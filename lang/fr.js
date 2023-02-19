@@ -391,7 +391,7 @@ export default {
 	utilisateurInexistant: 'Ce compte n\'existe pas.',
 	capsuleClassique: 'Classique',
 	capsuleGalerie: 'Galerie de photos',
-	formatImagesAutorisees: 'Seuls les formats suivants sont autorisés : .jpg, .jpeg, .png, .gif',
+	formatImagesAutorisees: 'Seuls les formats suivants sont autorisés : .jpg, .jpeg, .png, .gif.',
 	formatImagesAutoriseesTailleMaximale: 'Les formats autorisés sont .jpg, .jpeg, .png, .gif et la taille maximale pour chaque image est {taille} Mo.',
 	nombreMaximumImages: 'Le nombre maximal d\'images pour la galerie est 10.',
 	imagesGalerie: 'Images de la galerie',
