@@ -19,6 +19,7 @@ export const state = () => ({
 	statut: '',
 	acces: [],
 	murs: [],
+	digidrive: [],
 	affichage: 'liste',
 	classement: 'date-asc'
 })
@@ -59,6 +60,9 @@ export const mutations = {
 	},
 	modifierMurs (state, murs) {
 		state.murs = murs
+	},
+	modifierDigidrive (state, digidrive) {
+		state.digidrive = digidrive
 	}
 }
 
@@ -92,6 +96,9 @@ export const actions = {
 		if (donnees.hasOwnProperty('murs')) {
 			commit('modifierMurs', donnees.murs)
 		}
+		if (donnees.hasOwnProperty('digidrive')) {
+			commit('modifierDigidrive', donnees.digidrive)
+		}
 	},
 	modifierNom ({ commit }, nom) {
 		commit('modifierNom', nom)
@@ -119,5 +126,6 @@ export const actions = {
 		commit('modifierClassement', 'date-asc')
 		commit('modifierAcces', [])
 		commit('modifierMurs', [])
+		commit('modifierDigidrive', [])
 	}
 }

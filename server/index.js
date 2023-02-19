@@ -1807,8 +1807,12 @@ app.post('/api/verifier-acces', function (req, res) {
 				req.session.nom = utilisateur.nom
 				req.session.statut = 'auteur'
 				req.session.langue = utilisateur.langue
+				if (!req.session.hasOwnProperty('digidrive')) {
+					req.session.digidrive = []
+				}
+				req.session.digidrive.push(mur)
 				req.session.cookie.expires = new Date(Date.now() + dureeSession)
-				res.json({ message: 'mur_debloque', nom: utilisateur.nom, langue: utilisateur.langue })
+				res.json({ message: 'mur_debloque', nom: utilisateur.nom, langue: utilisateur.langue, digidrive: req.session.digidrive })
 			})
 		} else {
 			res.send('erreur')
@@ -2158,10 +2162,10 @@ app.post('/api/ladigitale', function (req, res) {
 					db.get('mur', function (err, resultat) {
 						if (err) { res.send('erreur'); return false }
 						const id = parseInt(resultat) + 1
-						creerMurSansCompte(req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, '')
+						creerMurSansCompte(req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, 'api')
 					})
 				} else {
-					creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, '')
+					creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, 'api')
 				}
 			})
 		} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'supprimer') {

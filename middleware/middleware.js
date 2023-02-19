@@ -22,6 +22,9 @@ export default function (context) {
 		if (context.req.session.hasOwnProperty('murs')) {
 			donnees.murs = context.req.session.murs
 		}
+		if (context.req.session.hasOwnProperty('digidrive')) {
+			donnees.digidrive = context.req.session.digidrive
+		}
 		context.store.dispatch('modifierUtilisateur', donnees)
 	}
 }

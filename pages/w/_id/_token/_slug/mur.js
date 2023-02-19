@@ -221,6 +221,9 @@ export default {
 		murs () {
 			return this.$store.state.murs
 		},
+		digidrive () {
+			return this.statut === 'auteur' && this.$store.state.digidrive.includes(this.mur.id)
+		},
 		etherpad () {
 			return process.env.etherpad
 		},
@@ -380,7 +383,7 @@ export default {
 				motdepasse: motdepasse
 			})
 			if (reponse.data.hasOwnProperty('message') && reponse.data.message === 'mur_debloque') {
-				this.$store.dispatch('modifierUtilisateur', { identifiant: identifiant, nom: reponse.data.nom, langue: reponse.data.langue, statut: 'auteur' })
+				this.$store.dispatch('modifierUtilisateur', { identifiant: identifiant, nom: reponse.data.nom, langue: reponse.data.langue, statut: 'auteur', digidrive: reponse.data.digidrive })
 			}
 			window.history.replaceState({}, document.title, window.location.href.split('?')[0])
 		}

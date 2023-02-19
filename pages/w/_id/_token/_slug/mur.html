@@ -125,12 +125,12 @@
 		<div class="contenu ascenseur">
 			<div class="conteneur">
 				<label for="titre-mur">{{ $t('titre') }}</label>
-				<input id="titre-mur"  type="text" :value="mur.titre" @keydown.enter="modifierTitre">
+				<input id="titre-mur"  type="text" :disabled="digidrive" :value="mur.titre" @keydown.enter="modifierTitre">
 			</div>
-			<div class="conteneur conteneur-bouton">
+			<div class="conteneur conteneur-bouton" v-if="!digidrive">
 				<span role="button" tabindex="0" class="bouton-vert" @click="modifierTitre">{{ $t('enregistrer') }}</span>
 			</div>
-			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur'">
+			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur' && !digidrive">
 				<span role="button" tabindex="0" class="bouton-bleu" @click="afficherModaleModifierMotDePasse">{{ $t('modifierMotDePasse') }}</span>
 			</div>
 			<div class="conteneur">
@@ -363,7 +363,7 @@
 			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur'">
 				<span role="button" tabindex="0" class="bouton-bleu" @click="afficherExporterMur">{{ $t('exporterMur') }}</span>
 			</div>
-			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur'">
+			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur' && !digidrive">
 				<span role="button" tabindex="0" class="bouton-rouge" @click="afficherSupprimerMur">{{ $t('supprimerMur') }}</span>
 			</div>
 		</div>
