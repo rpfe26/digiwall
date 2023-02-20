@@ -31,7 +31,7 @@ const gm = require('gm')
 const archiver = require('archiver')
 const extract = require('extract-zip')
 const moment = require('moment')
-const argon2 = require('argon2')
+const bcrypt = require('bcrypt')
 const cron = require('node-cron')
 const nodemailer = require('nodemailer')
 const rp = require('request-promise')
@@ -186,7 +186,7 @@ app.post('/api/inscription', function (req, res) {
 	db.exists('utilisateurs:' + identifiant, async function (err, reponse) {
 		if (err) { res.send('erreur'); return false  }
 		if (reponse === 0) {
-			const hash = await argon2.hash(motdepasse)
+			const hash = await bcrypt.hash(motdepasse, 10)
 			const date = moment().format()
 			let langue = 'fr'
 			if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
@@ -220,14 +220,14 @@ app.post('/api/connexion', function (req, res) {
 		if (reponse === 1 && req.session.identifiant !== identifiant) {
 			db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
 				if (err) { res.send('erreur_connexion'); return false }
-				const comparaison = await argon2.verify(donnees.motdepasse, motdepasse)
+				const comparaison = await bcrypt.compare(motdepasse, donnees.motdepasse)
 				let comparaisonTemp = false
 				if (donnees.hasOwnProperty('motdepassetemp')) {
-					comparaisonTemp = await argon2.verify(donnees.motdepassetemp, motdepasse)
+					comparaisonTemp = await bcrypt.compare(motdepasse, donnees.motdepassetemp)
 				}
 				if (comparaison === true || comparaisonTemp === true) {
 					if (comparaisonTemp === true) {
-						const hash = await argon2.hash(motdepasse)
+						const hash = await bcrypt.hash(motdepasse, 10)
 						db.hset('utilisateurs:' + identifiant, 'motdepasse', hash)
 						db.hdel('utilisateurs:' + identifiant, 'motdepassetemp')
 					}
@@ -270,7 +270,7 @@ app.post('/api/mot-de-passe-oublie', function (req, res) {
 						if (err) {
 							resolve()
 						} else {
-							const hash = await argon2.hash(motdepasse)
+							const hash = await bcrypt.hash(motdepasse, 10)
 							db.hset('utilisateurs:' + identifiant, 'motdepassetemp', hash)
 							resolve()
 						}
@@ -505,7 +505,7 @@ app.post('/api/creer-mur-sans-compte', async function (req, res) {
 	}
 	const titre = req.body.titre
 	const motdepasse = req.body.motdepasse
-	const hash = await argon2.hash(motdepasse)
+	const hash = await bcrypt.hash(motdepasse, 10)
 	const token = Math.random().toString(16).slice(10)
 	const slug = definirSlug(titre)
 	const date = moment().format()
@@ -548,8 +548,8 @@ app.post('/api/modifier-mot-de-passe-mur', function (req, res) {
 		const mur = req.body.mur
 		db.hgetall('murs:' + mur, async function (err, donnees) {
 			if (err) { res.send('erreur'); return false }
-			if (await argon2.verify(donnees.motdepasse, req.body.motdepasse)) {
-				const hash = await argon2.hash(req.body.nouveaumotdepasse)
+			if (await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
+				const hash = await bcrypt.hash(req.body.nouveaumotdepasse, 10)
 				db.hset('murs:' + mur, 'motdepasse', hash)
 				res.send('motdepasse_modifie')
 			} else {
@@ -1300,8 +1300,8 @@ app.post('/api/modifier-mot-de-passe', function (req, res) {
 	if (req.session.identifiant && req.session.identifiant === identifiant) {
 		db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
 			if (err) { res.send('erreur'); return false }
-			if (await argon2.verify(donnees.motdepasse, req.body.motdepasse)) {
-				const hash = await argon2.hash(req.body.nouveaumotdepasse)
+			if (await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
+				const hash = await bcrypt.hash(req.body.nouveaumotdepasse, 10)
 				db.hset('utilisateurs:' + identifiant, 'motdepasse', hash)
 				res.send('motdepasse_modifie')
 			} else {
@@ -1322,7 +1322,7 @@ app.post('/api/modifier-mot-de-passe-admin', function (req, res) {
 			db.exists('utilisateurs:' + identifiant, async function (err, resultat) {
 				if (err) { res.send('erreur'); return false }
 				if (resultat === 1) {
-					const hash = await argon2.hash(req.body.motdepasse)
+					const hash = await bcrypt.hash(req.body.motdepasse, 10)
 					db.hset('utilisateurs:' + identifiant, 'motdepasse', hash)
 					res.send('motdepasse_modifie')
 				} else {
@@ -1354,7 +1354,7 @@ app.post('/api/modifier-mot-de-passe-admin', function (req, res) {
 							}
 						})
 						if (utilisateurId !== '') {
-							const hash = await argon2.hash(req.body.motdepasse)
+							const hash = await bcrypt.hash(req.body.motdepasse, 10)
 							db.hset('utilisateurs:' + utilisateurId, 'motdepasse', hash)
 							res.send(utilisateurId)
 						} else {
@@ -1408,7 +1408,7 @@ app.post('/api/modifier-donnees-mur-admin', function (req, res) {
 		if (err) { res.send('erreur'); return false }
 		if (resultat === 1) {
 			if (champ === 'motdepasse') {
-				const hash = await argon2.hash(valeur)
+				const hash = await bcrypt.hash(valeur, 10)
 				db.hset('murs:' + mur, champ, hash)
 			} else if (champ === 'code') {
 				db.hset('murs:' + mur, champ, parseInt(valeur))
@@ -1754,7 +1754,7 @@ app.post('/api/verifier-mot-de-passe', function (req, res) {
 	const mur = req.body.mur
 	db.hgetall('murs:' + mur, async function (err, donnees) {
 		if (err) { res.send('erreur'); return false }
-		if (await argon2.verify(donnees.motdepasse, req.body.motdepasse)) {
+		if (await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
 			res.send('motdepasse_correct')
 		} else if (req.body.motdepasse === donnees.motdepasseAdmin) {
 			res.send('motdepasseadmin_correct')
@@ -1800,7 +1800,7 @@ app.post('/api/verifier-acces', function (req, res) {
 	const identifiant = req.body.identifiant
 	db.hgetall('murs:' + mur, async function (err, donnees) {
 		if (err) { res.send('erreur'); return false }
-		if (identifiant === donnees.identifiant && await argon2.verify(donnees.motdepasse, req.body.motdepasse)) {
+		if (identifiant === donnees.identifiant && await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
 			db.hgetall('utilisateurs:' + identifiant, function (err, utilisateur) {
 				if (err) { res.send('erreur'); return false }
 				req.session.identifiant = identifiant
@@ -2148,7 +2148,7 @@ app.post('/api/ladigitale', function (req, res) {
 			req.session.nom = nom
 			const titre = req.body.nom
 			const motdepasse = req.body.motdepasse
-			const hash = await argon2.hash(motdepasse)
+			const hash = await bcrypt.hash(motdepasse, 10)
 			const token = Math.random().toString(16).slice(10)
 			const slug = definirSlug(titre)
 			const date = moment().format()
@@ -2185,7 +2185,7 @@ app.post('/api/ladigitale', function (req, res) {
 				if (resultat === 1) {
 					db.hgetall('murs:' + mur, async function (err, donneesMur) {
 						if (err) { res.send('erreur'); return false }
-						if (donneesMur.identifiant === identifiant && await argon2.verify(donneesMur.motdepasse, motdepasse)) {
+						if (donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
 							db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
 								if (err) { res.send('erreur'); return false }
 								const multi = db.multi()
@@ -3062,7 +3062,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hgetall('murs:' + mur, async function (err, donnees) {
 				if (err) { socket.emit('erreur'); return false }
-				if (donnees.hasOwnProperty('motdepasse') && await argon2.verify(donnees.motdepasse, motdepasseAdmin)) {
+				if (donnees.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasseAdmin, donnees.motdepasse)) {
 					socket.emit('motsdepasseidentiques')
 					socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.handshake.session.save()
