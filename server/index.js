@@ -2168,6 +2168,14 @@ app.post('/api/ladigitale', function (req, res) {
 					creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, 'api')
 				}
 			})
+		} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'modifier-titre') {
+			const mur = req.body.id
+			const titre = req.body.titre
+			db.hset('murs:' + mur, 'titre', titre, function (err) {
+				if (err) { res.send('erreur'); return false }
+				const slug = definirSlug(titre)
+				res.send(slug)
+			})
 		} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'supprimer') {
 			const identifiant = req.body.identifiant
 			const mur = req.body.id
