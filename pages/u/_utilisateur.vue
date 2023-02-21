@@ -751,7 +751,7 @@ export default {
 							}
 						}.bind(this))
 					}
-					this.$store.dispatch('modifierMessage', this.$t('mursupprimeFavoris'))
+					this.$store.dispatch('modifierMessage', this.$t('murSupprimeFavoris'))
 				}
 			}.bind(this)).catch(function () {
 				this.chargement = false
