@@ -24,7 +24,7 @@
 			<i class="material-icons">chat</i>
 			<span class="badge" v-if="nouveauxMessages > 0">{{ nouveauxMessages }}</span>
 		</span>
-		<span id="motdepasse" role="button" tabindex="0" :title="$t('motDePasseMur')" @click="afficherModaleMotDePasse" v-if="mur.motdepasse && !admin && statut !== 'utilisateur'"><i class="material-icons">vpn_key</i></span>
+		<span id="motdepasse" role="button" tabindex="0" :title="$t('motDePasseMur')" @click="afficherModaleMotDePasse" v-if="(mur.motdepasse || mur.motdepasseAdmin) && !admin && statut !== 'utilisateur'"><i class="material-icons">vpn_key</i></span>
 		<span id="options" role="button" tabindex="0" :title="$t('parametresMur')" @click="afficherOptions" v-if="admin"><i class="material-icons">settings</i></span>
 		<span id="options" role="button" tabindex="0" :title="$t('parametresMur')" @click="afficherOptions" v-else-if="!admin && statut !== 'utilisateur'"><i class="material-icons">language</i></span>
 		<span id="organisation" role="button" tabindex="0" :title="$t('modeOrganiser')" :class="{'desactive': definirClasseOrganiser() === false}" @click="activerModeOrganiser" v-if="admin && action !== 'organiser'"><i class="material-icons">sort</i></span>
@@ -878,8 +878,8 @@
 			</div>
 			<div class="conteneur">
 				<div class="contenu">
-					<img :src="definirLienFichier(mur.id, medias[indexGalerie].fichier)">
-					<textarea :value="legende" @input="legende = $event.target.value"></textarea>
+					<img :src="definirLienFichierGalerie(mur.id, medias[indexGalerie].fichier)">
+					<textarea :value="legende" :placeholder="$t('legendeImage')" @input="legende = $event.target.value"></textarea>
 					<div class="actions">
 						<span role="button" tabindex="0" class="bouton" @click="modifierLegende">{{ $t('valider') }}</span>
 					</div>
@@ -1051,7 +1051,7 @@
 								<span :class="{'invisible': page >= (resultats.total / 16)}" @click="modifierPage('suivante')">{{ $t('pageSuivante') }}</span>
 							</div>
 						</div>
-						<div class="conteneur-interrupteur" v-if="type === 'audio' || type === 'video' || (type === 'embed' && (source === 'digiview' || source === 'peertube' || source === 'youtube' || source === 'vimeo' || source === 'dailymotion' || source === 'soundcloud'))">
+						<div class="conteneur-interrupteur" v-if="type === 'audio' || type === 'enregistrement' || type === 'video' || (type === 'embed' && (source === 'digiview' || source === 'peertube' || source === 'youtube' || source === 'vimeo' || source === 'dailymotion' || source === 'soundcloud'))">
 							<span>{{ $t('activerVignette') }}</span>
 							<label class="bouton-interrupteur">
 								<input type="checkbox" :checked="vignetteActivee" @change="modifierVignetteActivee">
@@ -1148,7 +1148,7 @@
 						<div id="medias" v-show="!chargementGalerie && medias.length > 0">
 							<draggable class="images" v-model="medias">
 								<div class="image" v-for="(imageGalerie, index) in medias" :key="'image_' + index">
-									<img :src="definirLienFichier(mur.id, imageGalerie.fichier)">
+									<img :src="definirLienFichierGalerie(mur.id, imageGalerie.fichier)">
 									<span class="fermer" @click="supprimerImageGalerie(index)" :title="$t('supprimerImage')"><i class="material-icons">highlight_off</i></span>
 									<span class="legende" :class="{'activee': imageGalerie.legende !== ''}" @click="afficherModifierLegende(index)" :title="$t('modifierLegende')"><i class="material-icons">subtitles</i></span>
 								</div>
