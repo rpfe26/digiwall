@@ -380,7 +380,7 @@ export default {
 			const reponse = await axios.post(this.hote + '/api/verifier-acces', {
 				mur: this.mur.id,
 				identifiant: identifiant,
-				motdepasse: motdepasse
+				motdepasse: window.atob(motdepasse)
 			})
 			if (reponse.data.hasOwnProperty('message') && reponse.data.message === 'mur_debloque') {
 				this.$store.dispatch('modifierUtilisateur', { identifiant: identifiant, nom: reponse.data.nom, langue: reponse.data.langue, statut: 'auteur', digidrive: reponse.data.digidrive })
@@ -897,8 +897,8 @@ export default {
 					let html = event.clipboardData.getData('text/html')
 					if (html !== '') {
 						html = stripTags(html, ['b', 'i', 'u', 'a', 'br', 'div', 'font', 'ul', 'ol'])
-						html = html.replace(/style="[^"]*"/, '')
-						html = html.replace(/class="[^"]*"/, '')
+						html = html.replace(/style=".*?"/mg, '')
+						html = html.replace(/class=".*?"/mg, '')
 						pell.exec('insertHTML', html)
 					} else {
 						pell.exec('insertText', event.clipboardData.getData('text/plain'))
@@ -2492,8 +2492,8 @@ export default {
 					let html = event.clipboardData.getData('text/html')
 					if (html !== '') {
 						html = stripTags(html, ['b', 'i', 'u', 'a', 'br', 'div', 'font', 'ul', 'ol'])
-						html = html.replace(/style="[^"]*"/, '')
-						html = html.replace(/class="[^"]*"/, '')
+						html = html.replace(/style=".*?"/mg, '')
+						html = html.replace(/class=".*?"/mg, '')
 						pell.exec('insertHTML', html)
 					} else {
 						pell.exec('insertText', event.clipboardData.getData('text/plain'))
@@ -2558,8 +2558,8 @@ export default {
 					let html = event.clipboardData.getData('text/html')
 					if (html !== '') {
 						html = stripTags(html, ['b', 'i', 'u', 'a', 'br', 'div', 'font', 'ul', 'ol'])
-						html = html.replace(/style="[^"]*"/, '')
-						html = html.replace(/class="[^"]*"/, '')
+						html = html.replace(/style=".*?"/mg, '')
+						html = html.replace(/class=".*?"/mg, '')
 						pell.exec('insertHTML', html)
 					} else {
 						pell.exec('insertText', event.clipboardData.getData('text/plain'))
@@ -3352,6 +3352,13 @@ export default {
 				return '/temp/' + mediaExtra
 			} else if (this.mode === 'edition' && this.donneesBloc.mediaExtra === mediaExtra) {
 				return '/' + this.definirDossierFichiers(id) + '/' + id + '/' + mediaExtra
+			}
+		},
+		definirLienFichierGalerie (id, media) {
+			if (this.mode === 'creation' || (this.mode === 'edition' && !this.donneesBloc.medias.map(function (e) { return e.fichier }).includes(media))) {
+				return '/temp/' + media
+			} else if (this.mode === 'edition' && this.donneesBloc.medias.map(function (e) { return e.fichier }).includes(media)) {
+				return '/' + this.definirDossierFichiers(id) + '/' + id + '/' + media
 			}
 		},
 		definirLienVignette (id, vignette) {
