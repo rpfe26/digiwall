@@ -1767,6 +1767,10 @@ export default {
 	margin-top: 10px;
 }
 
+#import .contenu {
+	font-size: 0;
+}
+
 .progression .chargement {
 	border-top: 0.7rem solid #00ced1;
 	margin-top: 1rem;
