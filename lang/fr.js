@@ -399,5 +399,8 @@ export default {
 	attentionMotsDePasse: 'Le mot de passe pour le propriétaire du mur et le mot de passe pour les codadmins sont identiques. Veuillez indiquer un mot de passe différent pour les coadmins.',
 	legendeImage: 'Légende de l\'image',
 	supprimerImage: 'Supprimer l\'image',
-	modifierLegende: 'Modifier la légende'
+	modifierLegende: 'Modifier la légende',
+	parametresContenu: 'Paramètres de contenu',
+	ajouterContenuImporte: 'Ajouter le contenu importé au contenu actuel',
+	remplacerContenuImporte: 'Remplacer le contenu actuel par le contenu importé'
 }

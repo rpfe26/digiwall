@@ -399,5 +399,8 @@ export default {
 	attentionMotsDePasse: 'La password per il proprietario della parete e la password per i codadmin sono identiche. Inserire una password diversa per i coadmin.',
 	legendeImage: 'Didascalia immagine',
 	supprimerImage: 'Cancellare l\'immagine',
-	modifierLegende: 'Modifica didascalia'
+	modifierLegende: 'Modifica didascalia',
+	parametresContenu: 'Impostazione del contenuto',
+	ajouterContenuImporte: 'Aggiungere il contenuto importato al contenuto corrente',
+	remplacerContenuImporte: 'Sostituire il contenuto corrente con quello importato'
 }

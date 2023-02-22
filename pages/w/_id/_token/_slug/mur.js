@@ -175,7 +175,15 @@ export default {
 			erreurImages: '',
 			modaleLegende: false,
 			indexGalerie: -1,
-			legende: ''
+			legende: '',
+			modaleImporterMur: false,
+			parametresImport: {
+				contenu: 'ajouter',
+				commentaires: false,
+				evaluations: false,
+				activite: false
+			},
+			progressionImport: 0
 		}
 	},
 	head () {
@@ -3294,6 +3302,61 @@ export default {
 				this.$store.dispatch('modifierAlerte', this.$t('erreurCommunicationServeur'))
 			}.bind(this))
 		},
+		modifierParametresImport (event, type) {
+			if (type === 'contenu') {
+				this.parametresImport[type] = event.target.value
+			} else {
+				this.parametresImport[type] = event.target.checked
+			}
+		},
+		importerMur () {
+			const champ = document.querySelector('#importer-mur')
+			const extension = champ.files[0].name.substring(champ.files[0].name.lastIndexOf('.') + 1).toLowerCase()
+			if (champ.files && champ.files[0] && extension === 'zip') {
+				const formulaire = new FormData()
+				formulaire.append('mur', this.mur.id)
+				formulaire.append('parametres', JSON.stringify(this.parametresImport))
+				formulaire.append('fichier', champ.files[0])
+				axios.post(this.hote + '/api/importer-mur-sans-compte', formulaire, {
+					headers: {
+						'Content-Type': 'multipart/form-data'
+					},
+					onUploadProgress: function (progression) {
+						const pourcentage = parseInt(Math.round((progression.loaded * 100) / progression.total))
+						this.progressionImport = pourcentage
+					}.bind(this)
+				}).then(function (reponse) {
+					this.fermerModaleImporterMur()
+					const donnees = reponse.data
+					if (donnees === 'non_connecte') {
+						this.$router.push('/')
+					} else if (donnees === 'erreur_import') {
+						this.$store.dispatch('modifierAlerte', this.$t('erreurImportMur'))
+					} else if (donnees === 'donnees_corrompues') {
+						this.$store.dispatch('modifierAlerte', this.$t('donneesCorrompuesImportMur'))
+					} else {
+						this.$socket.emit('murimporte', this.identifiant)
+						window.history.pushState({}, '', donnees)
+						window.location.reload()
+					}
+				}.bind(this)).catch(function () {
+					this.fermerModaleImporterMur()
+					this.$store.dispatch('modifierAlerte', this.$t('erreurCommunicationServeur'))
+				}.bind(this))
+			} else {
+				this.$store.dispatch('modifierAlerte', this.$t('formatFichierPasAccepte'))
+				champ.value = ''
+			}
+		},
+		fermerModaleImporterMur () {
+			this.modaleImporterMur = false
+			this.parametresImport.contenu = 'ajouter'
+			this.parametresImport.commentaires = false
+			this.parametresImport.evaluations = false
+			this.parametresImport.activite = false
+			this.progressionImport = 0
+			document.querySelector('#importer-mur').value = ''
+		},
 		afficherSupprimerMur () {
 			this.messageConfirmation = this.$t('confirmationSupprimerMur')
 			this.typeConfirmation = 'supprimer-mur'
@@ -4046,6 +4109,10 @@ export default {
 				if (this.admin) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreCopieBlocModifie'))
 				}
+			}.bind(this))
+
+			this.$socket.on('murimporte', function () {
+				this.$store.dispatch('modifierMessage', this.$t('rechargerPage'))
 			}.bind(this))
 
 			this.$socket.on('message', function (message) {

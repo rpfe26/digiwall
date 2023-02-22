@@ -1111,6 +1111,265 @@ app.post('/api/importer-mur', function (req, res) {
 	}
 })
 
+app.post('/api/importer-mur-sans-compte', function (req, res) {
+	if (maintenance === true) {
+		res.redirect('/maintenance')
+		return false
+	}
+	const identifiant = req.session.identifiant
+	if (!identifiant) {
+		res.send('non_connecte')
+	} else {
+		televerserTemp(req, res, async function (err) {
+			if (err) { res.send('erreur_import'); return false }
+			try {
+				const source = path.join(__dirname, '..', '/static/temp/' + req.file.filename)
+				const cible = path.join(__dirname, '..', '/static/temp/archive-' + Math.floor((Math.random() * 100000) + 1))
+				await extract(source, { dir: cible })
+				const donnees = await fs.readJson(path.normalize(cible + '/donnees.json'))
+				const parametres = JSON.parse(req.body.parametres)
+				// Vérification des clés des données
+				if (donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite') && donnees.mur.hasOwnProperty('id') && donnees.mur.hasOwnProperty('token') && donnees.mur.hasOwnProperty('titre') && donnees.mur.hasOwnProperty('identifiant') && donnees.mur.hasOwnProperty('fond') && donnees.mur.hasOwnProperty('acces') && donnees.mur.hasOwnProperty('motdepasseAdmin') && donnees.mur.hasOwnProperty('contributions') && donnees.mur.hasOwnProperty('affichage') && donnees.mur.hasOwnProperty('registreActivite') && donnees.mur.hasOwnProperty('conversation') && donnees.mur.hasOwnProperty('listeUtilisateurs') && donnees.mur.hasOwnProperty('editionNom') && donnees.mur.hasOwnProperty('enregistrements') && donnees.mur.hasOwnProperty('ordre') && donnees.mur.hasOwnProperty('largeur') && donnees.mur.hasOwnProperty('affichageColonnes') && donnees.mur.hasOwnProperty('vues') && donnees.mur.hasOwnProperty('fichiers') && donnees.mur.hasOwnProperty('liens') && donnees.mur.hasOwnProperty('documents') && donnees.mur.hasOwnProperty('commentaires') && donnees.mur.hasOwnProperty('evaluations') && donnees.mur.hasOwnProperty('verrouillage') && donnees.mur.hasOwnProperty('copieBloc') && donnees.mur.hasOwnProperty('date') && donnees.mur.hasOwnProperty('colonnes') && donnees.mur.hasOwnProperty('bloc') && donnees.mur.hasOwnProperty('activite')) {
+					const id = req.body.mur
+					if (parametres.contenu === 'remplacer') {
+						db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
+							if (err) { res.send('erreur_import'); return false }
+							// Supprimer données actuelles du mur
+							const multi = db.multi()
+							for (let i = 0; i < blocs.length; i++) {
+								multi.del('commentaires:' + blocs[i])
+								multi.del('evaluations:' + blocs[i])
+								multi.del('contenu-blocs:' + id + ':' + blocs[i])
+							}
+							multi.del('blocs:' + id)
+							multi.del('activite:' + id)
+							multi.del('dates-murs:' + id)
+							multi.exec(function () {
+								const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+								fs.emptyDirSync(chemin)
+								const donneesBlocs = []
+								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+									const donneesBloc = new Promise(function (resolve) {
+										if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
+											const date = moment().format()
+											let commentaires = 0
+											let evaluations = 0
+											if (parametres.commentaires === true) {
+												commentaires = bloc.commentaires
+											}
+											if (parametres.evaluations === true) {
+												evaluations = bloc.evaluations
+											}
+											if (bloc.vignette !== '') {
+												bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id, '/' + definirDossierFichiers(id) + '/' + id)
+											}
+											const multi = db.multi()
+											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+											multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'couleur', bloc.couleur)
+											multi.zadd('blocs:' + id, indexBloc, blocId)
+											if (parametres.commentaires === true) {
+												for (const commentaire of bloc.listeCommentaires) {
+													if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
+														multi.zadd('commentaires:' + blocId, commentaire.id, JSON.stringify(commentaire))
+													}
+												}
+											}
+											if (parametres.evaluations === true) {
+												for (const evaluation of bloc.listeEvaluations) {
+													if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
+														multi.zadd('evaluations:' + blocId, evaluation.id, JSON.stringify(evaluation))
+													}
+												}
+											}
+											multi.exec(function () {
+												if (bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
+													fs.copySync(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+												}
+												if (bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+													fs.copySync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+												}
+												const medias = JSON.parse(bloc.medias)
+												for (let i = 0; i < medias.length; i++) {
+													if (medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+														fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+													}
+												}
+												if (bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
+													fs.copySync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
+												}
+												resolve({ bloc: bloc.bloc, blocId: blocId })
+											})
+										} else {
+											resolve({ bloc: 0, blocId: 0 })
+										}
+									})
+									donneesBlocs.push(donneesBloc)
+								}
+								Promise.all(donneesBlocs).then(function (blocsCrees) {
+									const slug = definirSlug(donnees.mur.titre)
+									const date = moment().format()
+									const code = Math.floor(1000 + Math.random() * 9000)
+									let activiteId = 0
+									if (parametres.activite === true) {
+										activiteId = donnees.mur.activite
+									}
+									if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && fs.existsSync(path.normalize(cible + '/fichiers/' + donnees.mur.fond.split('/').pop()))) {
+										fs.copySync(path.normalize(cible + '/fichiers/' + donnees.mur.fond.split('/').pop()), path.normalize(chemin + '/' + donnees.mur.fond.split('/').pop(), { overwrite: true }))
+									}
+									const multi = db.multi()
+									multi.hmset('murs:' + id, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId)
+									if (parametres.activite === true) {
+										if (parametres.commentaires === false) {
+											donnees.activite = donnees.activite.filter(function (element) {
+												return element.type !== 'bloc-commente'
+											})
+										}
+										if (parametres.evaluations === false) {
+											donnees.activite = donnees.activite.filter(function (element) {
+												return element.type !== 'bloc-evalue'
+											})
+										}
+										for (const activite of donnees.activite) {
+											if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
+												blocsCrees.forEach(function (item) {
+													if (activite.bloc === item.bloc) {
+														activite.bloc = item.blocId
+													}
+												})
+												multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
+											}
+										}
+									}
+									multi.exec(function () {
+										fs.removeSync(source)
+										fs.removeSync(cible)
+										res.send(slug)
+									})
+								})
+							})
+						})
+					} else {
+						db.hgetall('murs:' + id, function (err, donneesMur) {
+							if (err) { res.send('erreur_import'); return false }
+							const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+							fs.emptyDirSync(chemin)
+							const donneesBlocs = []
+							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+								const donneesBloc = new Promise(function (resolve) {
+									if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
+										const deltaColonne = JSON.parse(donneesMur.colonnes).length
+										const colonne = (parseInt(bloc.colonne)) + deltaColonne
+										const date = moment().format()
+										let commentaires = 0
+										let evaluations = 0
+										if (parametres.commentaires === true) {
+											commentaires = bloc.commentaires
+										}
+										if (parametres.evaluations === true) {
+											evaluations = bloc.evaluations
+										}
+										if (bloc.vignette !== '') {
+											bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id, '/' + definirDossierFichiers(id) + '/' + id)
+										}
+										const multi = db.multi()
+										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+										multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', colonne, 'visibilite', bloc.visibilite, 'couleur', bloc.couleur)
+										multi.zadd('blocs:' + id, indexBloc, blocId)
+										if (parametres.commentaires === true) {
+											for (const commentaire of bloc.listeCommentaires) {
+												if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
+													multi.zadd('commentaires:' + blocId, commentaire.id, JSON.stringify(commentaire))
+												}
+											}
+										}
+										if (parametres.evaluations === true) {
+											for (const evaluation of bloc.listeEvaluations) {
+												if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
+													multi.zadd('evaluations:' + blocId, evaluation.id, JSON.stringify(evaluation))
+												}
+											}
+										}
+										multi.exec(function () {
+											if (bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
+												fs.copySync(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+											}
+											if (bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+												fs.copySync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+											}
+											const medias = JSON.parse(bloc.medias)
+											for (let i = 0; i < medias.length; i++) {
+												if (medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+													fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+												}
+											}
+											if (bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
+												fs.copySync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
+											}
+											resolve({ bloc: bloc.bloc, blocId: blocId })
+										})
+									} else {
+										resolve({ bloc: 0, blocId: 0 })
+									}
+								})
+								donneesBlocs.push(donneesBloc)
+							}
+							Promise.all(donneesBlocs).then(function (blocsCrees) {
+								const slug = definirSlug(donneesMur.titre)
+								let activiteId = parseInt(donneesMur.activite)
+								if (parametres.activite === true) {
+									activiteId = activiteId + donnees.mur.activite
+								}
+								let blocNum = parseInt(donneesMur.bloc)
+								blocNum  = blocNum  + donnees.mur.bloc
+								let colonnes = JSON.parse(donneesMur.colonnes)
+								colonnes = colonnes.concat(JSON.parse(donnees.mur.colonnes))
+								let affichageColonnes = JSON.parse(donneesMur.affichageColonnes)
+								affichageColonnes = affichageColonnes.concat(JSON.parse(donnees.mur.affichageColonnes))
+								const multi = db.multi()
+								multi.hmset('murs:' + id, 'identifiant', identifiant, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes), 'bloc', blocNum, 'activite', activiteId)
+								if (parametres.activite === true) {
+									if (parametres.commentaires === false) {
+										donnees.activite = donnees.activite.filter(function (element) {
+											return element.type !== 'bloc-commente'
+										})
+									}
+									if (parametres.evaluations === false) {
+										donnees.activite = donnees.activite.filter(function (element) {
+											return element.type !== 'bloc-evalue'
+										})
+									}
+									for (const activite of donnees.activite) {
+										if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
+											blocsCrees.forEach(function (item) {
+												if (activite.bloc === item.bloc) {
+													activite.bloc = item.blocId
+												}
+											})
+											multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
+										}
+									}
+								}
+								multi.exec(function () {
+									fs.removeSync(source)
+									fs.removeSync(cible)
+									res.send(slug)
+								})
+							})
+						})
+					}
+				} else {
+					fs.removeSync(source)
+					fs.removeSync(cible)
+					res.send('donnees_corrompues')
+				}
+			} catch (err) {
+				fs.removeSync(path.join(__dirname, '..', '/static/temp/' + req.file.filename))
+				res.send('erreur_import')
+			}
+		})
+	}
+})
+
 app.post('/api/supprimer-mur', function (req, res) {
 	if (maintenance === true) {
 		res.redirect('/maintenance')
@@ -3805,6 +4064,14 @@ io.on('connection', function (socket) {
 			})
 		} else {
 			socket.emit('deconnecte')
+		}
+	})
+
+	socket.on('murimporte', function (mur, identifiant) {
+		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
+			socket.to('mur-' + mur).emit('murimporte')
+			socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
+			socket.handshake.session.save()
 		}
 	})
 

@@ -399,5 +399,8 @@ export default {
 	attentionMotsDePasse: 'La contraseña para el propietario del muro y la contraseña para los coadministradores son idénticas. Por favor, introduzca una contraseña diferente para los coadmins.',
 	legendeImage: 'Pie de foto',
 	supprimerImage: 'Borrar imagen',
-	modifierLegende: 'Modificar pie de foto'
+	modifierLegende: 'Modificar pie de foto',
+	parametresContenu: 'Configuración del contenido',
+	ajouterContenuImporte: 'Añadir contenido importado al contenido actual',
+	remplacerContenuImporte: 'Sustituir el contenido actual por contenido importado'
 }

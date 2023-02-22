@@ -1646,6 +1646,51 @@
     animation: fonduEntrant linear 0.1s;
 }
 
+#import label:not(.bouton-interrupteur) {
+	width: 100%;
+	text-align: center;
+	margin-top: 10px;
+}
+
+#import .contenu {
+	font-size: 0;
+}
+
+#import .parametre-import label {
+	display: flex;
+	justify-content: space-between;
+	font-size: 16px;
+	font-weight: 400;
+	text-align: left;
+	margin-top: 0;
+	margin-bottom: 1rem;
+	margin-right: 1.5rem;
+}
+
+#import .contenu label.parametres {
+	font-size: 14px;
+	font-weight: 700;
+	text-align: left;
+	margin-top: 0;
+	margin-bottom: 10px;
+}
+
+.progression .chargement {
+	border-top: 0.7rem solid #00ced1;
+	margin-top: 1rem;
+}
+
+.modale .conteneur-interrupteur {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 1rem;
+	line-height: 2.2rem;
+}
+
+.modale .conteneur-interrupteur > span {
+	font-size: 16px;
+}
+
 .menu .bouton-radio {
 	display: block;
 	position: relative;

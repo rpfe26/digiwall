@@ -399,5 +399,8 @@ export default {
 	attentionMotsDePasse: 'The password for the wall owner and the password for the codadmins are identical. Please specify a different password for coadmins.',
 	legendeImage: 'Image caption',
 	supprimerImage: 'Image caption',
-	modifierLegende: 'Change caption'
+	modifierLegende: 'Change caption',
+	parametresContenu: 'Content settings',
+	ajouterContenuImporte: 'Add the imported content to the current content',
+	remplacerContenuImporte: 'Add the imported content to the current content'
 }

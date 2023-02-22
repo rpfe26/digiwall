@@ -399,5 +399,8 @@ export default {
 	attentionMotsDePasse: 'Lozinka za vlasnika zida i lozinka za kodadministe su identične. Molimo unesite drugu lozinku za coadmin.',
 	legendeImage: 'Opis slike',
 	supprimerImage: 'Izbriši sliku',
-	modifierLegende: 'Uredi naslov'
+	modifierLegende: 'Uredi naslov',
+	parametresContenu: 'Parametar sadržaja',
+	ajouterContenuImporte: 'Dodajte uvezeni sadržaj trenutnom sadržaju',
+	remplacerContenuImporte: 'Zamijenite trenutni sadržaj uvezenim sadržajem'
 }

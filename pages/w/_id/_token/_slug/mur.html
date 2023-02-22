@@ -363,6 +363,9 @@
 			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur'">
 				<span role="button" tabindex="0" class="bouton-bleu" @click="afficherExporterMur">{{ $t('exporterMur') }}</span>
 			</div>
+			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur'">
+				<span role="button" tabindex="0" class="bouton-bleu" @click="modaleImporterMur = true">{{ $t('importerMur') }}</span>
+			</div>
 			<div class="conteneur conteneur-bouton" v-if="mur.identifiant === identifiant && statut === 'auteur' && !digidrive">
 				<span role="button" tabindex="0" class="bouton-rouge" @click="afficherSupprimerMur">{{ $t('supprimerMur') }}</span>
 			</div>
@@ -1473,6 +1476,55 @@
 					</select>
 					<div class="actions">
 						<span role="button" tabindex="0" class="bouton" @click="envoyerBloc">{{ $t('valider') }}</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="conteneur-modale" v-else-if="modaleImporterMur">
+		<div id="import" class="modale">
+			<div class="en-tete">
+				<span class="titre">{{ $t('importerMur') }}</span>
+				<span role="button" tabindex="0" class="fermer" @click="fermerModaleImporterMur"><i class="material-icons">close</i></span>
+			</div>
+			<div class="conteneur">
+				<div class="contenu">
+					<label class="parametres">{{ $t('parametresContenu') }}</label>
+					<div class="parametre-import" v-if="progressionImport === 0">
+						<label class="bouton-radio">{{ $t('ajouterContenuImporte') }}
+							<input type="radio" name="import" value="ajouter" :checked="parametresImport.contenu === 'ajouter'" @change="modifierParametresImport($event, 'contenu')">
+						</label>
+						<label class="bouton-radio">{{ $t('remplacerContenuImporte') }}
+							<input type="radio" name="import" value="remplacer" :checked="parametresImport.contenu === 'remplacer'" @change="modifierParametresImport($event, 'contenu')">
+						</label>
+					</div>
+					<div class="conteneur-interrupteur" v-if="progressionImport === 0">
+						<span>{{ $t('importerCommentaires') }}</span>
+						<label class="bouton-interrupteur">
+							<input type="checkbox" :checked="parametresImport.commentaires" @change="modifierParametresImport($event, 'commentaires')">
+							<span class="barre" />
+						</label>
+					</div>
+					<div class="conteneur-interrupteur" v-if="progressionImport === 0">
+						<span>{{ $t('importerEvaluations') }}</span>
+						<label class="bouton-interrupteur">
+							<input type="checkbox" :checked="parametresImport.evaluations" @change="modifierParametresImport($event, 'evaluations')">
+							<span class="barre" />
+						</label>
+					</div>
+					<div class="conteneur-interrupteur" v-if="progressionImport === 0">
+						<span>{{ $t('importerActivite') }}</span>
+						<label class="bouton-interrupteur">
+							<input type="checkbox" :checked="parametresImport.activite" @change="modifierParametresImport($event, 'activite')">
+							<span class="barre" />
+						</label>
+					</div>
+					<label for="importer-mur" class="bouton" v-show="progressionImport === 0">{{ $t('selectionnerMur') }}</label>
+					<input id="importer-mur" type="file" style="display: none" accept=".zip" @change="importerMur">
+					<div class="conteneur-chargement progression" v-if="progressionImport > 0">
+						<progress class="barre-progression" max="100" :value="progressionImport" />
+						<div class="chargement" />
 					</div>
 				</div>
 			</div>
