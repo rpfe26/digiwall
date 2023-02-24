@@ -2859,7 +2859,7 @@ io.on('connection', function (socket) {
 		}
 	})
 
-	socket.on('verrouillerbloc', function (mur, bloc, colonne) {
+	socket.on('verrouillerbloc', function (mur, bloc, colonne, identifiant) {
 		if (maintenance === true) {
 			socket.emit('maintenance')
 			return false
@@ -2868,14 +2868,14 @@ io.on('connection', function (socket) {
 			if (err) { socket.emit('erreur'); return false }
 			if (resultat === 1) {
 				db.hmset('contenu-blocs:' + mur + ':' + bloc, 'edition', 'non')
-				io.in('mur-' + mur).emit('verrouillerbloc', { bloc: bloc, colonne: colonne })
+				io.in('mur-' + mur).emit('verrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			}
 		})
 	})
 
-	socket.on('deverrouillerbloc', function (mur, bloc, colonne) {
+	socket.on('deverrouillerbloc', function (mur, bloc, colonne, identifiant) {
 		if (maintenance === true) {
 			socket.emit('maintenance')
 			return false
@@ -2884,7 +2884,7 @@ io.on('connection', function (socket) {
 			if (err) { socket.emit('erreur'); return false }
 			if (resultat === 1) {
 				db.hmset('contenu-blocs:' + mur + ':' + bloc, 'edition', 'oui')
-				io.in('mur-' + mur).emit('deverrouillerbloc', { bloc: bloc, colonne: colonne })
+				io.in('mur-' + mur).emit('deverrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			}
@@ -3096,7 +3096,7 @@ io.on('connection', function (socket) {
 				if (err) { socket.emit('erreur'); return false }
 				const dateModification = moment().format()
 				const date = JSON.parse(donnees).date
-				const commentaire = { id: id, identifiant: identifiant, date: date, modifie: dateModification, texte: texte }
+				const commentaire = { id: id, identifiant: JSON.parse(donnees).identifiant, date: date, modifie: dateModification, texte: texte }
 				const multi = db.multi()
 				multi.zremrangebyscore('commentaires:' + bloc, id, id)
 				multi.zadd('commentaires:' + bloc, id, JSON.stringify(commentaire))
@@ -3287,7 +3287,7 @@ io.on('connection', function (socket) {
 			db.hset('murs:' + mur, 'titre', titre, function (err) {
 				if (err) { socket.emit('erreur'); return false }
 				const slug = definirSlug(titre)
-				io.in('mur-' + mur).emit('modifiertitre', { titre: titre, slug: slug })
+				io.in('mur-' + mur).emit('modifiertitre', { titre: titre, slug: slug, identifiant: identifiant })
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3304,7 +3304,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'code', code, function (err) {
 				if (err) { socket.emit('erreur'); return false }
-				io.in('mur-' + mur).emit('modifiercodeacces', code)
+				io.in('mur-' + mur).emit('modifiercodeacces', code, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3340,7 +3340,7 @@ io.on('connection', function (socket) {
 						}
 					})
 					multi.exec(function () {
-						io.in('mur-' + mur).emit('modifieradmins', admins, motdepasseAdmin)
+						io.in('mur-' + mur).emit('modifieradmins', admins, motdepasseAdmin, identifiant)
 						socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.handshake.session.save()
 					})
@@ -3402,7 +3402,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'affichage', affichage, function (err) {
 				if (err) { socket.emit('erreur'); return false }
-				io.in('mur-' + mur).emit('modifieraffichage', affichage)
+				io.in('mur-' + mur).emit('modifieraffichage', affichage, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3419,7 +3419,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'ordre', ordre, function (err) {
 				if (err) { socket.emit('erreur'); return false }
-				io.in('mur-' + mur).emit('modifierordre', ordre)
+				io.in('mur-' + mur).emit('modifierordre', ordre, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3436,7 +3436,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'largeur', largeur, function (err) {
 				if (err) { socket.emit('erreur'); return false }
-				io.in('mur-' + mur).emit('modifierlargeur', largeur)
+				io.in('mur-' + mur).emit('modifierlargeur', largeur, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3453,7 +3453,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'fond', fond, function (err) {
 				if (err) { socket.emit('erreur'); return false }
-				io.in('mur-' + mur).emit('modifierfond', fond)
+				io.in('mur-' + mur).emit('modifierfond', fond, identifiant)
 				if (ancienfond.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 					const chemin = path.join(__dirname, '..', '/static' + ancienfond)
 					fs.removeSync(chemin)
@@ -3474,7 +3474,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'fond', fond, function (err) {
 				if (err) { socket.emit('erreur'); return false }
-				io.in('mur-' + mur).emit('modifiercouleurfond', fond)
+				io.in('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
 				if (ancienfond.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 					const chemin = path.join(__dirname, '..', '/static' + ancienfond)
 					fs.removeSync(chemin)
@@ -3510,7 +3510,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'conversation', statut, function () {
-				io.in('mur-' + mur).emit('modifierconversation', statut)
+				io.in('mur-' + mur).emit('modifierconversation', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3526,7 +3526,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'listeUtilisateurs', statut, function () {
-				io.in('mur-' + mur).emit('modifierlisteutilisateurs', statut)
+				io.in('mur-' + mur).emit('modifierlisteutilisateurs', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3542,7 +3542,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'editionNom', statut, function () {
-				io.in('mur-' + mur).emit('modifiereditionnom', statut)
+				io.in('mur-' + mur).emit('modifiereditionnom', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3558,7 +3558,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'fichiers', statut, function () {
-				io.in('mur-' + mur).emit('modifierfichiers', statut)
+				io.in('mur-' + mur).emit('modifierfichiers', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3574,7 +3574,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'enregistrements', statut, function () {
-				io.in('mur-' + mur).emit('modifierenregistrements', statut)
+				io.in('mur-' + mur).emit('modifierenregistrements', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3590,7 +3590,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'liens', statut, function () {
-				io.in('mur-' + mur).emit('modifierliens', statut)
+				io.in('mur-' + mur).emit('modifierliens', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3606,7 +3606,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'documents', statut, function () {
-				io.in('mur-' + mur).emit('modifierdocuments', statut)
+				io.in('mur-' + mur).emit('modifierdocuments', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3622,7 +3622,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'commentaires', statut, function () {
-				io.in('mur-' + mur).emit('modifiercommentaires', statut)
+				io.in('mur-' + mur).emit('modifiercommentaires', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3638,7 +3638,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'evaluations', statut, function () {
-				io.in('mur-' + mur).emit('modifierevaluations', statut)
+				io.in('mur-' + mur).emit('modifierevaluations', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3654,7 +3654,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'verrouillage', statut, function () {
-				io.in('mur-' + mur).emit('modifierverrouillage', statut)
+				io.in('mur-' + mur).emit('modifierverrouillage', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3670,7 +3670,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hset('murs:' + mur, 'copieBloc', statut, function () {
-				io.in('mur-' + mur).emit('modifiercopiebloc', statut)
+				io.in('mur-' + mur).emit('modifiercopiebloc', statut, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3692,7 +3692,7 @@ io.on('connection', function (socket) {
 
 	socket.on('reinitialisermessages', function (mur, identifiant) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
-			io.in('mur-' + mur).emit('reinitialisermessages')
+			io.in('mur-' + mur).emit('reinitialisermessages', identifiant)
 			socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 			socket.handshake.session.save()
 		} else {
@@ -3703,7 +3703,7 @@ io.on('connection', function (socket) {
 	socket.on('reinitialiseractivite', function (mur, identifiant) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.del('activite:' + mur, function () {
-				io.in('mur-' + mur).emit('reinitialiseractivite')
+				io.in('mur-' + mur).emit('reinitialiseractivite', identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
@@ -3751,7 +3751,7 @@ io.on('connection', function (socket) {
 				const colonnes = JSON.parse(donnees.colonnes)
 				colonnes[index] = titre
 				db.hset('murs:' + mur, 'colonnes', JSON.stringify(colonnes), function () {
-					io.in('mur-' + mur).emit('modifiertitrecolonne', colonnes)
+					io.in('mur-' + mur).emit('modifiertitrecolonne', colonnes, identifiant)
 					socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.handshake.session.save()
 				})
@@ -3780,7 +3780,7 @@ io.on('connection', function (socket) {
 				}
 				affichageColonnes[index] = valeur
 				db.hset('murs:' + mur, 'affichageColonnes', JSON.stringify(affichageColonnes), function () {
-					io.in('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes)
+					io.in('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes, identifiant)
 					socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.handshake.session.save()
 				})
@@ -4058,7 +4058,7 @@ io.on('connection', function (socket) {
 	socket.on('supprimeractivite', function (mur, id, identifiant) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.zremrangebyscore('activite:' + mur, id, id, function () {
-				io.in('mur-' + mur).emit('supprimeractivite', id)
+				io.in('mur-' + mur).emit('supprimeractivite', id, identifiant)
 				socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.handshake.session.save()
 			})
