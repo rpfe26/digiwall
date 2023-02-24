@@ -2441,13 +2441,13 @@ export default {
 		},
 		verrouillerBloc (bloc) {
 			if (this.admin) {
-				this.$socket.emit('verrouillerbloc', this.mur.id, bloc, this.colonne)
+				this.$socket.emit('verrouillerbloc', this.mur.id, bloc, this.colonne, this.identifiant)
 				this.chargement = true
 			}
 		},
 		deverrouillerBloc (bloc) {
 			if (this.admin) {
-				this.$socket.emit('deverrouillerbloc', this.mur.id, bloc, this.colonne)
+				this.$socket.emit('deverrouillerbloc', this.mur.id, bloc, this.colonne, this.identifiant)
 				this.chargement = true
 			}
 		},
@@ -3693,7 +3693,7 @@ export default {
 						this.blocs[index].edition = 'non'
 					}
 				}.bind(this))
-				if (this.admin) {
+				if (this.admin && this.identifiant === donnees.identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('capsuleVerrouillee') + '.')
 				}
 			}.bind(this))
@@ -3712,7 +3712,7 @@ export default {
 						this.blocs[index].edition = 'oui'
 					}
 				}.bind(this))
-				if (this.admin) {
+				if (this.admin && this.identifiant === donnees.identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('capsuleDeverrouillee'))
 				}
 			}.bind(this))
@@ -3893,26 +3893,26 @@ export default {
 					this.chargement = false
 					this.definirPressePapier()
 					window.history.pushState({}, '', donnees.slug)
-					if (this.admin) {
+					if (this.admin && this.identifiant === donnees.identifiant) {
 						this.$store.dispatch('modifierMessage', this.$t('titreMurModifie'))
 					}
 				}.bind(this))
 			}.bind(this))
 
-			this.$socket.on('modifiercodeacces', function (code) {
+			this.$socket.on('modifiercodeacces', function (code, identifiant) {
 				this.mur.code = code
 				this.chargement = false
 				this.modificationCode = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('codeAccesModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifieradmins', function (admins, motdepasseAdmin) {
+			this.$socket.on('modifieradmins', function (admins, motdepasseAdmin, identifiant) {
 				this.mur.admins = admins
 				this.mur.motdepasseAdmin = motdepasseAdmin
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('accesAdminsModifie'))
 				}
 			}.bind(this))
@@ -3950,17 +3950,17 @@ export default {
 				}
 			}.bind(this))
 
-			this.$socket.on('modifieraffichage', function (affichage) {
+			this.$socket.on('modifieraffichage', function (affichage, identifiant) {
 				this.mur.affichage = affichage
 				this.affichage = affichage
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.action = ''
 					this.$store.dispatch('modifierMessage', this.$t('affichageMurModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierordre', function (ordre) {
+			this.$socket.on('modifierordre', function (ordre, identifiant) {
 				const blocActif = document.querySelector('.bloc.actif')
 				let blocId = ''
 				if (blocActif) {
@@ -3978,12 +3978,12 @@ export default {
 					}
 				})
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreOrdreModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierlargeur', function (largeur) {
+			this.$socket.on('modifierlargeur', function (largeur, identifiant) {
 				this.mur.largeur = largeur
 				if (this.mur.affichage === 'mur') {
 					this.mur.affichage = ''
@@ -3992,121 +3992,121 @@ export default {
 					}.bind(this), 10)
 				}
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreLargeurModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierfond', function (fond) {
+			this.$socket.on('modifierfond', function (fond, identifiant) {
 				this.mur.fond = fond
 				imagesLoaded('#mur', { background: true }, function () {
 					this.chargement = false
-					if (this.admin) {
+					if (this.admin && this.identifiant === identifiant) {
 						this.$store.dispatch('modifierMessage', this.$t('arrierePlanModifie'))
 					}
 				}.bind(this))
 			}.bind(this))
 
-			this.$socket.on('modifiercouleurfond', function (fond) {
+			this.$socket.on('modifiercouleurfond', function (fond, identifiant) {
 				this.mur.fond = fond
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('arrierePlanModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifieractivite', function (statut) {
+			this.$socket.on('modifieractivite', function (statut, identifiant) {
 				this.mur.registreActivite = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreActiviteModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierconversation', function (statut) {
+			this.$socket.on('modifierconversation', function (statut, identifiant) {
 				this.mur.conversation = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreConversationModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierlisteutilisateurs', function (statut) {
+			this.$socket.on('modifierlisteutilisateurs', function (statut, identifiant) {
 				this.mur.listeUtilisateurs = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreListeUtilisateursModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifiereditionnom', function (statut) {
+			this.$socket.on('modifiereditionnom', function (statut, identifiant) {
 				this.mur.editionNom = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreEditionNomModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierfichiers', function (statut) {
+			this.$socket.on('modifierfichiers', function (statut, identifiant) {
 				this.mur.fichiers = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreFichiersModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierenregistrements', function (statut) {
+			this.$socket.on('modifierenregistrements', function (statut, identifiant) {
 				this.mur.enregistrements = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreEnregistrementsModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierliens', function (statut) {
+			this.$socket.on('modifierliens', function (statut, identifiant) {
 				this.mur.liens = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreLiensModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierdocuments', function (statut) {
+			this.$socket.on('modifierdocuments', function (statut, identifiant) {
 				this.mur.documents = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreDocumentsModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifiercommentaires', function (statut) {
+			this.$socket.on('modifiercommentaires', function (statut, identifiant) {
 				this.mur.commentaires = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreCommentairesModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierevaluations', function (statut) {
+			this.$socket.on('modifierevaluations', function (statut, identifiant) {
 				this.mur.evaluations = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreEvaluationModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifierverrouillage', function (statut) {
+			this.$socket.on('modifierverrouillage', function (statut, identifiant) {
 				this.mur.verrouillage = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreVerrouillageModifie'))
 				}
 			}.bind(this))
 
-			this.$socket.on('modifiercopiebloc', function (statut) {
+			this.$socket.on('modifiercopiebloc', function (statut, identifiant) {
 				this.mur.copieBloc = statut
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('parametreCopieBlocModifie'))
 				}
 			}.bind(this))
@@ -4122,31 +4122,31 @@ export default {
 				}
 			}.bind(this))
 
-			this.$socket.on('reinitialisermessages', function () {
+			this.$socket.on('reinitialisermessages', function (identifiant) {
 				this.messages = []
 				this.nouveauxMessages = 0
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('historiqueConversationSupprime'))
 				}
 			}.bind(this))
 
-			this.$socket.on('reinitialiseractivite', function () {
+			this.$socket.on('reinitialiseractivite', function (identifiant) {
 				this.activite = []
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('activiteSupprimee'))
 				}
 			}.bind(this))
 
-			this.$socket.on('supprimeractivite', function (id) {
+			this.$socket.on('supprimeractivite', function (id, identifiant) {
 				this.activite.forEach(function (activite, index) {
 					if (activite.id === id) {
 						this.activite.splice(index, 1)
 					}
 				}.bind(this))
 				this.chargement = false
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('entreeActiviteSupprimee'))
 				}
 			}.bind(this))
@@ -4157,23 +4157,23 @@ export default {
 				this.mur.colonnes = donnees.colonnes
 				this.mur.affichageColonnes = donnees.affichageColonnes
 				this.activite.unshift({ id: donnees.activiteId, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'colonne-ajoutee' })
-				if (this.admin) {
+				if (this.admin && this.identifiant === donnees.identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('colonneAjoutee'))
 				}
 				this.chargement = false
 			}.bind(this))
 
-			this.$socket.on('modifiertitrecolonne', function (colonnes) {
+			this.$socket.on('modifiertitrecolonne', function (colonnes, identifiant) {
 				this.mur.colonnes = colonnes
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('nomColonneModifie'))
 				}
 				this.chargement = false
 			}.bind(this))
 
-			this.$socket.on('modifieraffichagecolonne', function (affichageColonnes) {
+			this.$socket.on('modifieraffichagecolonne', function (affichageColonnes, identifiant) {
 				this.mur.affichageColonnes = affichageColonnes
-				if (this.admin) {
+				if (this.admin && this.identifiant === identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('affichageColonneModifie'))
 				}
 				this.chargement = false
@@ -4192,7 +4192,7 @@ export default {
 				this.mur.affichageColonnes = donnees.affichageColonnes
 				this.blocs = blocs
 				this.activite.unshift({ id: donnees.activiteId, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'colonne-supprimee' })
-				if (this.admin) {
+				if (this.admin && this.identifiant === donnees.identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('colonneSupprimee'))
 				} else if (!this.admin && this.modaleBloc && parseInt(this.colonne) === parseInt(donnees.colonne)) {
 					this.fermerModaleBloc()
@@ -4230,7 +4230,7 @@ export default {
 				this.mur.affichageColonnes = donnees.affichageColonnes
 				this.blocs = blocs
 				this.activite.unshift({ id: donnees.activiteId, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'colonne-deplacee' })
-				if (this.admin) {
+				if (this.admin && this.identifiant === donnees.identifiant) {
 					this.$store.dispatch('modifierMessage', this.$t('colonneDeplacee'))
 				} else {
 					if (this.modaleBloc && parseInt(this.colonne) === parseInt(donnees.colonne) && donnees.direction === 'gauche') {
