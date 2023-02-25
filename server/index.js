@@ -2435,6 +2435,63 @@ app.post('/api/ladigitale', function (req, res) {
 				const slug = definirSlug(titre)
 				res.send(slug)
 			})
+		} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'ajouter') {
+			const identifiant = req.body.identifiant
+			const mur = req.body.id
+			const token = req.body.tokenContenu
+			const motdepasse = req.body.motdepasse
+			const nom = req.body.nomUtilisateur
+			db.exists('murs:' + mur, async function (err, resultat) {
+				if (err) { res.send('erreur'); return false }
+				if (resultat === 1) {
+					db.hgetall('murs:' + mur, async function (err, donneesMur) {
+						if (err) { res.send('erreur'); return false }
+						if (await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+							const date = moment().format()
+							let langue = 'fr'
+							if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
+								langue = req.session.langue
+							}
+							const multi = db.multi()
+							multi.hmset('utilisateurs:' + identifiant, 'id', identifiant, 'date', date, 'nom', nom, 'langue', langue)
+							multi.hset('murs:' + mur, 'identifiant', identifiant)
+							multi.exec(function (err) {
+								if (err) { res.send('erreur'); return false }
+								res.send(donneesMur.titre)
+							})
+						} else {
+							res.send('non_autorise')
+						}
+					})
+				} else if (resultat !== 1 && fs.existsSync(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
+					const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
+					if (await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+						const date = moment().format()
+						let langue = 'fr'
+						if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
+							langue = req.session.langue
+						}
+						db.hmset('utilisateurs:' + identifiant, 'id', identifiant, 'date', date, 'nom', nom, 'langue', langue, async function (err) {
+							if (err) { res.send('erreur'); return false }
+							const chemin = path.join(__dirname, '..', '/static/murs')
+							const donneesMurJSON = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
+							donneesMurJSON.mur.identifiant = identifiant
+							fs.writeFile(path.normalize(chemin + '/' + mur + '.json'), JSON.stringify(donneesMurJSON, '', 4), 'utf8', function (err) {
+								if (err) { res.send('erreur'); return false }
+								donneesMur.identifiant = identifiant
+								fs.writeFile(path.normalize(chemin + '/mur-' + mur + '.json'), JSON.stringify(donneesMur, '', 4), 'utf8', function (err) {
+									if (err) { res.send('erreur'); return false }
+									res.send(donneesMur.titre)
+								})
+							})
+						})
+					} else {
+						res.send('non_autorise')
+					}
+				} else {
+					res.send('contenu_inexistant')
+				}
+			})
 		} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'supprimer') {
 			const identifiant = req.body.identifiant
 			const mur = req.body.id
