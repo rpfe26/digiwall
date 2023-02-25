@@ -2532,13 +2532,13 @@ app.post('/api/ladigitale', function (req, res) {
 								})
 							})
 						} else {
-							res.send('erreur')
+							res.send('non_autorise')
 						}
 					})
 				} else if (resultat !== 1 && fs.existsSync(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
 					const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
 					const multi = db.multi()
-					if (donneesMur.identifiant === identifiant) {
+					if (donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
 						multi.srem('murs-crees:' + identifiant, mur)
 						multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
 							if (err) { res.send('erreur'); return false }
@@ -2557,7 +2557,7 @@ app.post('/api/ladigitale', function (req, res) {
 							res.send('contenu_supprime')
 						})
 					} else {
-						res.send('erreur')
+						res.send('non_autorise')
 					}
 				} else {
 					res.send('contenu_supprime')
