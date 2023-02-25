@@ -2399,12 +2399,10 @@ app.post('/api/ladigitale', function (req, res) {
 			res.send('erreur_token')
 		} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'creer') {
 			const identifiant = req.body.identifiant
-			req.session.identifiant = identifiant
 			let nom = req.body.nomUtilisateur
 			if (nom === '') {
 				nom = genererPseudo()
 			}
-			req.session.nom = nom
 			const titre = req.body.nom
 			const motdepasse = req.body.motdepasse
 			const hash = await bcrypt.hash(motdepasse, 10)
@@ -4182,12 +4180,12 @@ function creerMurSansCompte (req, res, id, token, slug, titre, hash, date, ident
 	multi.exec(function () {
 		const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
 		fs.mkdirsSync(chemin)
-		req.session.langue = langue
-		req.session.statut = 'auteur'
-		req.session.cookie.expires = new Date(Date.now() + dureeSession)
 		if (type === 'api') {
 			res.send(id + '/' + token + '/' + slug)
 		} else {
+			req.session.langue = langue
+			req.session.statut = 'auteur'
+			req.session.cookie.expires = new Date(Date.now() + dureeSession)
 			res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
 		}
 	})
