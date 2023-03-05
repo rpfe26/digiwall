@@ -36,7 +36,10 @@ export default {
 				redirection = '/u/' + identifiant
 			}
 			return {
-				redirection: redirection
+				redirection: redirection,
+				mur: {},
+				blocs: [],
+				activite: []
 			}
 		})
 		if (!reponse || !reponse.hasOwnProperty('data')) {
@@ -44,15 +47,24 @@ export default {
 				redirection = '/u/' + identifiant
 			}
 			return {
-				redirection: redirection
+				redirection: redirection,
+				mur: {},
+				blocs: [],
+				activite: []
 			}
 		} else if (reponse.data && reponse.data === 'erreur_mur' && statut === 'utilisateur') {
 			return {
-				redirection: '/u/' + identifiant
+				redirection: '/u/' + identifiant,
+				mur: {},
+				blocs: [],
+				activite: []
 			}
 		} else if (reponse.data && reponse.data === 'erreur_mur' && (statut === 'invite' || statut === 'auteur' || statut === '')) {
 			return {
-				redirection: '/'
+				redirection: '/',
+				mur: {},
+				blocs: [],
+				activite: []
 			}
 		} else {
 			return {
@@ -218,7 +230,7 @@ export default {
 			return this.$store.state.langues
 		},
 		admin () {
-			return this.mur.identifiant === this.identifiant || this.mur.admins.includes(this.identifiant) || (this.statut === 'auteur' && this.murs.includes(this.mur.id))
+			return (this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant) || (this.mur.hasOwnProperty('admins') && this.mur.admins.includes(this.identifiant)) || (this.statut === 'auteur' && this.mur.hasOwnProperty('id') && this.murs.includes(this.mur.id))
 		},
 		statut () {
 			return this.$store.state.statut
@@ -434,60 +446,62 @@ export default {
 	},
 	mounted () {
 		imagesLoaded('#mur', { background: true }, function () {
-			document.documentElement.setAttribute('lang', this.langue)
-			document.addEventListener('mousedown', this.surlignerBloc, false)
-			window.addEventListener('beforeunload', this.quitterPage, false)
-			window.addEventListener('resize', this.redimensionner, false)
-			window.addEventListener('message', this.ecouterMessage, false)
+			if (Object.keys(this.mur).length > 0) {
+				document.documentElement.setAttribute('lang', this.langue)
+				document.addEventListener('mousedown', this.surlignerBloc, false)
+				window.addEventListener('beforeunload', this.quitterPage, false)
+				window.addEventListener('resize', this.redimensionner, false)
+				window.addEventListener('message', this.ecouterMessage, false)
 
-			if (this.mur.affichage === 'colonnes') {
-				this.activerDefilementHorizontal()
-			}
-
-			this.definirPressePapier()
-
-			// eslint-disable-next-line
-			this.codeqr = new QRCode('qr', {
-				text: this.hote + '/w/' + this.mur.id + '/' + this.mur.token + '/' + this.mur.slug,
-				width: 360,
-				height: 360,
-				colorDark: '#000000',
-				colorLight: '#ffffff',
-				// eslint-disable-next-line
-				correctLevel : QRCode.CorrectLevel.H
-			})
-
-			setTimeout(function () {
-				this.$nuxt.$loading.finish()
-				document.getElementsByTagName('html')[0].setAttribute('lang', this.langue)
-			}.bind(this), 100)
-
-			document.querySelector('#mur').addEventListener('dragover', function (event) {
-				event.preventDefault()
-				event.stopPropagation()
-			}, false)
-
-			document.querySelector('#mur').addEventListener('dragcenter', function (event) {
-				event.preventDefault()
-				event.stopPropagation()
-			}, false)
-
-			document.querySelector('#mur').addEventListener('drop', function (event) {
-				event.preventDefault()
-				event.stopPropagation()
-				if (event.dataTransfer.files && event.dataTransfer.files[0] && this.accesAutorise && !this.recherche && ((this.admin && this.action !== 'organiser') || (!this.admin && this.mur.contributions !== 'fermees'))) {
-					let indexColonne = 0
-					if (this.mur.affichage === 'colonnes') {
-						this.mur.colonnes.forEach(function (colonne, index) {
-							if (document.querySelector('#colonne' + index).contains(event.target) === true) {
-								indexColonne = index
-							}
-						})
-					}
-					this.ouvrirModaleBloc('creation', '', indexColonne)
-					this.ajouterFichier(event.dataTransfer)
+				if (this.mur.affichage === 'colonnes') {
+					this.activerDefilementHorizontal()
 				}
-			}.bind(this), false)
+
+				this.definirPressePapier()
+
+				// eslint-disable-next-line
+				this.codeqr = new QRCode('qr', {
+					text: this.hote + '/w/' + this.mur.id + '/' + this.mur.token + '/' + this.mur.slug,
+					width: 360,
+					height: 360,
+					colorDark: '#000000',
+					colorLight: '#ffffff',
+					// eslint-disable-next-line
+					correctLevel : QRCode.CorrectLevel.H
+				})
+
+				setTimeout(function () {
+					this.$nuxt.$loading.finish()
+					document.getElementsByTagName('html')[0].setAttribute('lang', this.langue)
+				}.bind(this), 100)
+
+				document.querySelector('#mur').addEventListener('dragover', function (event) {
+					event.preventDefault()
+					event.stopPropagation()
+				}, false)
+
+				document.querySelector('#mur').addEventListener('dragcenter', function (event) {
+					event.preventDefault()
+					event.stopPropagation()
+				}, false)
+
+				document.querySelector('#mur').addEventListener('drop', function (event) {
+					event.preventDefault()
+					event.stopPropagation()
+					if (event.dataTransfer.files && event.dataTransfer.files[0] && this.accesAutorise && !this.recherche && ((this.admin && this.action !== 'organiser') || (!this.admin && this.mur.contributions !== 'fermees'))) {
+						let indexColonne = 0
+						if (this.mur.affichage === 'colonnes') {
+							this.mur.colonnes.forEach(function (colonne, index) {
+								if (document.querySelector('#colonne' + index).contains(event.target) === true) {
+									indexColonne = index
+								}
+							})
+						}
+						this.ouvrirModaleBloc('creation', '', indexColonne)
+						this.ajouterFichier(event.dataTransfer)
+					}
+				}.bind(this), false)
+			}
 		}.bind(this))
 	},
 	beforeDestroy () {
