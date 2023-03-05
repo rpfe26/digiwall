@@ -2069,7 +2069,9 @@ app.post('/api/verifier-acces', function (req, res) {
 				if (!req.session.hasOwnProperty('digidrive')) {
 					req.session.digidrive = []
 				}
-				req.session.digidrive.push(mur)
+				if (!req.session.digidrive.includes(mur)) {
+					req.session.digidrive.push(mur)
+				}
 				req.session.cookie.expires = new Date(Date.now() + dureeSession)
 				res.json({ message: 'mur_debloque', nom: utilisateur.nom, langue: utilisateur.langue, digidrive: req.session.digidrive })
 			})
