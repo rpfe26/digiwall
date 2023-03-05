@@ -254,7 +254,7 @@
 						<img :src="'/img/vignettes/' + imageFond" :alt="'Fond' + (indexImageFond + 1)">
 					</span>
 					<span class="couleur-personnalisee">
-						<input type="color" :value="mur.fond" @change="modifierCouleurFond" :title="$t('selectionnerCouleur')" v-if="mur.fond.substring(0, 1) === '#'">
+						<input type="color" :value="mur.fond" @change="modifierCouleurFond" :title="$t('selectionnerCouleur')" v-if="mur.hasOwnProperty('fond') && mur.fond.substring(0, 1) === '#'">
 						<input type="color" value="#ffffff" @change="modifierCouleurFond" :title="$t('selectionnerCouleur')" v-else>
 					</span>
 				</div>
@@ -415,7 +415,7 @@
 		</div>
 	</div>
 
-	<div id="mur" :class="{'fond-personnalise': mur.fond.substring(1, definirDossierFichiers(mur.id).length + 1) === definirDossierFichiers(mur.id), 'organiser': action === 'organiser'}" :style="definirFond(mur.fond)" v-if="mur.acces !== 'code' || (mur.acces === 'code' && accesAutorise)">
+	<div id="mur" :class="{'fond-personnalise': mur.hasOwnProperty('fond') && mur.fond.substring(1, definirDossierFichiers(mur.id).length + 1) === definirDossierFichiers(mur.id), 'organiser': action === 'organiser'}" :style="definirFond(mur.fond)" v-if="Object.keys(mur).length > 0 && mur.acces !== 'code' || (mur.acces === 'code' && accesAutorise)">
 		<!-- Affichage mur // sans recherche -->
 		<transition name="fondu">
 			<masonry id="blocs" class="mur" :cols="definirLargeurCapsules()" :gutter="0" v-if="mur.affichage === 'mur' && action !== 'organiser' && !recherche">
