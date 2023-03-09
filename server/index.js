@@ -111,6 +111,9 @@ cron.schedule(dateCron, () => {
 	fs.emptyDirSync(path.join(__dirname, '..', '/static/temp'))
 })
 
+const etherpad = process.env.ETHERPAD
+const etherpadApi = process.env.ETHERPAD_API_KEY
+
 app.set('trust proxy', true)
 app.use(helmet({ frameguard: false }))
 app.use(bodyParser.json({ limit: '500mb' }))
@@ -641,8 +644,6 @@ app.post('/api/dupliquer-mur', function (req, res) {
 										if (infos.vignette !== '') {
 											infos.vignette = infos.vignette.replace('/' + definirDossierFichiers(mur) + '/' + mur, '/' + definirDossierFichiers(id) + '/' + id)
 										}
-										const etherpad = process.env.ETHERPAD
-										const etherpadApi = process.env.ETHERPAD_API_KEY
 										if (infos.iframe !== '' && infos.iframe.includes(etherpad)) {
 											const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
 											const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
@@ -695,8 +696,6 @@ app.post('/api/dupliquer-mur', function (req, res) {
 								if (bloc.vignette !== '') {
 									bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(mur) + '/' + mur, '/' + definirDossierFichiers(id) + '/' + id)
 								}
-								const etherpad = process.env.ETHERPAD
-								const etherpadApi = process.env.ETHERPAD_API_KEY
 								if (bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
 									const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
 									const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
@@ -3066,8 +3065,6 @@ io.on('connection', function (socket) {
 								if (objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 									supprimerVignette(objet.vignette)
 								}
-								const etherpad = process.env.ETHERPAD
-								const etherpadApi = process.env.ETHERPAD_API_KEY
 								let etherpadId, url
 								if (objet.iframe !== '' && objet.iframe.includes(etherpad)) {
 									etherpadId = objet.iframe.replace(etherpad + '/p/', '')
