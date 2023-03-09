@@ -387,7 +387,7 @@ export default {
 	watchQuery: ['page'],
 	async created () {
 		if (this.redirection) {
-			this.$router.push(this.redirection)
+			this.$router.replace(this.redirection)
 			return false
 		}
 		if (this.mur.affichage === 'colonnes') {
@@ -431,9 +431,9 @@ export default {
 				this.modaleCodeAcces = true
 			}
 		} else if (this.statut === 'utilisateur') {
-			this.$router.push('/u/' + this.identifiant)
+			this.$router.replace('/u/' + this.identifiant)
 		} else {
-			this.$router.push('/')
+			this.$router.replace('/')
 		}
 		const langue = this.$route.query.lang
 		if (this.langues.includes(langue) === true) {
@@ -518,7 +518,7 @@ export default {
 		allerAccueil () {
 			if (this.statut === 'invite' || this.statut === 'auteur') {
 				this.quitterPage()
-				this.$router.push('/')
+				this.$router.replace('/')
 			}
 		},
 		allerCompte () {
@@ -962,7 +962,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						this.$router.push('/')
+						this.$router.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFichier = 0
@@ -1055,7 +1055,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						this.$router.push('/')
+						this.$router.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFichier = 0
@@ -1194,7 +1194,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						this.$router.push('/')
+						this.$router.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFichierExtra = 0
@@ -1267,7 +1267,7 @@ export default {
 			}).then(function (reponse) {
 				const donnees = reponse.data
 				if (donnees === 'non_connecte') {
-					this.$router.push('/')
+					this.$router.replace('/')
 				} else if (donnees === 'erreur_televersement') {
 					this.progressionEnregistrement = false
 					this.$store.dispatch('modifierAlerte', this.$t('erreurTeleversementFichier'))
@@ -1669,7 +1669,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						this.$router.push('/')
+						this.$router.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionVignette = 0
@@ -2993,7 +2993,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						this.$router.push('/')
+						this.$router.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFond = 0
@@ -3180,7 +3180,7 @@ export default {
 			axios.post(this.hote + '/api/deconnexion').then(function () {
 				this.$socket.emit('deconnexion', identifiant)
 				this.$store.dispatch('reinitialiser')
-				this.$router.push('/')
+				this.$router.replace('/')
 			}.bind(this)).catch(function () {
 				this.$store.dispatch('modifierAlerte', this.$t('erreurCommunicationServeur'))
 			}.bind(this))
@@ -3206,7 +3206,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						this.$router.push('/')
+						this.$router.replace('/')
 					} else if (donnees === 'motdepasse_incorrect') {
 						this.chargement = false
 						this.$store.dispatch('modifierAlerte', this.$t('motDePasseActuelPasCorrect'))
@@ -3343,7 +3343,7 @@ export default {
 					this.fermerModaleImporterMur()
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						this.$router.push('/')
+						this.$router.replace('/')
 					} else if (donnees === 'erreur_import') {
 						this.$store.dispatch('modifierAlerte', this.$t('erreurImportMur'))
 					} else if (donnees === 'donnees_corrompues') {
@@ -3390,7 +3390,7 @@ export default {
 					this.chargement = false
 					this.$store.dispatch('modifierAlerte', this.$t('erreurSuppressionMur'))
 				} else {
-					this.$router.push('/')
+					this.$router.replace('/')
 				}
 			}.bind(this)).catch(function () {
 				this.chargement = false
@@ -3948,7 +3948,7 @@ export default {
 				} else {
 					if (donnees.acces === 'prive') {
 						this.$socket.emit('sortie', this.mur.id, this.identifiant)
-						this.$router.push('/')
+						this.$router.replace('/')
 					}
 				}
 			}.bind(this))
