@@ -3065,16 +3065,12 @@ io.on('connection', function (socket) {
 								if (objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 									supprimerVignette(objet.vignette)
 								}
-								let etherpadId, url
+								let pad = ''
 								if (objet.iframe !== '' && objet.iframe.includes(etherpad)) {
-									etherpadId = objet.iframe.replace(etherpad + '/p/', '')
-									url = etherpad + '/api/1/deletePad?apikey=' + etherpadApi + '&padId=' + etherpadId
-									axios.get(url)
+									pad = objet.iframe
 								}
-								if (objet.media !== '' && objet.media.includes(etherpad)) {
-									etherpadId = objet.media.replace(etherpad + '/p/', '')
-									url = etherpad + '/api/1/deletePad?apikey=' + etherpadApi + '&padId=' + etherpadId
-									axios.get(url)
+								if (objet.media !== '' && objet.media.includes(etherpad) && pad === '') {
+									pad = objet.media
 								}
 								if (objet.bloc === bloc && (objet.identifiant === identifiant || proprietaire === identifiant || admins.includes(identifiant))) {
 									const date = moment().format()
@@ -3089,7 +3085,7 @@ io.on('connection', function (socket) {
 									multi.hincrby('murs:' + mur, 'activite', 1)
 									multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-supprime' }))
 									multi.exec(function () {
-										io.in('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId })
+										io.in('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId, etherpad: pad })
 										socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 										socket.handshake.session.save()
 									})
