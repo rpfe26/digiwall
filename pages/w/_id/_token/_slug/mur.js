@@ -3785,6 +3785,11 @@ export default {
 				}.bind(this))
 				this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-supprime' })
 				this.envoyerNotificationAdmins()
+				if (this.identifiant === donnees.identifiant && donnees.etherpad !== '') {
+					const etherpadId = donnees.etherpad.replace(this.etherpad + '/p/', '')
+					const url = this.etherpad + '/api/1/deletePad?apikey=' + this.etherpadApi + '&padID=' + etherpadId
+					axios.get(url)
+				}
 			}.bind(this))
 
 			this.$socket.on('commenterbloc', function (donnees) {
