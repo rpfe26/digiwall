@@ -220,7 +220,7 @@ app.post('/api/connexion', function (req, res) {
 	const motdepasse = req.body.motdepasse
 	db.exists('utilisateurs:' + identifiant, function (err, reponse) {
 		if (err) { res.send('erreur_connexion'); return false }
-		if (reponse === 1 && req.session.identifiant !== identifiant) {
+		if (reponse === 1) {
 			db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
 				if (err) { res.send('erreur_connexion'); return false }
 				const comparaison = await bcrypt.compare(motdepasse, donnees.motdepasse)
@@ -497,7 +497,7 @@ app.post('/api/creer-mur-sans-compte', async function (req, res) {
 		return false
 	}
 	let identifiant, nom
-	if (req.session.identifiant === '' || req.session.identifiant === undefined) {
+	if (req.session.identifiant === '' || req.session.identifiant === undefined || (req.session.identifiant.length !== 13 && req.session.identifiant.substring(0, 1) !== 'u')) {
 		identifiant = 'u' + Math.random().toString(16).slice(3)
 		nom = genererPseudo()
 		req.session.identifiant = identifiant
@@ -2058,7 +2058,7 @@ app.post('/api/verifier-acces', function (req, res) {
 	const identifiant = req.body.identifiant
 	db.hgetall('murs:' + mur, async function (err, donnees) {
 		if (err) { res.send('erreur'); return false }
-		if (identifiant === donnees.identifiant && await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
+		if (identifiant === donnees.identifiant && donnees.hasOwnProperty('motdepasse') && await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
 			db.hgetall('utilisateurs:' + identifiant, function (err, utilisateur) {
 				if (err) { res.send('erreur'); return false }
 				req.session.identifiant = identifiant
@@ -2073,6 +2073,33 @@ app.post('/api/verifier-acces', function (req, res) {
 				}
 				req.session.cookie.expires = new Date(Date.now() + dureeSession)
 				res.json({ message: 'mur_debloque', nom: utilisateur.nom, langue: utilisateur.langue, digidrive: req.session.digidrive })
+			})
+		} else if (identifiant === donnees.identifiant && !donnees.hasOwnProperty('motdepasse')) {
+			db.exists('utilisateurs:' + identifiant, function (err, resultat) {
+				if (err) { res.send('erreur'); return false }
+				if (resultat === 1) {
+					db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
+						if (err) { res.send('erreur'); return false }
+						if (await bcrypt.compare(req.body.motdepasse, utilisateur.motdepasse)) {
+							req.session.identifiant = identifiant
+							req.session.nom = utilisateur.nom
+							req.session.statut = 'auteur'
+							req.session.langue = utilisateur.langue
+							if (!req.session.hasOwnProperty('digidrive')) {
+								req.session.digidrive = []
+							}
+							if (!req.session.digidrive.includes(mur)) {
+								req.session.digidrive.push(mur)
+							}
+							req.session.cookie.expires = new Date(Date.now() + dureeSession)
+							res.json({ message: 'mur_debloque', nom: utilisateur.nom, langue: utilisateur.langue, digidrive: req.session.digidrive })
+						} else {
+							res.send('erreur')
+						}
+					})
+				} else {
+					res.send('erreur')
+				}
 			})
 		} else {
 			res.send('erreur')
@@ -2445,7 +2472,7 @@ app.post('/api/ladigitale', function (req, res) {
 				if (resultat === 1) {
 					db.hgetall('murs:' + mur, async function (err, donneesMur) {
 						if (err) { res.send('erreur'); return false }
-						if (await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+						if (donneesMur.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
 							const date = moment().format()
 							let langue = 'fr'
 							if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
@@ -2456,7 +2483,23 @@ app.post('/api/ladigitale', function (req, res) {
 							multi.hset('murs:' + mur, 'identifiant', identifiant)
 							multi.exec(function (err) {
 								if (err) { res.send('erreur'); return false }
-								res.send(donneesMur.titre)
+								res.json({ titre: donneesMur.titre, identifiant: identifiant })
+							})
+						} else if (!donneesMur.hasOwnProperty('motdepasse') && token === donneesMur.token) {
+							db.exists('utilisateurs:' + donneesMur.identifiant, function (err, resultat) {
+								if (err) { res.send('erreur'); return false }
+								if (resultat === 1) {
+									db.hgetall('utilisateurs:' + donneesMur.identifiant, async function (err, utilisateur) {
+										if (err) { res.send('erreur'); return false }
+										if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+											res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
+										} else {
+											res.send('non_autorise')
+										}
+									})
+								} else {
+									res.send('erreur')
+								}
 							})
 						} else {
 							res.send('non_autorise')
@@ -2464,7 +2507,7 @@ app.post('/api/ladigitale', function (req, res) {
 					})
 				} else if (resultat !== 1 && fs.existsSync(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
 					const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-					if (await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+					if (donneesMur.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
 						const date = moment().format()
 						let langue = 'fr'
 						if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
@@ -2484,6 +2527,22 @@ app.post('/api/ladigitale', function (req, res) {
 								})
 							})
 						})
+					} else if (!donneesMur.hasOwnProperty('motdepasse') && token === donneesMur.token) {
+						db.exists('utilisateurs:' + donneesMur.identifiant, function (err, resultat) {
+							if (err) { res.send('erreur'); return false }
+							if (resultat === 1) {
+								db.hgetall('utilisateurs:' + donneesMur.identifiant, async function (err, utilisateur) {
+									if (err) { res.send('erreur'); return false }
+									if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+										res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
+									} else {
+										res.send('non_autorise')
+									}
+								})
+							} else {
+								res.send('erreur')
+							}
+						})
 					} else {
 						res.send('non_autorise')
 					}
@@ -2500,7 +2559,7 @@ app.post('/api/ladigitale', function (req, res) {
 				if (resultat === 1) {
 					db.hgetall('murs:' + mur, async function (err, donneesMur) {
 						if (err) { res.send('erreur'); return false }
-						if (donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
+						if (donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
 							db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
 								if (err) { res.send('erreur'); return false }
 								const multi = db.multi()
@@ -2530,6 +2589,50 @@ app.post('/api/ladigitale', function (req, res) {
 									res.send('contenu_supprime')
 								})
 							})
+						} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
+							db.exists('utilisateurs:' + identifiant, function (err, resultat) {
+								if (err) { res.send('erreur'); return false }
+								if (resultat === 1) {
+									db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
+										if (err) { res.send('erreur'); return false }
+										if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+											db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
+												if (err) { res.send('erreur'); return false }
+												const multi = db.multi()
+												for (let i = 0; i < blocs.length; i++) {
+													multi.del('commentaires:' + blocs[i])
+													multi.del('evaluations:' + blocs[i])
+													multi.del('contenu-blocs:' + mur + ':' + blocs[i])
+												}
+												multi.del('blocs:' + mur)
+												multi.del('murs:' + mur)
+												multi.del('activite:' + mur)
+												multi.del('dates-murs:' + mur)
+												multi.srem('murs-crees:' + identifiant, mur)
+												multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
+													if (err) { res.send('erreur'); return false }
+													for (let j = 0; j < utilisateurs.length; j++) {
+														db.srem('murs-rejoints:' + utilisateurs[j], mur)
+														db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
+														db.srem('murs-admins:' + utilisateurs[j], mur)
+														db.srem('murs-favoris:' + utilisateurs[j], mur)
+													}
+												})
+												multi.del('utilisateurs-murs:' + mur)
+												multi.exec(function () {
+													const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+													fs.removeSync(chemin)
+													res.send('contenu_supprime')
+												})
+											})
+										} else {
+											res.send('non_autorise')
+										}
+									})
+								} else {
+									res.send('erreur')
+								}
+							})			
 						} else {
 							res.send('non_autorise')
 						}
@@ -2537,7 +2640,7 @@ app.post('/api/ladigitale', function (req, res) {
 				} else if (resultat !== 1 && fs.existsSync(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
 					const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
 					const multi = db.multi()
-					if (donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
+					if (donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
 						multi.srem('murs-crees:' + identifiant, mur)
 						multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
 							if (err) { res.send('erreur'); return false }
@@ -2555,6 +2658,50 @@ app.post('/api/ladigitale', function (req, res) {
 							fs.removeSync(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
 							res.send('contenu_supprime')
 						})
+					} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
+						db.exists('utilisateurs:' + identifiant, function (err, resultat) {
+							if (err) { res.send('erreur'); return false }
+							if (resultat === 1) {
+								db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
+									if (err) { res.send('erreur'); return false }
+									if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+										db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
+											if (err) { res.send('erreur'); return false }
+											const multi = db.multi()
+											for (let i = 0; i < blocs.length; i++) {
+												multi.del('commentaires:' + blocs[i])
+												multi.del('evaluations:' + blocs[i])
+												multi.del('contenu-blocs:' + mur + ':' + blocs[i])
+											}
+											multi.del('blocs:' + mur)
+											multi.del('murs:' + mur)
+											multi.del('activite:' + mur)
+											multi.del('dates-murs:' + mur)
+											multi.srem('murs-crees:' + identifiant, mur)
+											multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
+												if (err) { res.send('erreur'); return false }
+												for (let j = 0; j < utilisateurs.length; j++) {
+													db.srem('murs-rejoints:' + utilisateurs[j], mur)
+													db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
+													db.srem('murs-admins:' + utilisateurs[j], mur)
+													db.srem('murs-favoris:' + utilisateurs[j], mur)
+												}
+											})
+											multi.del('utilisateurs-murs:' + mur)
+											multi.exec(function () {
+												const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+												fs.removeSync(chemin)
+												res.send('contenu_supprime')
+											})
+										})
+									} else {
+										res.send('non_autorise')
+									}
+								})
+							} else {
+								res.send('erreur')
+							}
+						})			
 					} else {
 						res.send('non_autorise')
 					}
