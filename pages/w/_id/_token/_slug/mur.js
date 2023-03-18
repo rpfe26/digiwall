@@ -459,17 +459,6 @@ export default {
 
 				this.definirPressePapier()
 
-				// eslint-disable-next-line
-				this.codeqr = new QRCode('qr', {
-					text: this.hote + '/w/' + this.mur.id + '/' + this.mur.token + '/' + this.mur.slug,
-					width: 360,
-					height: 360,
-					colorDark: '#000000',
-					colorLight: '#ffffff',
-					// eslint-disable-next-line
-					correctLevel : QRCode.CorrectLevel.H
-				})
-
 				setTimeout(function () {
 					this.$nuxt.$loading.finish()
 					document.getElementsByTagName('html')[0].setAttribute('lang', this.langue)
@@ -2876,6 +2865,18 @@ export default {
 		},
 		afficherCodeQR () {
 			this.modaleCodeQR = true
+			this.$nextTick(function () {
+				// eslint-disable-next-line
+				this.codeqr = new QRCode('qr', {
+					text: this.hote + '/w/' + this.mur.id + '/' + this.mur.token + '/' + this.mur.slug,
+					width: 360,
+					height: 360,
+					colorDark: '#000000',
+					colorLight: '#ffffff',
+					// eslint-disable-next-line
+					correctLevel : QRCode.CorrectLevel.H
+				})
+			}.bind(this))
 		},
 		fermerModaleCodeQR () {
 			this.modaleCodeQR = false
@@ -3907,7 +3908,6 @@ export default {
 				this.mur.slug = donnees.slug
 				this.pressePapierLien.destroy()
 				this.pressePapierIframe.destroy()
-				this.codeqr.makeCode(this.hote + '/w/' + this.mur.id + '/' + this.mur.token + '/' + this.mur.slug)
 				this.$nextTick(function () {
 					this.chargement = false
 					this.definirPressePapier()
