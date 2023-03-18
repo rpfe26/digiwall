@@ -305,25 +305,25 @@ app.post('/api/deconnexion', function (req, res) {
 app.post('/api/recuperer-donnees-utilisateur', function (req, res) {
 	const identifiant = req.body.identifiant
 	recupererDonnees(identifiant).then(function (murs) {
-		const mursCrees = murs[0].filter(function (element) {
+		let mursCrees = murs[0].filter(function (element) {
 			if (element.hasOwnProperty('id')) {
 				element.id = parseInt(element.id)
 			}
 			return element !== '' && Object.keys(element).length > 0
 		})
-		const mursRejoints = murs[1].filter(function (element) {
+		let mursRejoints = murs[1].filter(function (element) {
 			if (element.hasOwnProperty('id')) {
 				element.id = parseInt(element.id)
 			}
 			return element !== '' && Object.keys(element).length > 0
 		})
-		const mursAdmins = murs[2].filter(function (element) {
+		let mursAdmins = murs[2].filter(function (element) {
 			if (element.hasOwnProperty('id')) {
 				element.id = parseInt(element.id)
 			}
 			return element !== '' && Object.keys(element).length > 0
 		})
-		const mursFavoris = murs[3].filter(function (element) {
+		let mursFavoris = murs[3].filter(function (element) {
 			if (element.hasOwnProperty('id')) {
 				element.id = parseInt(element.id)
 			}
@@ -337,6 +337,27 @@ app.post('/api/recuperer-donnees-utilisateur', function (req, res) {
 				}
 			})
 		})
+		// Supprimer doublons
+		mursCrees = mursCrees.filter((valeur, index, self) =>
+			index === self.findIndex((t) => (
+				t.id === valeur.id && t.token === valeur.token
+			))
+		)
+		mursRejoints = mursRejoints.filter((valeur, index, self) =>
+			index === self.findIndex((t) => (
+				t.id === valeur.id && t.token === valeur.token
+			))
+		)
+		mursAdmins = mursAdmins.filter((valeur, index, self) =>
+			index === self.findIndex((t) => (
+				t.id === valeur.id && t.token === valeur.token
+			))
+		)
+		mursFavoris = mursFavoris.filter((valeur, index, self) =>
+			index === self.findIndex((t) => (
+				t.id === valeur.id && t.token === valeur.token
+			))
+		)
 		// Récupération et vérification des dossiers utilisateur
 		db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
 			if (err || donnees === null) {
