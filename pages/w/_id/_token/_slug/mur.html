@@ -426,14 +426,14 @@
 						</div>
 						<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 						<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-							<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+							<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 							<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 							<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 							<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></span>
+							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 							<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 						</div>
 						<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -477,14 +477,14 @@
 						</div>
 						<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 						<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-							<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+							<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 							<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 							<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 							<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></span>
+							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 							<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 						</div>
 						<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -528,14 +528,14 @@
 						</div>
 						<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 						<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-							<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+							<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 							<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 							<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 							<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></span>
+							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 							<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 						</div>
 						<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -579,14 +579,14 @@
 						</div>
 						<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 						<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-							<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+							<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 							<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 							<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 							<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></span>
+							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 							<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 						</div>
 						<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -644,14 +644,14 @@
 									</div>
 									<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 									<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-										<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-										<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+										<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+										<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 										<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 										<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 										<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-										<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-										<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-										<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+										<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></span>
+										<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+										<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 										<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 									</div>
 									<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -718,14 +718,14 @@
 									</div>
 									<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 									<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-										<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-										<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+										<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+										<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 										<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 										<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 										<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-										<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-										<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-										<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+										<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></span>
+										<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+										<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 										<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 									</div>
 									<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -773,14 +773,14 @@
 						</div>
 						<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 						<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-							<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+							<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+							<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 							<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 							<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 							<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+							<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></span>
+							<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+							<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 							<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 						</div>
 						<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -828,14 +828,14 @@
 								</div>
 								<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 								<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-									<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" @click="afficherVisionneuse(item)">
-									<img v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)">
+									<img v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" @click="afficherVisionneuse(item)">
+									<img v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" @click="afficherVisionneuse(item)">
 									<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
 									<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
 									<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
 									<span v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></span>
-									<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
-									<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)"></a></span>
+									<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
+									<span v-else><a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 5) !== '/img/'}" :src="definirVignette(item)" loading="lazy"></a></span>
 									<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
 								</div>
 								<div class="evaluation" v-if="mur.evaluations === 'activees'">
@@ -1531,20 +1531,7 @@
 		</div>
 	</div>
 
-	<div class="conteneur-modale" v-if="transcodage || progressionEnregistrement">
-		<div id="transcodage" class="modale">
-			<div class="conteneur">
-				<div class="contenu">
-					<div class="conteneur-chargement">
-						<div class="chargement" />
-					</div>
-					<span class="patienter">{{ $t('transcodage') }}</span>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="conteneur-modale" v-show="modaleCodeQR">
+	<div class="conteneur-modale" v-else-if="modaleCodeQR">
 		<div id="codeqr" class="modale">
 			<div class="en-tete">
 				<span class="titre">{{ $t('codeQR') }}</span>
@@ -1553,6 +1540,19 @@
 			<div class="conteneur">
 				<div class="contenu">
 					<div id="qr" />
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="conteneur-modale" v-if="transcodage || progressionEnregistrement">
+		<div id="transcodage" class="modale">
+			<div class="conteneur">
+				<div class="contenu">
+					<div class="conteneur-chargement">
+						<div class="chargement" />
+					</div>
+					<span class="patienter">{{ $t('transcodage') }}</span>
 				</div>
 			</div>
 		</div>
