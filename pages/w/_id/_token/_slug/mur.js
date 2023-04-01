@@ -1326,7 +1326,7 @@ export default {
 										minutes = '0' + minutes
 									}
 									this.dureeEnregistrement = minutes + ' : ' + secondes
-									if (this.dureeEnregistrement === '01 : 30') {
+									if (this.dureeEnregistrement === '02 : 00') {
 										this.arreterEnregistrementAudio()
 									}
 								}.bind(this), 100)
