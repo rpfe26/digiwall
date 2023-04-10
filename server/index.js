@@ -363,7 +363,14 @@ app.post('/api/recuperer-donnees-utilisateur', function (req, res) {
 			if (err || donnees === null) {
 				res.json({ mursCrees: mursCrees, mursRejoints: mursRejoints, mursAdmins: mursAdmins, mursFavoris: mursFavoris, dossiers: [] })
 			} else {
-				const dossiers = JSON.parse(donnees.dossiers)
+				let dossiers = []
+				if (donnees.hasOwnProperty('dossiers')) {
+					try {
+						dossiers = JSON.parse(donnees.dossiers)
+					} catch (err) {
+						console.log(err)
+					}
+				}
 				const listeMursDossiers = []
 				dossiers.forEach(function (dossier, indexDossier) {
 					dossier.murs.forEach(function (mur, indexMur) {
@@ -2797,7 +2804,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hgetall('murs:' + mur, function (err, donnees) {
-				if (err) { socket.emit('erreur'); return false }
+				if (err || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('bloc')) { socket.emit('erreur'); return false }
 				const id = parseInt(donnees.bloc) + 1
 				db.hincrby('murs:' + mur, 'bloc', 1)
 				if (donnees.id === mur && donnees.token === token) {
@@ -2863,6 +2870,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hgetall('murs:' + mur, function (err, donnees) {
+				if (err || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token')) { socket.emit('erreur'); return false }
 				if (donnees.id === mur && donnees.token === token) {
 					db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
 						if (err) { socket.emit('erreur'); return false }
@@ -3031,7 +3039,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hgetall('murs:' + mur, function (err, donnees) {
-				if (err) { socket.emit('erreur'); return false }
+				if (err || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('bloc')) { socket.emit('erreur'); return false }
 				const id = parseInt(donnees.bloc) + 1
 				db.hincrby('murs:' + mur, 'bloc', 1)
 				if (donnees.id === mur && donnees.token === token) {
@@ -3122,6 +3130,7 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hgetall('murs:' + mur, function (err, donnees) {
+				if (err || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token')) { socket.emit('erreur'); return false }
 				if (donnees.id === mur && donnees.token === token) {
 					db.exists('contenu-blocs:' + mur + ':' + item.bloc, function (err, resultat) {
 						if (err) { socket.emit('erreur'); return false }
