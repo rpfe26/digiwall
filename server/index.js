@@ -3447,9 +3447,9 @@ io.on('connection', function (socket) {
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hgetall('murs:' + mur, function (err, resultat) {
-				if (err) { socket.emit('erreur'); return false }
+				if (err || !resultat.hasOwnProperty('activite')) { socket.emit('erreur'); return false }
 				db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, donnees) {
-					if (err) { socket.emit('erreur'); return false }
+					if (err || !donnees.hasOwnProperty('evaluations')) { socket.emit('erreur'); return false }
 					const date = moment().format()
 					const activiteId = parseInt(resultat.activite) + 1
 					const evaluationId = parseInt(donnees.evaluations) + 1
