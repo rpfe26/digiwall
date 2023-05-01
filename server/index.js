@@ -676,10 +676,10 @@ app.post('/api/dupliquer-mur', function (req, res) {
 									db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, infos) {
 										if (err) { resolve({}) }
 										const date = moment().format()
-										if (infos.vignette !== '') {
+										if (infos.hasOwnProperty('vignette') && infos.vignette !== '') {
 											infos.vignette = infos.vignette.replace('/' + definirDossierFichiers(mur) + '/' + mur, '/' + definirDossierFichiers(id) + '/' + id)
 										}
-										if (infos.iframe !== '' && infos.iframe.includes(etherpad)) {
+										if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
 											const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
 											const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
 											const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
@@ -729,10 +729,10 @@ app.post('/api/dupliquer-mur', function (req, res) {
 						for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 							const donneesBloc = new Promise(function (resolve) {
 								if (Object.keys(bloc).length > 0) {
-									if (bloc.vignette !== '') {
+									if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '') {
 										bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(mur) + '/' + mur, '/' + definirDossierFichiers(id) + '/' + id)
 									}
-									if (bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
+									if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
 										const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
 										const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
 										const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
@@ -1071,19 +1071,21 @@ app.post('/api/importer-mur', function (req, res) {
 										}
 									}
 									multi.exec(function () {
-										if (bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
+										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
 											fs.copySync(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
 										}
-										if (bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+										if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
 											fs.copySync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
 										}
-										const medias = JSON.parse(bloc.medias)
-										for (let i = 0; i < medias.length; i++) {
-											if (medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
-												fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+										if (bloc.hasOwnProperty('medias')) {
+											const medias = JSON.parse(bloc.medias)
+											for (let i = 0; i < medias.length; i++) {
+												if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+													fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+												}
 											}
 										}
-										if (bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
+										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
 											fs.copySync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
 										}
 										resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1224,19 +1226,21 @@ app.post('/api/importer-mur-sans-compte', function (req, res) {
 												}
 											}
 											multi.exec(function () {
-												if (bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
+												if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
 													fs.copySync(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
 												}
-												if (bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+												if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
 													fs.copySync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
 												}
-												const medias = JSON.parse(bloc.medias)
-												for (let i = 0; i < medias.length; i++) {
-													if (medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
-														fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+												if (bloc.hasOwnProperty('medias')) {
+													const medias = JSON.parse(bloc.medias)
+													for (let i = 0; i < medias.length; i++) {
+														if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+															fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+														}
 													}
 												}
-												if (bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
+												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
 													fs.copySync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
 												}
 												resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1332,19 +1336,21 @@ app.post('/api/importer-mur-sans-compte', function (req, res) {
 											}
 										}
 										multi.exec(function () {
-											if (bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
+											if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.media))) {
 												fs.copySync(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
 											}
-											if (bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+											if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
 												fs.copySync(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
 											}
-											const medias = JSON.parse(bloc.medias)
-											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
-													fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+											if (bloc.hasOwnProperty('medias')) {
+												const medias = JSON.parse(bloc.medias)
+												for (let i = 0; i < medias.length; i++) {
+													if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && fs.existsSync(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+														fs.copyFileSync(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+													}
 												}
 											}
-											if (bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
+											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && fs.existsSync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
 												fs.copySync(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
 											}
 											resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1822,10 +1828,21 @@ app.post('/api/supprimer-compte', function (req, res) {
 											db.hgetall('contenu-blocs:' + mur + ':' + blocs[i], function (err, donnees) {
 												if (err) { resolve() }
 												if (donnees.identifiant === identifiant) {
-													if (donnees.media !== '' && donnees.type !== 'embed') {
+													if (donnees.hasOwnProperty('media') && donnees.media !== '' && donnees.type !== 'embed') {
 														supprimerFichier(mur, donnees.media)
 													}
-													if (donnees.vignette !== '' && donnees.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
+													if (donnees.hasOwnProperty('mediaExtra') && donnees.mediaExtra !== '') {
+														supprimerFichier(mur, donnees.mediaExtra)
+													}
+													if (donnees.hasOwnProperty('medias')) {
+														const medias = JSON.parse(donnees.medias)
+														for (let i = 0; i < medias.length; i++) {
+															if (medias[i].hasOwnProperty('fichier')) {
+																supprimerFichier(mur, medias[i].fichier)
+															}
+														}
+													}
+													if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && donnees.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 														supprimerVignette(donnees.vignette)
 													}
 													const multi = db.multi()
@@ -1909,11 +1926,22 @@ app.post('/api/supprimer-compte', function (req, res) {
 									const entrees = donnees.activite
 									const donneesBloc = new Promise(function (resolve) {
 										for (let i = 0; i < blocs.length; i++) {
-											if (blocs[i].identifiant === identifiant) {
-												if (blocs[i].media !== '' && blocs[i].type !== 'embed') {
+											if (blocs[i].hasOwnProperty('identifiant') && blocs[i].identifiant === identifiant) {
+												if (blocs[i].hasOwnProperty('media') && blocs[i].media !== '' && blocs[i].type !== 'embed') {
 													supprimerFichier(mur, blocs[i].media)
 												}
-												if (blocs[i].vignette !== '' && blocs[i].vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
+												if (blocs[i].hasOwnProperty('mediaExtra') && blocs[i].mediaExtra !== '') {
+													supprimerFichier(mur, blocs[i].mediaExtra)
+												}
+												if (blocs[i].hasOwnProperty('medias')) {
+													const medias = JSON.parse(blocs[i].medias)
+													for (let i = 0; i < medias.length; i++) {
+														if (medias[i].hasOwnProperty('fichier')) {
+															supprimerFichier(mur, medias[i].fichier)
+														}
+													}
+												}
+												if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && blocs[i].vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 													supprimerVignette(blocs[i].vignette)
 												}
 												const multi = db.multi()
@@ -2941,37 +2969,39 @@ io.on('connection', function (socket) {
 										multi.hincrby('murs:' + mur, 'activite', 1)
 										multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }))
 										multi.exec(function (err) {
-											if (objet.media && objet.media !== media && media !== '' && type !== 'embed' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + media))) {
+											if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + media))) {
 												fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
 												fs.removeSync(path.join(__dirname, '..', '/static/temp/' + media))
 											}
-											if (objet.media && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+											if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
 												supprimerFichier(mur, objet.media)
 											}
-											if (objet.mediaExtra && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+											if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
 												fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
 												fs.removeSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
 											}
-											if (objet.mediaExtra && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
+											if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
 												supprimerFichier(mur, objet.mediaExtra)
 											}
-											const mediasActuels = JSON.parse(objet.medias)
-											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-													fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-													fs.removeSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+											if (objet.hasOwnProperty('medias')) {
+												const mediasActuels = JSON.parse(objet.medias)
+												for (let i = 0; i < medias.length; i++) {
+													if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+														fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+														fs.removeSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+													}
 												}
+												mediasActuels.forEach(function (mediaActuel) {
+													if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
+														supprimerFichier(mur, mediaActuel.fichier)
+													}
+												})
 											}
-											mediasActuels.forEach(function (mediaActuel) {
-												if (!medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-													supprimerFichier(mur, mediaActuel.fichier)
-												}
-											})
-											if (objet.vignette && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
 												fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 												fs.removeSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 											}
-											if (objet.vignette && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
+											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 												supprimerVignette(objet.vignette)
 											}
 											io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, activiteId: activiteId })
@@ -2983,37 +3013,39 @@ io.on('connection', function (socket) {
 										multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'modifie', date, 'couleur', couleur)
 										multi.hset('dates-murs:' + mur, 'date', date)
 										multi.exec(function () {
-											if (objet.media && objet.media !== media && media !== '' && type !== 'embed' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + media))) {
+											if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + media))) {
 												fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
 												fs.removeSync(path.join(__dirname, '..', '/static/temp/' + media))
 											}
-											if (objet.media && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+											if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
 												supprimerFichier(mur, objet.media)
 											}
-											if (objet.mediaExtra && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+											if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
 												fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
 												fs.removeSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
 											}
-											if (objet.mediaExtra && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
+											if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
 												supprimerFichier(mur, objet.mediaExtra)
 											}
-											const mediasActuels = JSON.parse(objet.medias)
-											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-													fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-													fs.removeSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+											if (objet.hasOwnProperty('medias')) {
+												const mediasActuels = JSON.parse(objet.medias)
+												for (let i = 0; i < medias.length; i++) {
+													if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+														fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+														fs.removeSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+													}
 												}
+												mediasActuels.forEach(function (mediaActuel) {
+													if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
+														supprimerFichier(mur, mediaActuel.fichier)
+													}
+												})
 											}
-											mediasActuels.forEach(function (mediaActuel) {
-												if (!medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-													supprimerFichier(mur, mediaActuel.fichier)
-												}
-											})
-											if (objet.vignette && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
 												fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 												fs.removeSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 											}
-											if (objet.vignette && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
+											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 												supprimerVignette(objet.vignette)
 											}
 											io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite })
@@ -3021,37 +3053,39 @@ io.on('connection', function (socket) {
 											socket.handshake.session.save()
 										})
 									} else {
-										if (objet.media && objet.media !== media && media !== '' && type !== 'embed' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + media))) {
+										if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + media))) {
 											fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
 											fs.removeSync(path.join(__dirname, '..', '/static/temp/' + media))
 										}
-										if (objet.media && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+										if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
 											supprimerFichier(mur, objet.media)
 										}
-										if (objet.mediaExtra && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+										if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
 											fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
 											fs.removeSync(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
 										}
-										if (objet.mediaExtra && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
+										if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
 											supprimerFichier(mur, objet.mediaExtra)
 										}
-										const mediasActuels = JSON.parse(objet.medias)
-										for (let i = 0; i < medias.length; i++) {
-											if (medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-												fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-												fs.removeSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+										if (objet.hasOwnProperty('medias')) {
+											const mediasActuels = JSON.parse(objet.medias)
+											for (let i = 0; i < medias.length; i++) {
+												if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+													fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+													fs.removeSync(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+												}
 											}
+											mediasActuels.forEach(function (mediaActuel) {
+												if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
+													supprimerFichier(mur, mediaActuel.fichier)
+												}
+											})
 										}
-										mediasActuels.forEach(function (mediaActuel) {
-											if (!medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-												supprimerFichier(mur, mediaActuel.fichier)
-											}
-										})
-										if (objet.vignette && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+										if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && fs.existsSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
 											fs.copyFileSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 											fs.removeSync(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 										}
-										if (objet.vignette && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
+										if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 											supprimerVignette(objet.vignette)
 										}
 										io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite })
@@ -3266,27 +3300,31 @@ io.on('connection', function (socket) {
 						if (resultat === 1) {
 							db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, objet) {
 								if (err) { socket.emit('erreur'); return false }
-								if (objet.media !== '' && objet.type !== 'embed') {
+								if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
 									supprimerFichier(mur, objet.media)
 								}
-								if (objet.mediaExtra !== '') {
+								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
 									supprimerFichier(mur, objet.mediaExtra)
 								}
-								const medias = JSON.parse(objet.medias)
-								for (let i = 0; i < medias.length; i++) {
-									supprimerFichier(mur, medias[i].fichier)
+								if (objet.hasOwnProperty('medias')) {
+									const medias = JSON.parse(objet.medias)
+									for (let i = 0; i < medias.length; i++) {
+										if (medias[i].hasOwnProperty('fichier')) {
+											supprimerFichier(mur, medias[i].fichier)
+										}
+									}
 								}
-								if (objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
+								if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 									supprimerVignette(objet.vignette)
 								}
 								let pad = ''
-								if (objet.iframe !== '' && objet.iframe.includes(etherpad)) {
+								if (objet.hasOwnProperty('iframe') && objet.iframe !== '' && objet.iframe.includes(etherpad)) {
 									pad = objet.iframe
 								}
-								if (objet.media !== '' && objet.media.includes(etherpad) && pad === '') {
+								if (objet.hasOwnProperty('media') && objet.media !== '' && objet.media.includes(etherpad) && pad === '') {
 									pad = objet.media
 								}
-								if (objet.bloc === bloc && (objet.identifiant === identifiant || proprietaire === identifiant || admins.includes(identifiant))) {
+								if (objet.hasOwnProperty('bloc') && objet.bloc === bloc && (objet.identifiant === identifiant || proprietaire === identifiant || admins.includes(identifiant))) {
 									const date = moment().format()
 									const activiteId = parseInt(donnees.activite) + 1
 									const multi = db.multi()
@@ -3356,11 +3394,12 @@ io.on('connection', function (socket) {
 			return false
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
-			db.zrangebyscore('commentaires:' + bloc, id, id, function (err, donnees) {
+			db.zrangebyscore('commentaires:' + bloc, id, id, function (err, resultats) {
 				if (err) { socket.emit('erreur'); return false }
 				const dateModification = moment().format()
-				const date = JSON.parse(donnees).date
-				const commentaire = { id: id, identifiant: JSON.parse(donnees).identifiant, date: date, modifie: dateModification, texte: texte }
+				const donnees = JSON.parse(resultats)
+				const date = donnees.date
+				const commentaire = { id: id, identifiant: donnees.identifiant, date: date, modifie: dateModification, texte: texte }
 				const multi = db.multi()
 				multi.zremrangebyscore('commentaires:' + bloc, id, id)
 				multi.zadd('commentaires:' + bloc, id, JSON.stringify(commentaire))
@@ -4096,13 +4135,24 @@ io.on('connection', function (socket) {
 									if (resultat === 1) {
 										db.hgetall('contenu-blocs:' + mur + ':' + blocSupprime, function (err, objet) {
 											if (err) { resolve() }
-											if (objet.media !== '' && objet.type !== 'embed') {
+											if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
 												supprimerFichier(mur, objet.media)
 											}
-											if (objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
+											if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
+												supprimerFichier(mur, objet.mediaExtra)
+											}
+											if (objet.hasOwnProperty('medias')) {
+												const medias = JSON.parse(objet.medias)
+												for (let i = 0; i < medias.length; i++) {
+													if (medias[i].hasOwnProperty('fichier')) {
+														supprimerFichier(mur, medias[i].fichier)
+													}
+												}
+											}
+											if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
 												supprimerVignette(objet.vignette)
 											}
-											if (objet.bloc === blocSupprime) {
+											if (objet.hasOwnProperty('bloc') && objet.bloc === blocSupprime) {
 												const multi = db.multi()
 												multi.del('contenu-blocs:' + mur + ':' + blocSupprime)
 												multi.zrem('blocs:' + mur, blocSupprime)
