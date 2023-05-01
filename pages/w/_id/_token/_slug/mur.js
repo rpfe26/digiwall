@@ -1851,9 +1851,19 @@ export default {
 				const mursCrees = reponse.data.mursCrees.filter(function (element) {
 					return parseInt(element.id) !== parseInt(this.mur.id)
 				}.bind(this))
+				mursCrees.sort(function (a, b) {
+					const a1 = a.titre.toLowerCase()
+					const b1 = b.titre.toLowerCase()
+					return a1 < b1 ? -1 : a1 > b1 ? 1 : 0
+				})
 				const mursAdmins = reponse.data.mursAdmins.filter(function (element) {
 					return parseInt(element.id) !== parseInt(this.mur.id)
 				}.bind(this))
+				mursAdmins.sort(function (a, b) {
+					const a1 = a.titre.toLowerCase()
+					const b1 = b.titre.toLowerCase()
+					return a1 < b1 ? -1 : a1 > b1 ? 1 : 0
+				})
 				this.donneesUtilisateur.mursCrees = mursCrees
 				this.donneesUtilisateur.mursAdmins = mursAdmins
 			}
