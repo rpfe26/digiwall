@@ -1,30 +1,38 @@
 import Vue from 'vue'
-import moment from 'moment'
+const dayjs = require('dayjs')
+require('dayjs/locale/fr')
+require('dayjs/locale/es')
+require('dayjs/locale/it')
+require('dayjs/locale/hr')
+const localizedFormat = require('dayjs/plugin/localizedFormat')
+const relativeTime = require('dayjs/plugin/relativeTime')
+dayjs.extend(localizedFormat)
+dayjs.extend(relativeTime)
 
 Vue.prototype.$formaterDate = function (date, langue) {
 	let dateFormattee = ''
 	switch (langue) {
 	case 'fr':
-		dateFormattee = moment(date).locale('fr').format('L') + ' à ' + moment(date).locale('fr').format('LT')
+		dateFormattee = dayjs(new Date(date)).locale('fr').format('L') + ' à ' + dayjs(new Date(date)).locale('fr').format('LT')
 		break
 	case 'es':
-		dateFormattee = moment(date).locale('es').format('L') + ' a las ' + moment(date).locale('es').format('LT')
+		dateFormattee = dayjs(new Date(date)).locale('es').format('L') + ' a las ' + dayjs(new Date(date)).locale('es').format('LT')
 		break
 	case 'it':
-		dateFormattee = moment(date).locale('it').format('L') + ' alle ' + moment(date).locale('it').format('LT')
+		dateFormattee = dayjs(new Date(date)).locale('it').format('L') + ' alle ' + dayjs(new Date(date)).locale('it').format('LT')
 		break
 	case 'hr':
-		dateFormattee = moment(date).locale('hr').format('L') + ' u ' + moment(date).locale('hr').format('LT')
+		dateFormattee = dayjs(new Date(date)).locale('hr').format('L') + ' u ' + dayjs(new Date(date)).locale('hr').format('LT')
 		break
 	case 'en':
-		dateFormattee = moment(date).locale('en').format('L') + ' at ' + moment(date).locale('en').format('LT')
+		dateFormattee = dayjs(new Date(date)).locale('en').format('L') + ' at ' + dayjs(new Date(date)).locale('en').format('LT')
 		break
 	}
 	return dateFormattee
 }
 
 Vue.prototype.$formaterDateRelative = function (date, langue) {
-	return moment(date).locale(langue).fromNow()
+	return dayjs(new Date(date)).locale(langue).fromNow()
 }
 
 Vue.prototype.$verifierEmail = function (email) {

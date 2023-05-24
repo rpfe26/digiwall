@@ -30,7 +30,12 @@ const sharp = require('sharp')
 const gm = require('gm')
 const archiver = require('archiver')
 const extract = require('extract-zip')
-const moment = require('moment')
+const dayjs = require('dayjs')
+require('dayjs/locale/fr')
+require('dayjs/locale/es')
+require('dayjs/locale/it')
+require('dayjs/locale/hr')
+const localizedFormat = require('dayjs/plugin/localizedFormat')
 const bcrypt = require('bcrypt')
 const cron = require('node-cron')
 const nodemailer = require('nodemailer')
@@ -110,6 +115,9 @@ if (process.env.CRON_TASK_DATE) {
 cron.schedule(dateCron, () => {
 	fs.emptyDirSync(path.join(__dirname, '..', '/static/temp'))
 })
+
+// Charger plugin dayjs
+dayjs.extend(localizedFormat)
 
 const etherpad = process.env.ETHERPAD
 const etherpadApi = process.env.ETHERPAD_API_KEY
@@ -193,7 +201,7 @@ app.post('/api/inscription', function (req, res) {
 		if (err) { res.send('erreur'); return false  }
 		if (reponse === 0) {
 			const hash = await bcrypt.hash(motdepasse, 10)
-			const date = moment().format()
+			const date = dayjs().format()
 			let langue = 'fr'
 			if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 				langue = req.session.langue
@@ -508,7 +516,7 @@ app.post('/api/creer-mur', function (req, res) {
 		const titre = req.body.titre
 		const token = Math.random().toString(16).slice(10)
 		const slug = definirSlug(titre)
-		const date = moment().format()
+		const date = dayjs().format()
 		db.exists('mur', function (err, resultat) {
 			if (err) { res.send('erreur_creation'); return false }
 			if (resultat === 1) {
@@ -546,7 +554,7 @@ app.post('/api/creer-mur-sans-compte', async function (req, res) {
 	const hash = await bcrypt.hash(motdepasse, 10)
 	const token = Math.random().toString(16).slice(10)
 	const slug = definirSlug(titre)
-	const date = moment().format()
+	const date = dayjs().format()
 	let langue = 'fr'
 	if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 		langue = req.session.langue
@@ -675,7 +683,7 @@ app.post('/api/dupliquer-mur', function (req, res) {
 								const donneesBloc = new Promise(function (resolve) {
 									db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, infos) {
 										if (err || !infos) { resolve({}) }
-										const date = moment().format()
+										const date = dayjs().format()
 										if (infos.hasOwnProperty('vignette') && infos.vignette !== '') {
 											infos.vignette = infos.vignette.replace('/' + definirDossierFichiers(mur) + '/' + mur, '/' + definirDossierFichiers(id) + '/' + id)
 										}
@@ -701,7 +709,7 @@ app.post('/api/dupliquer-mur', function (req, res) {
 							Promise.all(donneesBlocs).then(function () {
 								const token = Math.random().toString(16).slice(10)
 								const slug = definirSlug(donnees.titre)
-								const date = moment().format()
+								const date = dayjs().format()
 								const code = Math.floor(1000 + Math.random() * 9000)
 								const multi = db.multi()
 								multi.incr('mur')
@@ -724,7 +732,7 @@ app.post('/api/dupliquer-mur', function (req, res) {
 				} else if (resultat !== 1 && fs.existsSync(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
 					const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
 					if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-						const date = moment().format()
+						const date = dayjs().format()
 						const donneesBlocs = []
 						for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 							const donneesBloc = new Promise(function (resolve) {
@@ -1040,7 +1048,7 @@ app.post('/api/importer-mur', function (req, res) {
 						for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 							const donneesBloc = new Promise(function (resolve) {
 								if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
-									const date = moment().format()
+									const date = dayjs().format()
 									let commentaires = 0
 									let evaluations = 0
 									if (parametres.commentaires === true) {
@@ -1099,7 +1107,7 @@ app.post('/api/importer-mur', function (req, res) {
 						Promise.all(donneesBlocs).then(function (blocs) {
 							const token = Math.random().toString(16).slice(10)
 							const slug = definirSlug(donnees.mur.titre)
-							const date = moment().format()
+							const date = dayjs().format()
 							const code = Math.floor(1000 + Math.random() * 9000)
 							let activiteId = 0
 							if (parametres.activite === true) {
@@ -1195,7 +1203,7 @@ app.post('/api/importer-mur-sans-compte', function (req, res) {
 								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 									const donneesBloc = new Promise(function (resolve) {
 										if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
-											const date = moment().format()
+											const date = dayjs().format()
 											let commentaires = 0
 											let evaluations = 0
 											if (parametres.commentaires === true) {
@@ -1253,7 +1261,7 @@ app.post('/api/importer-mur-sans-compte', function (req, res) {
 								}
 								Promise.all(donneesBlocs).then(function (blocsCrees) {
 									const slug = definirSlug(donnees.mur.titre)
-									const date = moment().format()
+									const date = dayjs().format()
 									const code = Math.floor(1000 + Math.random() * 9000)
 									let activiteId = 0
 									if (parametres.activite === true) {
@@ -1305,7 +1313,7 @@ app.post('/api/importer-mur-sans-compte', function (req, res) {
 									if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
 										const deltaColonne = JSON.parse(donneesMur.colonnes).length
 										const colonne = (parseInt(bloc.colonne)) + deltaColonne
-										const date = moment().format()
+										const date = dayjs().format()
 										let commentaires = 0
 										let evaluations = 0
 										if (parametres.commentaires === true) {
@@ -2533,7 +2541,7 @@ app.post('/api/ladigitale', function (req, res) {
 			const hash = await bcrypt.hash(motdepasse, 10)
 			const token = Math.random().toString(16).slice(10)
 			const slug = definirSlug(titre)
-			const date = moment().format()
+			const date = dayjs().format()
 			let langue = 'fr'
 			if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 				langue = req.session.langue
@@ -2570,7 +2578,7 @@ app.post('/api/ladigitale', function (req, res) {
 					db.hgetall('murs:' + mur, async function (err, donneesMur) {
 						if (err) { res.send('erreur'); return false }
 						if (donneesMur.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
-							const date = moment().format()
+							const date = dayjs().format()
 							let langue = 'fr'
 							if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 								langue = req.session.langue
@@ -2606,7 +2614,7 @@ app.post('/api/ladigitale', function (req, res) {
 					const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
 					if (typeof donneesMur === 'object' && donneesMur !== null) {
 						if (donneesMur.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
-							const date = moment().format()
+							const date = dayjs().format()
 							let langue = 'fr'
 							if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 								langue = req.session.langue
@@ -2889,7 +2897,7 @@ io.on('connection', function (socket) {
 				const id = parseInt(donnees.bloc) + 1
 				db.hincrby('murs:' + mur, 'bloc', 1)
 				if (donnees.id === mur && donnees.token === token) {
-					const date = moment().format()
+					const date = dayjs().format()
 					const activiteId = parseInt(donnees.activite) + 1
 					const multi = db.multi()
 					let visibilite = 'visible'
@@ -2972,8 +2980,8 @@ io.on('connection', function (socket) {
 										vignetteActivee = 'non'
 									}
 									const edition = objet.edition
-									const date = moment().format()
-									if (objet.vignette && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+									const date = dayjs().format()
+									if (vignette && objet.vignette && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
 										vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
 									}
 									if (visibilite === 'visible') {
@@ -3130,7 +3138,7 @@ io.on('connection', function (socket) {
 				const id = parseInt(donnees.bloc) + 1
 				db.hincrby('murs:' + mur, 'bloc', 1)
 				if (donnees.id === mur && donnees.token === token) {
-					const date = moment().format()
+					const date = dayjs().format()
 					const activiteId = parseInt(donnees.activite) + 1
 					const multi = db.multi()
 					if (vignetteActivee === true) {
@@ -3222,7 +3230,7 @@ io.on('connection', function (socket) {
 					db.exists('contenu-blocs:' + mur + ':' + item.bloc, function (err, resultat) {
 						if (err) { socket.emit('erreur'); return false }
 						if (resultat === 1) {
-							const date = moment().format()
+							const date = dayjs().format()
 							const activiteId = parseInt(donnees.activite) + 1
 							const multi = db.multi()
 							if (item.hasOwnProperty('modifie')) {
@@ -3341,7 +3349,7 @@ io.on('connection', function (socket) {
 									pad = objet.media
 								}
 								if (objet.hasOwnProperty('bloc') && objet.bloc === bloc && (objet.identifiant === identifiant || proprietaire === identifiant || admins.includes(identifiant))) {
-									const date = moment().format()
+									const date = dayjs().format()
 									const activiteId = parseInt(donnees.activite) + 1
 									const multi = db.multi()
 									multi.del('contenu-blocs:' + mur + ':' + bloc)
@@ -3380,7 +3388,7 @@ io.on('connection', function (socket) {
 					if (err || !donnees || !donnees.hasOwnProperty('commentaires')) { socket.emit('erreur'); return false }
 					db.zcard('commentaires:' + bloc, function (err, commentaires) {
 						if (err) { socket.emit('erreur'); return false }
-						const date = moment().format()
+						const date = dayjs().format()
 						const activiteId = parseInt(resultat.activite) + 1
 						const commentaireId = parseInt(donnees.commentaires) + 1
 						const multi = db.multi()
@@ -3412,7 +3420,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.zrangebyscore('commentaires:' + bloc, id, id, function (err, resultats) {
 				if (err || !resultats) { socket.emit('erreur'); return false }
-				const dateModification = moment().format()
+				const dateModification = dayjs().format()
 				const donnees = JSON.parse(resultats)
 				const date = donnees.date
 				const commentaire = { id: id, identifiant: donnees.identifiant, date: date, modifie: dateModification, texte: texte }
@@ -3437,7 +3445,7 @@ io.on('connection', function (socket) {
 			return false
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
-			const date = moment().format()
+			const date = dayjs().format()
 			const multi = db.multi()
 			multi.zremrangebyscore('commentaires:' + bloc, id, id)
 			multi.hset('dates-murs:' + mur, 'date', date)
@@ -3505,7 +3513,7 @@ io.on('connection', function (socket) {
 				if (err || !resultat || !resultat.hasOwnProperty('activite')) { socket.emit('erreur'); return false }
 				db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, donnees) {
 					if (err || !donnees || !donnees.hasOwnProperty('evaluations')) { socket.emit('erreur'); return false }
-					const date = moment().format()
+					const date = dayjs().format()
 					const activiteId = parseInt(resultat.activite) + 1
 					const evaluationId = parseInt(donnees.evaluations) + 1
 					const evaluation = { id: evaluationId, identifiant: identifiant, date: date, etoiles: etoiles }
@@ -3536,7 +3544,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.zrangebyscore('evaluations:' + bloc, id, id, function (err) {
 				if (err) { socket.emit('erreur'); return false }
-				const date = moment().format()
+				const date = dayjs().format()
 				const evaluation = { id: id, identifiant: identifiant, date: date, etoiles: etoiles }
 				const multi = db.multi()
 				multi.zremrangebyscore('evaluations:' + bloc, id, id)
@@ -3559,7 +3567,7 @@ io.on('connection', function (socket) {
 			return false
 		}
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
-			const date = moment().format()
+			const date = dayjs().format()
 			const multi = db.multi()
 			multi.hset('dates-murs:' + mur, 'date', date)
 			multi.zremrangebyscore('evaluations:' + bloc, id, id)
@@ -4000,7 +4008,7 @@ io.on('connection', function (socket) {
 
 	socket.on('message', function (mur, texte, identifiant, nom) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
-			const date = moment().format()
+			const date = dayjs().format()
 			io.in('mur-' + mur).emit('message', { texte: texte, identifiant: identifiant, nom: nom, date: date })
 			socket.handshake.session.cookie.expires = new Date(Date.now() + dureeSession)
 			socket.handshake.session.save()
@@ -4039,7 +4047,7 @@ io.on('connection', function (socket) {
 		if (identifiant !== '' && identifiant !== undefined && socket.handshake.session.identifiant === identifiant) {
 			db.hgetall('murs:' + mur, function (err, resultat) {
 				if (err || !resultat || !resultat.hasOwnProperty('activite')) { socket.emit('erreur'); return false }
-				const date = moment().format()
+				const date = dayjs().format()
 				const activiteId = parseInt(resultat.activite) + 1
 				colonnes.push(titre)
 				affichageColonnes.push(true)
@@ -4204,7 +4212,7 @@ io.on('connection', function (socket) {
 							donneesBlocsRestants.push(donneeBloc)
 						}
 						Promise.all([donneesBlocsSupprimes, donneesBlocsRestants]).then(function () {
-							const date = moment().format()
+							const date = dayjs().format()
 							const activiteId = parseInt(donnees.activite) + 1
 							const multi = db.multi()
 							multi.hmset('murs:' + mur, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes))
@@ -4262,11 +4270,11 @@ io.on('connection', function (socket) {
 						})
 						donneesBlocs.push(donneesBloc)
 					}
-					Promise.all(donneesBlocs).then(function (blocs) {
+					Promise.all(donneesBlocs).then(function (items) {
 						const donneesBlocsDeplaces = []
-						for (const item of blocs) {
+						for (const item of items) {
 							const donneesBlocDeplace = new Promise(function (resolve) {
-								if (item.hasOwnProperty('bloc')) {
+								if (item && item.hasOwnProperty('bloc')) {
 									db.exists('contenu-blocs:' + mur + ':' + item.bloc, function (err, resultat) {
 										if (err) { resolve() }
 										if (resultat === 1 && parseInt(item.colonne) === parseInt(colonne) && direction === 'gauche') {
@@ -4300,7 +4308,7 @@ io.on('connection', function (socket) {
 							donneesBlocsDeplaces.push(donneesBlocDeplace)
 						}
 						Promise.all(donneesBlocsDeplaces).then(function () {
-							const date = moment().format()
+							const date = dayjs().format()
 							const activiteId = parseInt(donnees.activite) + 1
 							const multi = db.multi()
 							multi.hmset('murs:' + mur, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes))
@@ -5106,37 +5114,37 @@ function formaterDate (donnees, langue) {
 	switch (langue) {
 	case 'fr':
 		if (donnees.hasOwnProperty('modifie')) {
-			dateFormattee = 'Créée le ' + moment(donnees.date).locale('fr').format('L') + ' à ' + moment(donnees.date).locale('fr').format('LT') + ' par ' + donnees.nom + '. Modifiée le ' + moment(donnees.modifie).locale('fr').format('L') + ' à ' + moment(donnees.modifie).locale('fr').format('LT') + '.'
+			dateFormattee = 'Créée le ' + dayjs(new Date(donnees.date)).locale('fr').format('L') + ' à ' + dayjs(new Date(donnees.date)).locale('fr').format('LT') + ' par ' + donnees.nom + '. Modifiée le ' + dayjs(new Date(donnees.modifie)).locale('fr').format('L') + ' à ' + dayjs(new Date(donnees.modifie)).locale('fr').format('LT') + '.'
 		} else {
-			dateFormattee = 'Créée le ' + moment(donnees.date).locale('fr').format('L') + ' à ' + moment(donnees.date).locale('fr').format('LT') + ' par ' + donnees.nom + '.'
+			dateFormattee = 'Créée le ' + dayjs(new Date(donnees.date)).locale('fr').format('L') + ' à ' + dayjs(new Date(donnees.date)).locale('fr').format('LT') + ' par ' + donnees.nom + '.'
 		}
 		break
 	case 'es':
 		if (donnees.hasOwnProperty('modifie')) {
-			dateFormattee = 'Creada el ' + moment(donnees.date).locale('es').format('L') + ' a las ' + moment(donnees.date).locale('es').format('LT') + ' por ' + donnees.nom + '. Modificada el ' + moment(donnees.modifie).locale('es').format('L') + ' a las ' + moment(donnees.modifie).locale('es').format('LT') + '.'
+			dateFormattee = 'Creada el ' + dayjs(new Date(donnees.date)).locale('es').format('L') + ' a las ' + dayjs(new Date(donnees.date)).locale('es').format('LT') + ' por ' + donnees.nom + '. Modificada el ' + dayjs(new Date(donnees.modifie)).locale('es').format('L') + ' a las ' + dayjs(new Date(donnees.modifie)).locale('es').format('LT') + '.'
 		} else {
-			dateFormattee = 'Creada el ' + moment(donnees.date).locale('es').format('L') + ' a las ' + moment(donnees.date).locale('es').format('LT') + ' por ' + donnees.nom + '.'
+			dateFormattee = 'Creada el ' + dayjs(new Date(donnees.date)).locale('es').format('L') + ' a las ' + dayjs(new Date(donnees.date)).locale('es').format('LT') + ' por ' + donnees.nom + '.'
 		}
 		break
 	case 'it':
 		if (donnees.hasOwnProperty('modifie')) {
-			dateFormattee = 'Creazione attivata ' + moment(donnees.date).locale('it').format('L') + ' alle ' + moment(donnees.date).locale('it').format('LT') + ' di ' + donnees.nom + '. Modifica attivata ' + moment(donnees.modifie).locale('it').format('L') + ' alle ' + moment(donnees.modifie).locale('it').format('LT') + '.'
+			dateFormattee = 'Creazione attivata ' + dayjs(new Date(donnees.date)).locale('it').format('L') + ' alle ' + dayjs(new Date(donnees.date)).locale('it').format('LT') + ' di ' + donnees.nom + '. Modifica attivata ' + dayjs(new Date(donnees.modifie)).locale('it').format('L') + ' alle ' + dayjs(new Date(donnees.modifie)).locale('it').format('LT') + '.'
 		} else {
-			dateFormattee = 'Creazione attivata ' + moment(donnees.date).locale('it').format('L') + ' alle ' + moment(donnees.date).locale('it').format('LT') + ' di ' + donnees.nom + '.'
+			dateFormattee = 'Creazione attivata ' + dayjs(new Date(donnees.date)).locale('it').format('L') + ' alle ' + dayjs(new Date(donnees.date)).locale('it').format('LT') + ' di ' + donnees.nom + '.'
 		}
 		break
 	case 'hr':
 		if (donnees.hasOwnProperty('modifie')) {
-			dateFormattee = 'Stvoreno na ' + moment(donnees.date).locale('hr').format('L') + ' u ' + moment(donnees.date).locale('hr').format('LT') + ' po ' + donnees.nom + '. Izmijenjeno na ' + moment(donnees.modifie).locale('hr').format('L') + ' u ' + moment(donnees.modifie).locale('hr').format('LT') + '.'
+			dateFormattee = 'Stvoreno na ' + dayjs(new Date(donnees.date)).locale('hr').format('L') + ' u ' + dayjs(new Date(donnees.date)).locale('hr').format('LT') + ' po ' + donnees.nom + '. Izmijenjeno na ' + dayjs(new Date(donnees.modifie)).locale('hr').format('L') + ' u ' + dayjs(new Date(donnees.modifie)).locale('hr').format('LT') + '.'
 		} else {
-			dateFormattee = 'Stvoreno na ' + moment(donnees.date).locale('hr').format('L') + ' u ' + moment(donnees.date).locale('hr').format('LT') + ' po ' + donnees.nom + '.'
+			dateFormattee = 'Stvoreno na ' + dayjs(new Date(donnees.date)).locale('hr').format('L') + ' u ' + dayjs(new Date(donnees.date)).locale('hr').format('LT') + ' po ' + donnees.nom + '.'
 		}
 		break
 	case 'en':
 		if (donnees.hasOwnProperty('modifie')) {
-			dateFormattee = 'Created on ' + moment(donnees.date).locale('en').format('L') + ' at ' + moment(donnees.date).locale('en').format('LT') + ' by ' + donnees.nom + '. Modified on ' + moment(donnees.modifie).locale('en').format('L') + ' at ' + moment(donnees.modifie).locale('en').format('LT') + '.'
+			dateFormattee = 'Created on ' + dayjs(new Date(donnees.date)).locale('en').format('L') + ' at ' + dayjs(new Date(donnees.date)).locale('en').format('LT') + ' by ' + donnees.nom + '. Modified on ' + dayjs(new Date(donnees.modifie)).locale('en').format('L') + ' at ' + dayjs(new Date(donnees.modifie)).locale('en').format('LT') + '.'
 		} else {
-			dateFormattee = 'Created on ' + moment(donnees.date).locale('en').format('L') + ' at ' + moment(donnees.date).locale('en').format('LT') + ' by ' + donnees.nom + '.'
+			dateFormattee = 'Created on ' + dayjs(new Date(donnees.date)).locale('en').format('L') + ' at ' + dayjs(new Date(donnees.date)).locale('en').format('LT') + ' by ' + donnees.nom + '.'
 		}
 		break
 	}
