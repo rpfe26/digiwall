@@ -17,8 +17,7 @@ npm run dev
 
 ### Compilation, minification des fichiers et lancement du serveur de production
 ```
-npm run build
-npm run start
+npm run prod
 ```
 
 ### Avec PM2
@@ -37,27 +36,28 @@ DB_PWD (mot de passe de la base de données Redis)
 DB_PORT (port de la base de données Redis / 6379 par défaut)
 SESSION_KEY (clé de session Express Session)
 SESSION_DURATION (durée de la session de connexion des utilisateurs en millisecondes)
-ETHERPAD (lien vers un serveur Etherpad pour les documents collaboratifs)
-ETHERPAD_API_KEY (clé API Etherpad)
-UPLOAD_LIMIT (limite de téléversement des fichiers en Mo)
-UPLOAD_FILE_TYPES (types de fichiers autorisés pour le téléversement / par défaut : .jpg,.jpeg,.png,.gif,.mp4,.m4v,.mp3,.m4a,.ogg,.wav,.pdf,.ppt,.pptx,.odp,.doc,.docx,.odt,.ods,.odg,.xls,.xlsx)
-WALL_LIMIT (nombre maximum de murs par compte utilisateur)
-WALL_WITHOUT_ACCOUNT (0 ou 1 / pour autoriser la création de murs sans compte)
-CREATE_ACCOUNT (0 ou 1 / pour autoriser la création de comptes)
+VITE_ETHERPAD (lien vers un serveur Etherpad pour les documents collaboratifs)
+VITE_ETHERPAD_API_KEY (clé API Etherpad)
+VITE_UPLOAD_LIMIT (limite de téléversement des fichiers en Mo)
+VITE_UPLOAD_FILE_TYPES (types de fichiers autorisés pour le téléversement / par défaut : .jpg,.jpeg,.png,.gif,.mp4,.m4v,.mp3,.m4a,.ogg,.wav,.pdf,.ppt,.pptx,.odp,.doc,.docx,.odt,.ods,.odg,.xls,.xlsx)
+VITE_WALL_LIMIT (nombre maximum de murs par compte utilisateur)
+VITE_WALL_WITHOUT_ACCOUNT (0 ou 1 / pour autoriser la création de murs sans compte)
+VITE_CREATE_ACCOUNT (0 ou 1 / pour autoriser la création de comptes)
+VITE_ADMIN_PASSWORD (mot de passe pour accéder à la page d'administration /admin)
 CRON_TASK_DATE (régularité de la tâche cron pour supprimer les fichiers temporaires et enregistrer les murs en JSON sur le disque / 59 23 * * Saturday par défaut)
-ADMIN_PASSWORD (mot de passe pour accéder à la page d'administration /admin)
 EMAIL_HOST (hôte pour l'envoi d'emails)
 EMAIL_ADDRESS (adresse pour l'envoi d'emails)
 EMAIL_PASSWORD (mot de passe de l'adresse emails)
 EMAIL_PORT (port pour l'envoi d'emails)
 EMAIL_SECURE (true ou false)
-MATOMO (lien vers un serveur Matomo)
-NFS_WALL_NUMBER (id de mur à partir de laquelle les fichiers seront enregistrés dans un dossier monté NFS - environ 200 000 pour 1 To de capacité disque)
-NFS_FOLDER (nom du dossier monté NFS, obligatoirement situé dans le dossier /static/)
-AUTORIZED_DOMAINS (domaines autorisés pour api serveur. ex : ladigitale.dev,example.com / par défaut *)
+VITE_MATOMO (lien vers un serveur Matomo)
+VITE_MATOMO_SITE_ID (id de site Matomo / par défaut : 1)
+VITE_NFS_WALL_NUMBER (id de mur à partir de laquelle les fichiers seront enregistrés dans un dossier monté NFS - environ 200 000 pour 1 To de capacité disque)
+VITE_NFS_FOLDER (nom du dossier monté NFS, obligatoirement situé dans le dossier /static/)
+AUTORIZED_DOMAINS (domaines autorisés pour api serveur. ex : ladigitale.dev,example.com / par défaut : *)
 ```
 
-### Projet Nuxt.js avec serveur Node.js (Express) et base de données Redis
+### Projet Vue (Vue.js 3 et Vite SSR Plugin) avec serveur Node.js (Express) et base de données Redis
 
 ### Démo
 https://digiwall.app
