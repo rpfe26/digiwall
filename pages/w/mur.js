@@ -164,10 +164,10 @@ export default {
 			mur: this.$pageContext.pageProps.mur,
 			blocs: this.$pageContext.pageProps.blocs,
 			activite: this.$pageContext.pageProps.activite,
-			etherpad: '',
-			etherpadApi: '',
-			limite: 20,
-			fichiersAutorises: '.jpg,.jpeg,.png,.gif,.mp4,.m4v,.mp3,.m4a,.ogg,.wav,.pdf,.ppt,.pptx,.odp,.doc,.docx,.odt,.ods,.odg,.xls,.xlsx'
+			etherpad: import.meta.env.VITE_ETHERPAD,
+			etherpadApi: import.meta.env.VITE_ETHERPAD_API_KEY,
+			limite: parseInt(import.meta.env.VITE_UPLOAD_LIMIT),
+			fichiersAutorises: import.meta.env.VITE_UPLOAD_FILE_TYPES
 		}
 	},
 	computed: {
@@ -370,17 +370,11 @@ export default {
 			window.location.href = '/'
 		}
 
-		if (import.meta.env.VITE_ETHERPAD && import.meta.env.VITE_ETHERPAD !== '') {
-			this.etherpad = import.meta.env.VITE_ETHERPAD
+		if (this.fichiersAutorises === null || this.fichiersAutorises === undefined) {
+			this.fichiersAutorises = '.jpg,.jpeg,.png,.gif,.mp4,.m4v,.mp3,.m4a,.ogg,.wav,.pdf,.ppt,.pptx,.odp,.doc,.docx,.odt,.ods,.odg,.xls,.xlsx'
 		}
-		if (import.meta.env.VITE_ETHERPAD_API_KEY && import.meta.env.VITE_ETHERPAD_API_KEY !== '') {
-			this.ethepardApi = import.meta.env.VITE_ETHERPAD_API_KEY
-		}
-		if (import.meta.env.VITE_UPLOAD_FILE_TYPES && import.meta.env.VITE_UPLOAD_FILE_TYPES !== '') {
-			this.fichiersAutorises = import.meta.env.VITE_UPLOAD_FILE_TYPES
-		}
-		if (import.meta.env.VITE_UPLOAD_LIMIT && import.meta.env.VITE_UPLOAD_LIMIT !== '') {
-			this.limite = parseInt(import.meta.env.VITE_UPLOAD_LIMIT)
+		if (this.limite === 0 || this.limite === null || this.limite === undefined) {
+			this.limite = 10
 		}
 
 		const observer = new PerformanceObserver((liste) => {
