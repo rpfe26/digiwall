@@ -1046,14 +1046,12 @@ label.bouton-bleu {
 
 /* Transition
 –––––––––––––––––––––––––––––––––––––––––––––––––– */
-.fondu-enter-active {
-	transition-property: opacity;
-	transition-duration: 0.2s;
+.fondu-enter-active,
+.fondu-leave-active {
+	transition: opacity 0.2s;
 }
 
-.fondu-enter,
-.fondu-leave-active,
-.fondu-leave,
+.fondu-enter-from,
 .fondu-leave-to {
 	opacity: 0;
 }

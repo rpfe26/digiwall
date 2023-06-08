@@ -1978,22 +1978,6 @@
 	display: inline-block;
 }
 
-.fondu-enter-active {
-	transition-property: opacity;
-	transition-duration: 0.25s;
-}
-
-.fondu-enter-active {
-	transition-delay: 0s;
-}
-
-.fondu-enter,
-.fondu-leave-active,
-.fondu-leave,
-.fondu-leave-to {
-	opacity: 0;
-}
-
 @keyframes fonduEntrant {
     0% {
         opacity: 0;

@@ -854,11 +854,11 @@
 
 	<div id="mur" :style="{'background': '#00ced1'}" v-else />
 
-	<transition name="fondu">
+	<Transition name="fondu">
 		<span role="button" tabindex="0" id="ajouter" :title="$t('ajouterCapsule')" @click="ouvrirModaleBloc('creation', '', 0)" v-if="accesAutorise && !recherche && ((mur.affichage === 'mur' || mur.affichage === 'flux-vertical') && ((admin && action !== 'organiser') || (!admin && mur.contributions !== 'fermees')))">
 			<i class="material-icons">add</i>
 		</span>
-	</transition>
+	</Transition>
 
 	<div id="legende" class="conteneur-modale" v-if="modaleLegende">
 		<div class="modale">

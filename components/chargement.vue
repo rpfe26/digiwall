@@ -1,5 +1,5 @@
 <template>
-	<transition name="fondu">
+	<Transition name="fondu">
 		<div id="conteneur-chargement">
 			<div id="chargement">
 				<div class="spinner">
@@ -18,7 +18,7 @@
 				</div>
 			</div>
 		</div>
-	</transition>
+	</Transition>
 </template>
 
 <script>
