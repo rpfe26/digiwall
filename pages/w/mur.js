@@ -4030,7 +4030,9 @@ export default {
 			}.bind(this))
 
 			this.$socket.on('modifierlisteutilisateurs', function (statut, identifiant) {
-				this.menuUtilisateurs = false
+				if (statut === 'desactivee') {
+					this.menuUtilisateurs = false
+				}
 				this.mur.listeUtilisateurs = statut
 				this.chargement = false
 				if (this.admin && this.identifiant === identifiant) {
