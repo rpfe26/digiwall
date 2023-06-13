@@ -5,9 +5,6 @@ export { onBeforeRender }
 async function onBeforeRender (pageContext) {
 	let pageProps
 	let redirection = '/'
-	let mur = {}
-	let blocs = []
-	let activite = []
 	const id = pageContext.routeParams.id
 	const token = pageContext.routeParams.token
 	const identifiant = pageContext.identifiant
@@ -23,13 +20,13 @@ async function onBeforeRender (pageContext) {
 		if (statut === 'utilisateur') {
 			redirection = '/u/' + identifiant
 		}
-		pageProps = { redirection, mur, blocs, activite }
+		pageProps = { redirection }
 	})
 	if (!reponse || !reponse.hasOwnProperty('data') || (reponse.data && reponse.data === 'erreur_mur')) {
 		if (statut === 'utilisateur') {
 			redirection = '/u/' + identifiant
 		}
-		pageProps = { redirection, mur, blocs, activite }
+		pageProps = { redirection }
 	} else {
 		const params = pageContext.params
 		const hote = pageContext.hote
@@ -42,9 +39,9 @@ async function onBeforeRender (pageContext) {
 		const acces = pageContext.acces
 		const murs = pageContext.murs
 		const digidrive = pageContext.digidrive
-		mur = reponse.data.mur
-		blocs = reponse.data.blocs
-		activite = reponse.data.activite
+		const mur = reponse.data.mur
+		const blocs = reponse.data.blocs
+		const activite = reponse.data.activite
 		const titre = mur.titre + ' - Digiwall by La Digitale'
 		pageProps = { params, hote, userAgent, langues, identifiant, nom, langue, statut, acces, murs, digidrive, mur, blocs, activite, titre }
 	}
