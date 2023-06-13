@@ -238,7 +238,16 @@ async function demarrerServeur () {
 			req.session.murs = []
 			req.session.digidrive = []
 			req.session.cookie.expires = new Date(Date.now() + dureeSession)
-		}	
+		}
+		if (!req.session.hasOwnProperty('acces')) {
+			req.session.acces = []
+		}
+		if (!req.session.hasOwnProperty('murs')) {
+			req.session.murs = []
+		}
+		if (!req.session.hasOwnProperty('digidrive')) {
+			req.session.digidrive = []
+		}
 		const pageContextInit = {
 			urlOriginal: req.originalUrl,
 			params: req.query,
@@ -364,9 +373,9 @@ async function demarrerServeur () {
 						const email = donnees.email
 						req.session.identifiant = identifiant
 						req.session.nom = nom
+						req.session.email = email
 						req.session.langue = langue
 						req.session.statut = 'utilisateur'
-						req.session.email = email
 						req.session.cookie.expires = new Date(Date.now() + dureeSession)
 						res.json({ identifiant: identifiant })
 					} else {
@@ -690,6 +699,12 @@ async function demarrerServeur () {
 		} else {
 			identifiant = req.session.identifiant
 			nom = req.session.nom
+		}
+		if (!req.session.hasOwnProperty('acces')) {
+			req.session.acces = []
+		}
+		if (!req.session.hasOwnProperty('murs')) {
+			req.session.murs = []
 		}
 		if (!req.session.hasOwnProperty('digidrive')) {
 			req.session.digidrive = []
@@ -1080,8 +1095,8 @@ async function demarrerServeur () {
 								}
 								if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && await fs.pathExists(path.join(__dirname, '..', '/static' + bloc.vignette))) {
 									await fs.copy(path.join(__dirname, '..', '/static' + bloc.vignette), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
-								} else if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + bloc.vignette))) {
-									await fs.copy(path.join(__dirname, '..', '/static' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
+								} else if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
+									await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
 								}
 							}
 							const archiveId = Math.floor((Math.random() * 100000) + 1)
@@ -1143,8 +1158,8 @@ async function demarrerServeur () {
 							}
 							if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && await fs.pathExists(path.join(__dirname, '..', '/static' + bloc.vignette))) {
 								await fs.copy(path.join(__dirname, '..', '/static' + bloc.vignette), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
-							} else if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + bloc.vignette))) {
-								await fs.copy(path.join(__dirname, '..', '/static' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
+							} else if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
+								await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
 							}
 						}
 						const archiveId = Math.floor((Math.random() * 100000) + 1)
@@ -2305,6 +2320,12 @@ async function demarrerServeur () {
 					req.session.nom = utilisateur.nom
 					req.session.statut = 'auteur'
 					req.session.langue = utilisateur.langue
+					if (!req.session.hasOwnProperty('acces')) {
+						req.session.acces = []
+					}
+					if (!req.session.hasOwnProperty('murs')) {
+						req.session.murs = []
+					}
 					if (!req.session.hasOwnProperty('digidrive')) {
 						req.session.digidrive = []
 					}
@@ -2325,6 +2346,12 @@ async function demarrerServeur () {
 								req.session.nom = utilisateur.nom
 								req.session.statut = 'auteur'
 								req.session.langue = utilisateur.langue
+								if (!req.session.hasOwnProperty('acces')) {
+									req.session.acces = []
+								}
+								if (!req.session.hasOwnProperty('murs')) {
+									req.session.murs = []
+								}
 								if (!req.session.hasOwnProperty('digidrive')) {
 									req.session.digidrive = []
 								}
@@ -4484,6 +4511,9 @@ async function demarrerServeur () {
 						socket.request.session.nom = utilisateur.nom
 						socket.request.session.statut = 'auteur'
 						socket.request.session.langue = utilisateur.langue
+						if (!socket.request.session.hasOwnProperty('acces')) {
+							socket.request.session.acces = []
+						}
 						if (!socket.request.session.hasOwnProperty('murs')) {
 							socket.request.session.murs = []
 						}
@@ -4507,6 +4537,9 @@ async function demarrerServeur () {
 					}
 					if (!socket.request.session.hasOwnProperty('langue')) {
 						socket.request.session.langue = 'fr'
+					}
+					if (!socket.request.session.hasOwnProperty('acces')) {
+						socket.request.session.acces = []
 					}
 					if (!socket.request.session.hasOwnProperty('murs')) {
 						socket.request.session.murs = []
