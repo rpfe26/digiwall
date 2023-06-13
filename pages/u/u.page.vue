@@ -1475,6 +1475,7 @@ export default {
 	width: 2rem;
 	height: 2rem;
 	background: #e32f6c;
+	margin-right: 0;
 	border-radius: 50%;
 	font-size: 1.2rem;
 	color: #fff;
