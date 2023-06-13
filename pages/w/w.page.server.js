@@ -28,22 +28,32 @@ async function onBeforeRender (pageContext) {
 		}
 		pageProps = { redirection }
 	} else {
-		const params = pageContext.params
-		const hote = pageContext.hote
-		const userAgent = pageContext.userAgent
-		const langues = pageContext.langues
-		const identifiant = pageContext.identifiant
-		const nom = pageContext.nom
-		const langue = pageContext.langue
-		const statut = pageContext.statut
-		const acces = pageContext.acces
-		const murs = pageContext.murs
-		const digidrive = pageContext.digidrive
-		const mur = reponse.data.mur
-		const blocs = reponse.data.blocs
-		const activite = reponse.data.activite
-		const titre = mur.titre + ' - Digiwall by La Digitale'
-		pageProps = { params, hote, userAgent, langues, identifiant, nom, langue, statut, acces, murs, digidrive, mur, blocs, activite, titre }
+		let admin = false
+		if ((reponse.data.mur.identifiant === identifiant) || (reponse.data.mur.admins.includes(identifiant))) {
+			admin = true
+		}
+		if (!admin && reponse.data.mur.acces === 'prive' && statut === 'utilisateur') {
+			redirection = '/u/' + identifiant
+			pageProps = { redirection }
+		} else if (!admin && reponse.data.mur.acces === 'prive' && statut !== 'utilisateur') {
+			pageProps = { redirection }
+		} else {
+			const params = pageContext.params
+			const hote = pageContext.hote
+			const userAgent = pageContext.userAgent
+			const langues = pageContext.langues
+			const nom = pageContext.nom
+			const langue = pageContext.langue
+			const statut = pageContext.statut
+			const acces = pageContext.acces
+			const murs = pageContext.murs
+			const digidrive = pageContext.digidrive
+			const mur = reponse.data.mur
+			const blocs = reponse.data.blocs
+			const activite = reponse.data.activite
+			const titre = mur.titre + ' - Digiwall by La Digitale'
+			pageProps = { params, hote, userAgent, langues, identifiant, nom, langue, statut, acces, murs, digidrive, mur, blocs, activite, titre }
+		}
 	}
 	return {
 		pageContext: {
