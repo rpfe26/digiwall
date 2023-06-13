@@ -58,7 +58,7 @@ async function demarrerServeur () {
 	} else {
 		db = redis.createClient({ port: db_port })
 	}
-	let storeOptions, cookie, dureeSession, dateCron
+	let storeOptions, cookie, dureeSession, dateCron, domainesAutorises
 	let maintenance = false
 	if (production) {
 		storeOptions = {
