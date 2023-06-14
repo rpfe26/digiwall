@@ -367,7 +367,7 @@ export default {
 		} else if (this.statut === 'utilisateur') {
 			window.location.href = '/u/' + this.identifiant
 		} else {
-			window.location.href = '/'
+			window.location.replace('/')
 		}
 
 		if (this.fichiersAutorises === null || this.fichiersAutorises === undefined) {
@@ -911,7 +911,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						window.location.href = '/'
+						window.location.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFichier = 0
@@ -1004,7 +1004,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						window.location.href = '/'
+						window.location.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFichier = 0
@@ -1143,7 +1143,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						window.location.href = '/'
+						window.location.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFichierExtra = 0
@@ -1216,7 +1216,7 @@ export default {
 			}).then(function (reponse) {
 				const donnees = reponse.data
 				if (donnees === 'non_connecte') {
-					window.location.href = '/'
+					window.location.replace('/')
 				} else if (donnees === 'erreur_televersement') {
 					this.progressionEnregistrement = false
 					this.message = this.$t('erreurTeleversementFichier')
@@ -1618,7 +1618,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						window.location.href = '/'
+						window.location.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionVignette = 0
@@ -2973,7 +2973,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						window.location.href = '/'
+						window.location.replace('/')
 					} else if (donnees === 'erreur_televersement') {
 						champ.value = ''
 						this.progressionFond = 0
@@ -3159,7 +3159,7 @@ export default {
 			const identifiant = this.identifiant
 			axios.post(this.hote + '/api/deconnexion').then(function () {
 				this.$socket.emit('deconnexion', identifiant)
-				window.location.href = '/'
+				window.location.replace('/')
 			}.bind(this)).catch(function () {
 				this.message = this.$t('erreurCommunicationServeur')
 			}.bind(this))
@@ -3185,7 +3185,7 @@ export default {
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						window.location.href = '/'
+						window.location.replace('/')
 					} else if (donnees === 'motdepasse_incorrect') {
 						this.chargement = false
 						this.message = this.$t('motDePasseActuelPasCorrect')
@@ -3322,7 +3322,7 @@ export default {
 					this.fermerModaleImporterMur()
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
-						window.location.href = '/'
+						window.location.replace('/')
 					} else if (donnees === 'erreur_import') {
 						this.message = this.$t('erreurImportMur')
 					} else if (donnees === 'donnees_corrompues') {
@@ -3369,7 +3369,7 @@ export default {
 					this.chargement = false
 					this.message = this.$t('erreurSuppressionMur')
 				} else {
-					window.location.href = '/'
+					window.location.replace('/')
 				}
 			}.bind(this)).catch(function () {
 				this.chargement = false
@@ -3932,7 +3932,7 @@ export default {
 				} else {
 					if (donnees.acces === 'prive') {
 						this.$socket.emit('sortie', this.mur.id, this.identifiant)
-						window.location.href = '/'
+						window.location.replace('/')
 					}
 				}
 			}.bind(this))
