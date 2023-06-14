@@ -149,7 +149,12 @@ async function demarrerServeur () {
 	app.use(bodyParser.json({ limit: '500mb' }))
 	app.use(sessionMiddleware)
 	app.use(cors({ 'origin': domainesAutorises }))
-	app.use('/', express.static('static'))
+	app.use('/fichiers', express.static('static/fichiers'))
+	app.use('/pdfjs', express.static('static/pdfjs'))
+	app.use('/temp', express.static('static/temp'))
+	if (process.env.VITE_NFS_FOLDER && process.env.VITE_NFS_FOLDER !== '') {
+		app.use('/' + process.env.VITE_NFS_FOLDER, express.static('static/' + process.env.VITE_NFS_FOLDER))
+	}
 
 	if (production) {
 		app.use(express.static('dist/client'))
@@ -1140,7 +1145,7 @@ async function demarrerServeur () {
 						await fs.copy(path.join(__dirname, '..', '/public/fonts/MaterialIcons-Regular.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/MaterialIcons-Regular.woff2'))
 						await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff'))
 						await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
-						await fs.copy(path.join(__dirname, '..', '/static/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
+						await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
 						for (const bloc of donnees.blocs) {
 							if (Object.keys(bloc).length > 0 && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media))) {
 								await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
@@ -2661,7 +2666,7 @@ async function demarrerServeur () {
 			const reponse = await axios.get(protocole + '//' + domaine, { responseType: 'document' }).catch(function () {
 				res.send('erreur')
 			})
-			if (reponse.hasOwnProperty('data')) {
+			if (reponse && reponse.hasOwnProperty('data')) {
 				const $ = cheerio.load(reponse.data)
 				const recupererTaille = function (el) {
 					return (el.attribs.sizes && parseInt(el.attribs.sizes, 10)) || 0
@@ -2669,7 +2674,7 @@ async function demarrerServeur () {
 				let favicons = [
 					...$('meta[property="og:image"]')
 				]
-				if (favicons.length > 0) {
+				if (favicons.length > 0 && favicons[0].hasOwnProperty('attribs')) {
 					favicon = favicons[0].attribs.content
 				} else {
 					favicons = [
@@ -2677,7 +2682,9 @@ async function demarrerServeur () {
 					].sort((a, b) => {
 						return recupererTaille(b) - recupererTaille(a)
 					})
-					favicon = favicons[0].attribs.href
+					if (favicons.length > 0 && favicons[0].hasOwnProperty('attribs')) {
+						favicon = favicons[0].attribs.href
+					}
 				}
 			}
 			if (favicon !== '' && verifierURL(favicon, ['https', 'http']) === true) {
