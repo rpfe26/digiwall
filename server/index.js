@@ -849,8 +849,8 @@ async function demarrerServeur () {
 										db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, infos) {
 											if (err || !infos) { resolve({}) }
 											const date = dayjs().format()
-											if (infos.hasOwnProperty('vignette') && infos.vignette !== '') {
-												infos.vignette = infos.vignette.replace('/' + definirDossierFichiers(mur) + '/' + mur, '/' + definirDossierFichiers(id) + '/' + id)
+											if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && !infos.vignette.includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
+												infos.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(infos.vignette)
 											}
 											if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
 												const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
@@ -876,6 +876,9 @@ async function demarrerServeur () {
 									const slug = definirSlug(donnees.titre)
 									const date = dayjs().format()
 									const code = Math.floor(1000 + Math.random() * 9000)
+									if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#') {
+										donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
+									}
 									const multi = db.multi()
 									multi.incr('mur')
 									if (donnees.hasOwnProperty('code')) {
@@ -902,8 +905,8 @@ async function demarrerServeur () {
 							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 								const donneesBloc = new Promise(function (resolve) {
 									if (Object.keys(bloc).length > 0) {
-										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '') {
-											bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(mur) + '/' + mur, '/' + definirDossierFichiers(id) + '/' + id)
+										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+											bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
 										}
 										if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
 											const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
@@ -930,6 +933,9 @@ async function demarrerServeur () {
 								const token = Math.random().toString(16).slice(10)
 								const slug = definirSlug(donnees.mur.titre)
 								const code = Math.floor(1000 + Math.random() * 9000)
+								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#') {
+									donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
+								}
 								const multi = db.multi()
 								multi.incr('mur')
 								if (donnees.mur.hasOwnProperty('code')) {
@@ -1068,7 +1074,7 @@ async function demarrerServeur () {
 							await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(parametres, '', 4), 'utf8')
 							await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
 							if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
-								await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + parametres.mur.fond.split('/').pop(), { overwrite: true }))
+								await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
 							} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
 								await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
 							}
@@ -1098,10 +1104,15 @@ async function demarrerServeur () {
 										}
 									}
 								}
-								if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && await fs.pathExists(path.join(__dirname, '..', '/static' + bloc.vignette))) {
-									await fs.copy(path.join(__dirname, '..', '/static' + bloc.vignette), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
-								} else if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
-									await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
+								if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '') {
+									if (bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
+										await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
+									} else if (!verifierURL(bloc.vignette, ['https', 'http'])) {
+										const fichierVignette = path.basename(bloc.vignette)
+										if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette))) {
+											await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
+										}
+									}
 								}
 							}
 							const archiveId = Math.floor((Math.random() * 100000) + 1)
@@ -1131,7 +1142,7 @@ async function demarrerServeur () {
 						await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(donnees, '', 4), 'utf8')
 						await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
 						if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
-							await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + parametres.mur.fond.split('/').pop(), { overwrite: true }))
+							await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
 						} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
 							await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
 						}
@@ -1161,10 +1172,15 @@ async function demarrerServeur () {
 									}
 								}
 							}
-							if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && await fs.pathExists(path.join(__dirname, '..', '/static' + bloc.vignette))) {
-								await fs.copy(path.join(__dirname, '..', '/static' + bloc.vignette), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
-							} else if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '' && bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
-								await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
+							if (Object.keys(bloc).length > 0 && bloc.vignette && bloc.vignette !== '') {
+								if (bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
+									await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
+								} else if (!verifierURL(bloc.vignette, ['https', 'http'])) {
+									const fichierVignette = path.basename(bloc.vignette)
+									if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette))) {
+										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
+									}
+								}
 							}
 						}
 						const archiveId = Math.floor((Math.random() * 100000) + 1)
@@ -1226,8 +1242,8 @@ async function demarrerServeur () {
 										if (parametres.evaluations === true) {
 											evaluations = bloc.evaluations
 										}
-										if (bloc.vignette !== '') {
-											bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id, '/' + definirDossierFichiers(id) + '/' + id)
+										if (bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+											bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
 										}
 										const multi = db.multi()
 										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
@@ -1262,8 +1278,8 @@ async function demarrerServeur () {
 													}
 												}
 											}
-											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
-												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
+											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+												await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 											}
 											resolve({ bloc: bloc.bloc, blocId: blocId })
 										})
@@ -1282,8 +1298,8 @@ async function demarrerServeur () {
 								if (parametres.activite === true) {
 									activiteId = donnees.mur.activite
 								}
-								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.normalize(cible + '/fichiers/' + donnees.mur.fond.split('/').pop()))) {
-									await fs.copy(path.normalize(cible + '/fichiers/' + donnees.mur.fond.split('/').pop()), path.normalize(chemin + '/' + donnees.mur.fond.split('/').pop(), { overwrite: true }))
+								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+									await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
 								}
 								const multi = db.multi()
 								multi.incr('mur')
@@ -1381,8 +1397,8 @@ async function demarrerServeur () {
 												if (parametres.evaluations === true) {
 													evaluations = bloc.evaluations
 												}
-												if (bloc.vignette !== '') {
-													bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id, '/' + definirDossierFichiers(id) + '/' + id)
+												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+													bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
 												}
 												const multi = db.multi()
 												const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
@@ -1417,8 +1433,8 @@ async function demarrerServeur () {
 															}
 														}
 													}
-													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
+													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+														await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 													}
 													resolve({ bloc: bloc.bloc, blocId: blocId })
 												})
@@ -1436,8 +1452,8 @@ async function demarrerServeur () {
 										if (parametres.activite === true) {
 											activiteId = donnees.mur.activite
 										}
-										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.normalize(cible + '/fichiers/' + donnees.mur.fond.split('/').pop()))) {
-											await fs.copy(path.normalize(cible + '/fichiers/' + donnees.mur.fond.split('/').pop()), path.normalize(chemin + '/' + donnees.mur.fond.split('/').pop(), { overwrite: true }))
+										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
 										}
 										const multi = db.multi()
 										multi.hmset('murs:' + id, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId)
@@ -1491,8 +1507,8 @@ async function demarrerServeur () {
 											if (parametres.evaluations === true) {
 												evaluations = bloc.evaluations
 											}
-											if (bloc.vignette !== '') {
-												bloc.vignette = bloc.vignette.replace('/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id, '/' + definirDossierFichiers(id) + '/' + id)
+											if (bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+												bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
 											}
 											const multi = db.multi()
 											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
@@ -1527,8 +1543,8 @@ async function demarrerServeur () {
 														}
 													}
 												}
-												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && bloc.vignette.substring(1, definirDossierFichiers(id).length + 1) === definirDossierFichiers(id) && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')))) {
-													await fs.copy(path.normalize(cible + '/fichiers/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', '')), path.normalize(chemin + '/' + bloc.vignette.replace('/' + definirDossierFichiers(id) + '/' + id + '/', ''), { overwrite: true }))
+												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+													await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 												}
 												resolve({ bloc: bloc.bloc, blocId: blocId })
 											})
@@ -2023,8 +2039,8 @@ async function demarrerServeur () {
 																}
 															}
 														}
-														if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && donnees.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-															supprimerVignette(donnees.vignette)
+														if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && !donnees.vignette.includes('/img/') && !verifierURL(donnees.vignette, ['https', 'http'])) {
+															supprimerFichier(mur, path.basename(donnees.vignette))
 														}
 														const multi = db.multi()
 														multi.del('contenu-blocs:' + mur + ':' + blocs[i])
@@ -2122,8 +2138,8 @@ async function demarrerServeur () {
 															}
 														}
 													}
-													if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && blocs[i].vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-														supprimerVignette(blocs[i].vignette)
+													if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && !blocs[i].vignette.includes('/img/') && !verifierURL(blocs[i].vignette, ['https', 'http'])) {
+														supprimerFichier(mur, path.basename(blocs[i].vignette))
 													}
 													const multi = db.multi()
 													multi.del('contenu-blocs:' + mur + ':' + blocs[i].bloc)
@@ -2663,39 +2679,46 @@ async function demarrerServeur () {
 			let favicon = ''
 			const domaine = req.body.domaine
 			const protocole = req.body.protocole
-			const reponse = await axios.get(protocole + '//' + domaine, { responseType: 'document' })
-			if (reponse && reponse.hasOwnProperty('data')) {
-				const $ = cheerio.load(reponse.data)
-				const recupererTaille = function (el) {
-					return (el.attribs.sizes && parseInt(el.attribs.sizes, 10)) || 0
-				}
-				let favicons = [
-					...$('meta[property="og:image"]')
-				]
-				if (favicons.length > 0 && favicons[0].hasOwnProperty('attribs')) {
-					favicon = favicons[0].attribs.content
-				} else {
-					favicons = [
-						...$('link[rel="shortcut icon"], link[rel="icon"], link[rel="apple-touch-icon"]')
-					].sort((a, b) => {
-						return recupererTaille(b) - recupererTaille(a)
-					})
-					if (favicons.length > 0 && favicons[0].hasOwnProperty('attribs')) {
-						favicon = favicons[0].attribs.href
+			axios.get(protocole + '//' + domaine, { 
+				responseType: 'document'
+			}).then(function (reponse) {
+				if (reponse && reponse.hasOwnProperty('data')) {
+					const $ = cheerio.load(reponse.data)
+					const recupererTaille = function (el) {
+						return (el.attribs.sizes && parseInt(el.attribs.sizes, 10)) || 0
 					}
+					let favicons = [
+						...$('meta[property="og:image"]')
+					]
+					if (favicons.length > 0 && favicons[0].hasOwnProperty('attribs')) {
+						favicon = favicons[0].attribs.content
+					} else {
+						favicons = [
+							...$('link[rel="shortcut icon"], link[rel="icon"], link[rel="apple-touch-icon"]')
+						].sort((a, b) => {
+							return recupererTaille(b) - recupererTaille(a)
+						})
+						if (favicons.length > 0 && favicons[0].hasOwnProperty('attribs')) {
+							favicon = favicons[0].attribs.href
+						}
+					}
+					if (favicon !== '' && verifierURL(favicon, ['https', 'http']) === true) {
+						res.send(favicon)
+					} else if (favicon !== '' && favicon.substring(0, 2) === './') {
+						res.send(protocole + '//' + domaine + favicon.substring(1))
+					} else if (favicon !== '' && favicon.substring(0, 1) === '/') {
+						res.send(protocole + '//' + domaine + favicon)
+					} else if (favicon !== '') {
+						res.send(protocole + '//' + domaine + '/' + favicon)
+					} else {
+						res.send(favicon)
+					}
+				} else {
+					res.send(favicon)
 				}
-			}
-			if (favicon !== '' && verifierURL(favicon, ['https', 'http']) === true) {
-				res.send(favicon)
-			} else if (favicon !== '' && favicon.substring(0, 2) === './') {
-				res.send(protocole + '//' + domaine + favicon.substring(1))
-			} else if (favicon !== '' && favicon.substring(0, 1) === '/') {
-				res.send(protocole + '//' + domaine + favicon)
-			} else if (favicon !== '') {
-				res.send(protocole + '//' + domaine + '/' + favicon)
-			} else {
-				res.send(favicon)
-			}
+			}).catch(function () {
+				res.send('erreur')
+			})
 		}
 	})
 
@@ -3202,8 +3225,8 @@ async function demarrerServeur () {
 													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 													await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 												}
-												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-													supprimerVignette(objet.vignette)
+												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+													supprimerFichier(mur, path.basename(objet.vignette))
 												}
 												io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, activiteId: activiteId })
 												socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -3246,8 +3269,8 @@ async function demarrerServeur () {
 													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 													await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 												}
-												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-													supprimerVignette(objet.vignette)
+												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+													supprimerFichier(mur, path.basename(objet.vignette))
 												}
 												io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite })
 												socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -3286,8 +3309,8 @@ async function demarrerServeur () {
 												await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 												await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 											}
-											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-												supprimerVignette(objet.vignette)
+											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+												supprimerFichier(mur, path.basename(objet.vignette))
 											}
 											io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite })
 											socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -3515,8 +3538,8 @@ async function demarrerServeur () {
 											}
 										}
 									}
-									if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-										supprimerVignette(objet.vignette)
+									if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+										supprimerFichier(mur, path.basename(objet.vignette))
 									}
 									let pad = ''
 									if (objet.hasOwnProperty('iframe') && objet.iframe !== '' && objet.iframe.includes(etherpad)) {
@@ -3958,9 +3981,8 @@ async function demarrerServeur () {
 				db.hset('murs:' + mur, 'fond', fond, async function (err) {
 					if (err) { socket.emit('erreur'); return false }
 					io.in('mur-' + mur).emit('modifierfond', fond, identifiant)
-					if (ancienfond.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-						const chemin = path.join(__dirname, '..', '/static' + ancienfond)
-						await fs.remove(chemin)
+					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#') {
+						supprimerFichier(mur, path.basename(ancienfond))
 					}
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
@@ -3979,9 +4001,8 @@ async function demarrerServeur () {
 				db.hset('murs:' + mur, 'fond', fond, async function (err) {
 					if (err) { socket.emit('erreur'); return false }
 					io.in('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
-					if (ancienfond.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-						const chemin = path.join(__dirname, '..', '/static' + ancienfond)
-						await fs.remove(chemin)
+					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#') {
+						supprimerFichier(mur, path.basename(ancienfond))
 					}
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
@@ -4350,8 +4371,8 @@ async function demarrerServeur () {
 														}
 													}
 												}
-												if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && objet.vignette.substring(1, definirDossierFichiers(mur).length + 1) === definirDossierFichiers(mur)) {
-													supprimerVignette(objet.vignette)
+												if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+													supprimerFichier(mur, path.basename(objet.vignette))
 												}
 												if (objet.hasOwnProperty('bloc') && objet.bloc === blocSupprime) {
 													const multi = db.multi()
@@ -5337,11 +5358,6 @@ async function demarrerServeur () {
 
 	async function supprimerFichier (mur, fichier) {
 		const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier)
-		await fs.remove(chemin)
-	}
-
-	async function supprimerVignette (vignette) {
-		const chemin = path.join(__dirname, '..', '/static' + vignette)
 		await fs.remove(chemin)
 	}
 
