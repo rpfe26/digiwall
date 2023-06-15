@@ -2547,16 +2547,20 @@ async function demarrerServeur () {
 						mimetype = 'document'
 						const docBuffer = await fs.readFile(chemin)
 						const pdfBuffer = await libre.convertAsync(docBuffer, '.pdf', undefined)
-						await fs.writeFile(destinationPDF, pdfBuffer)
-						if (await fs.pathExists(destinationPDF)) {
-							gm(destinationPDF + '[0]').setFormat('jpg').resize(450).quality(80).write(destination, async function (erreur) {
-								await fs.remove(destinationPDF)
-								if (erreur) {
-									res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
-								} else {
-									res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: true })
-								}
-							})
+						if (pdfBuffer) {
+							await fs.writeFile(destinationPDF, pdfBuffer)
+							if (await fs.pathExists(destinationPDF)) {
+								gm(destinationPDF + '[0]').setFormat('jpg').resize(450).quality(80).write(destination, async function (erreur) {
+									await fs.remove(destinationPDF)
+									if (erreur) {
+										res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
+									} else {
+										res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: true })
+									}
+								})
+							} else {
+								res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
+							}
 						} else {
 							res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
 						}
@@ -2564,16 +2568,20 @@ async function demarrerServeur () {
 						mimetype = 'office'
 						const docBuffer = await fs.readFile(chemin)
 						const pdfBuffer = await libre.convertAsync(docBuffer, '.pdf', undefined)
-						await fs.writeFile(destinationPDF, pdfBuffer)
-						if (await fs.pathExists(destinationPDF)) {
-							gm(destinationPDF + '[0]').setFormat('jpg').resize(450).quality(80).write(destination, async function (erreur) {
-								await fs.remove(destinationPDF)
-								if (erreur) {
-									res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
-								} else {
-									res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: true })
-								}
-							})
+						if (pdfBuffer) {
+							await fs.writeFile(destinationPDF, pdfBuffer)
+							if (await fs.pathExists(destinationPDF)) {
+								gm(destinationPDF + '[0]').setFormat('jpg').resize(450).quality(80).write(destination, async function (erreur) {
+									await fs.remove(destinationPDF)
+									if (erreur) {
+										res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
+									} else {
+										res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: true })
+									}
+								})
+							} else {
+								res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
+							}
 						} else {
 							res.json({ fichier: fichier.filename, mimetype: mimetype, vignetteGeneree: false })
 						}
