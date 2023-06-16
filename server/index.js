@@ -876,7 +876,7 @@ async function demarrerServeur () {
 									const slug = definirSlug(donnees.titre)
 									const date = dayjs().format()
 									const code = Math.floor(1000 + Math.random() * 9000)
-									if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#') {
+									if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
 										donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
 									}
 									const multi = db.multi()
@@ -933,7 +933,7 @@ async function demarrerServeur () {
 								const token = Math.random().toString(16).slice(10)
 								const slug = definirSlug(donnees.mur.titre)
 								const code = Math.floor(1000 + Math.random() * 9000)
-								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#') {
+								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
 									donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
 								}
 								const multi = db.multi()
@@ -1073,7 +1073,7 @@ async function demarrerServeur () {
 							await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
 							await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(parametres, '', 4), 'utf8')
 							await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
-							if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
+							if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
 								await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
 							} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
 								await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
@@ -1141,7 +1141,7 @@ async function demarrerServeur () {
 						await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
 						await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(donnees, '', 4), 'utf8')
 						await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
-						if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
+						if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
 							await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
 						} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
 							await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
@@ -1298,7 +1298,7 @@ async function demarrerServeur () {
 								if (parametres.activite === true) {
 									activiteId = donnees.mur.activite
 								}
-								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
 									await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
 								}
 								const multi = db.multi()
@@ -1452,7 +1452,7 @@ async function demarrerServeur () {
 										if (parametres.activite === true) {
 											activiteId = donnees.mur.activite
 										}
-										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
 										}
 										const multi = db.multi()
@@ -3989,7 +3989,7 @@ async function demarrerServeur () {
 				db.hset('murs:' + mur, 'fond', fond, async function (err) {
 					if (err) { socket.emit('erreur'); return false }
 					io.in('mur-' + mur).emit('modifierfond', fond, identifiant)
-					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#') {
+					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
 						supprimerFichier(mur, path.basename(ancienfond))
 					}
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -4009,7 +4009,7 @@ async function demarrerServeur () {
 				db.hset('murs:' + mur, 'fond', fond, async function (err) {
 					if (err) { socket.emit('erreur'); return false }
 					io.in('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
-					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#') {
+					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
 						supprimerFichier(mur, path.basename(ancienfond))
 					}
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
