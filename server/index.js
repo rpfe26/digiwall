@@ -3611,7 +3611,7 @@ async function demarrerServeur () {
 							multi.hincrby('murs:' + mur, 'activite', 1)
 							multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-commente' }))
 							multi.exec(function () {
-								io.in('mur-' + mur).emit('commenterbloc', { id: commentaireId, bloc: bloc, identifiant: identifiant, nom: nom, texte: texte, titre: titre, date: date, commentaires: parseInt(commentaires) + 1, activiteId: activiteId })
+								io.in('mur-' + mur).emit('commenterbloc', { id: commentaireId, bloc: bloc, identifiant: identifiant, nom: nom, texte: texte, titre: titre, date: date, commentaires: commentaires.length + 1, activiteId: activiteId })
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
 							})
