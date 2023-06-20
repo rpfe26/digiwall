@@ -313,18 +313,6 @@ export default {
 		const identifiant = params.id
 		const motdepasse = params.mdp
 		if (identifiant && identifiant !== '' && motdepasse && motdepasse !== '') {
-			const reponse = await axios.post(this.hote + '/api/verifier-acces', {
-				mur: this.mur.id,
-				identifiant: identifiant,
-				motdepasse: window.atob(motdepasse)
-			})
-			if (reponse.data.hasOwnProperty('message') && reponse.data.message === 'mur_debloque') {
-				this.identifiant = identifiant
-				this.nom = reponse.data.nom
-				this.langue = reponse.data.langue
-				this.statut = 'auteur'
-				this.mursDigidrive = reponse.data.digidrive
-			}
 			window.history.replaceState({}, document.title, window.location.href.split('?')[0])
 		}
 
