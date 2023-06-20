@@ -232,7 +232,7 @@ async function demarrerServeur () {
 			return false
 		}
 		const userAgent = req.headers['user-agent']
-		if (req.session.identifiant === '' || req.session.identifiant === undefined) {
+		if (!req.query.id && !req.query.mdp && (req.session.identifiant === '' || req.session.identifiant === undefined)) {
 			const identifiant = 'u' + Math.random().toString(16).slice(3)
 			req.session.identifiant = identifiant
 			req.session.nom = identifiant.slice(0, 8).toUpperCase()
@@ -244,13 +244,13 @@ async function demarrerServeur () {
 			req.session.digidrive = []
 			req.session.cookie.expires = new Date(Date.now() + dureeSession)
 		}
-		if (!req.session.hasOwnProperty('acces')) {
+		if (!req.query.id && !req.query.mdp && !req.session.hasOwnProperty('acces')) {
 			req.session.acces = []
 		}
-		if (!req.session.hasOwnProperty('murs')) {
+		if (!req.query.id && !req.query.mdp && !req.session.hasOwnProperty('murs')) {
 			req.session.murs = []
 		}
-		if (!req.session.hasOwnProperty('digidrive')) {
+		if (!req.query.id && !req.query.mdp && !req.session.hasOwnProperty('digidrive')) {
 			req.session.digidrive = []
 		}
 		const pageContextInit = {
@@ -362,9 +362,12 @@ async function demarrerServeur () {
 			if (reponse === 1) {
 				db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
 					if (err) { res.send('erreur_connexion'); return false }
-					const comparaison = await bcrypt.compare(motdepasse, donnees.motdepasse)
+					let comparaison = false
+					if (motdepasse !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse !== '') {
+						comparaison = await bcrypt.compare(motdepasse, donnees.motdepasse)
+					}
 					let comparaisonTemp = false
-					if (donnees.hasOwnProperty('motdepassetemp')) {
+					if (donnees.hasOwnProperty('motdepassetemp') && donnees.motdepassetemp !== '') {
 						comparaisonTemp = await bcrypt.compare(motdepasse, donnees.motdepassetemp)
 					}
 					if (comparaison === true || comparaisonTemp === true) {
