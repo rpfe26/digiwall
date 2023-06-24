@@ -515,7 +515,7 @@ async function demarrerServeur () {
 						try {
 							dossiers = JSON.parse(donnees.dossiers)
 						} catch (err) {
-							console.log(err)
+							dossiers = []
 						}
 					}
 					const listeMursDossiers = []
