@@ -120,7 +120,7 @@
 								<span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />
 								<span class="titre">{{ mur.titre }}</span>
 								<span class="date">{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
-								<span class="auteur" v-if="mur.identifiant !== identifiant">&nbsp;{ $t('par') }} {{ mur.identifiant }}</span>
+								<span class="auteur" v-if="mur.identifiant !== identifiant">&nbsp;{{ $t('par') }} {{ mur.identifiant }}</span>
 								<span class="vues" v-if="mur.vues > 1"> - {{ mur.vues }} {{ $t('vues') }}</span>
 								<span class="vues" v-else> - {{ mur.vues }} {{ $t('vue') }}</span>
 							</a>
