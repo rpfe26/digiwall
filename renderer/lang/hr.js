@@ -402,5 +402,10 @@ export default {
 	modifierLegende: 'Uredi naslov',
 	parametresContenu: 'Parametar sadržaja',
 	ajouterContenuImporte: 'Dodajte uvezeni sadržaj trenutnom sadržaju',
-	remplacerContenuImporte: 'Zamijenite trenutni sadržaj uvezenim sadržajem'
+	remplacerContenuImporte: 'Zamijenite trenutni sadržaj uvezenim sadržajem',
+	transfererCompte: 'Prijenos sadržaja računa',
+	identifiantCompteATransferer: 'ID računa koji se prenosi',
+	identifiantDestination: 'ID odredišta',
+	confirmationTransfererCompte: 'Jeste li sigurni da želite prenijeti sadržaj računa na ovaj ID?',
+	compteTransfere: 'Prenesen sadržaj računa.'
 }

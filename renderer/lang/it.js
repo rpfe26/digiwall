@@ -402,5 +402,10 @@ export default {
 	modifierLegende: 'Modifica la didascalia',
 	parametresContenu: 'Impostazione del contenuto',
 	ajouterContenuImporte: 'Aggiungi il contenuto importato al contenuto corrente',
-	remplacerContenuImporte: 'Sostituisci il contenuto corrente con quello importato'
+	remplacerContenuImporte: 'Sostituisci il contenuto corrente con quello importato',
+	transfererCompte: 'Trasferimento di contenuti da un account',
+	identifiantCompteATransferer: 'Nome utente dell\'account da trasferire',
+	identifiantDestination: 'Nome utente di destinazione',
+	confirmationTransfererCompte: 'Si desidera davvero trasferire il contenuto dell\'account a questo nome utente?',
+	compteTransfere: 'Contenuto dell\'account trasferito.'
 }

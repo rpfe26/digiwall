@@ -402,5 +402,10 @@ export default {
 	modifierLegende: 'Change caption',
 	parametresContenu: 'Content settings',
 	ajouterContenuImporte: 'Add the imported content to the current content',
-	remplacerContenuImporte: 'Add the imported content to the current content'
+	remplacerContenuImporte: 'Add the imported content to the current content',
+	transfererCompte: 'Transfer account contents',
+	identifiantCompteATransferer: 'Username to be transferred',
+	identifiantDestination: 'Destination username',
+	confirmationTransfererCompte: 'Do you really want to transfer contents to this username?',
+	compteTransfere: 'Account contents transferred.'
 }

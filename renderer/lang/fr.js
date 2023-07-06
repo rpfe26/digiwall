@@ -402,5 +402,10 @@ export default {
 	modifierLegende: 'Modifier la légende',
 	parametresContenu: 'Paramètres de contenu',
 	ajouterContenuImporte: 'Ajouter le contenu importé au contenu actuel',
-	remplacerContenuImporte: 'Remplacer le contenu actuel par le contenu importé'
+	remplacerContenuImporte: 'Remplacer le contenu actuel par le contenu importé',
+	transfererCompte: 'Transférer les contenus d\'un compte',
+	identifiantCompteATransferer: 'Identifiant du compte à transférer',
+	identifiantDestination: 'Identifiant de destination',
+	confirmationTransfererCompte: 'Souhaitez-vous vraiment transférer les contenus du compte vers cet identifiant&nbsp;?',
+	compteTransfere: 'Contenus du compte transférés.'
 }

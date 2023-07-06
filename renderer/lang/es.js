@@ -402,5 +402,10 @@ export default {
 	modifierLegende: 'Modificar pie de foto',
 	parametresContenu: 'Configuración del contenido',
 	ajouterContenuImporte: 'Añadir contenido importado al contenido actual',
-	remplacerContenuImporte: 'Sustituir el contenido actual por contenido importado'
+	remplacerContenuImporte: 'Sustituir el contenido actual por contenido importado',
+	transfererCompte: 'Transferir contenido de la cuenta',
+	identifiantCompteATransferer: 'Usuario de la cuenta a transferir',
+	identifiantDestination: 'Nombre de usuario de destino',
+	confirmationTransfererCompte: '¿Realmente desea transferir el contenido de la cuenta a este usuario?',
+	compteTransfere: 'Contenido de la cuenta transferido.'
 }
