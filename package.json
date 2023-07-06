@@ -17,7 +17,8 @@
     "prod": "npm run build && npm run server:prod",
     "build": "vite build",
     "server": "nodemon --watch server ./server",
-    "server:prod": "cross-env NODE_ENV=production node ./server"
+    "server:prod": "cross-env NODE_ENV=production node ./server",
+    "lightendb": "cross-env NODE_ENV=production node server/exporter-murs.js"
   },
   "dependencies": {
     "@panzoom/panzoom": "^4.5.0",
