@@ -443,7 +443,7 @@ export default {
 					if (donnees === 'erreur') {
 						this.message = this.$t('erreurActionServeur')
 					} else if (donnees === 'utilisateur_inexistant') {
-						this.message = this.$t('utilisateurInexistant')
+						this.message = this.$t('utilisateursInexistants')
 					} else {
 						this.notification = this.$t('compteTransfere')
 						this.identifiantO = ''
