@@ -408,5 +408,9 @@
 	"identifiantDestination": "ID odredišta",
 	"confirmationTransfererCompte": "Jeste li sigurni da želite prenijeti sadržaj računa na ovaj ID?",
 	"compteTransfere": "Prenesen sadržaj računa.",
-	"utilisateursInexistants": "Najmanje jedan od navedenih korisnika ne postoji."
+	"utilisateursInexistants": "Najmanje jedan od navedenih korisnika ne postoji.",
+	"rattacherMur": "Povežite podloga kreiran bez računa s računom",
+	"confirmationRattacherMur": "Jeste li sigurni da želite prenijeti ovu podlogu na ovaj ID?",
+	"murTransfere": "Podloga prenesena.",
+	"murCreeAvecCompte": "Ova podloga već pripada drugom korisniku."
 }

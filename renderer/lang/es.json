@@ -408,5 +408,9 @@
 	"identifiantDestination": "Nombre de usuario de destino",
 	"confirmationTransfererCompte": "¿Realmente desea transferir el contenido de la cuenta a este usuario?",
 	"compteTransfere": "Contenido de la cuenta transferido.",
-	"utilisateursInexistants": "Al menos uno de los usuarios especificados no existe."
+	"utilisateursInexistants": "Al menos uno de los usuarios especificados no existe.",
+	"rattacherMur": "Vincular un muro creado sin una cuenta a una cuenta",
+	"confirmationRattacherMur": "¿Estás seguro de que quieres transferir este muro a este usuario?",
+	"murTransfere": "Muro transferido.",
+	"murCreeAvecCompte": "Este muro ya pertenece a otro usuario."
 }
