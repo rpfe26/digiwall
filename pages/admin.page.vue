@@ -81,6 +81,20 @@
 					<span class="bouton" role="button" tabindex="0" @click="exporterMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
+					<span>{{ $t('rattacherMur') }}</span>
+				</h1>
+				<div class="conteneur">
+					<label>{{ $t('numeroMur') }}</label>
+					<input type="number" :value="murIdR" @input="murIdR = $event.target.value">
+				</div>
+				<div class="conteneur">
+					<label>{{ $t('identifiantDestination') }}</label>
+					<input type="text" :value="identifiantRa" @input="identifiantRa = $event.target.value">
+				</div>
+				<div class="actions">
+					<span class="bouton" role="button" tabindex="0" @click="modale = 'rattacher-mur'">{{ $t('valider') }}</span>
+				</div>
+				<h1>
 					<span>{{ $t('supprimerMur') }}</span>
 				</h1>
 				<div class="conteneur">
@@ -143,12 +157,14 @@
 			<div class="modale">
 				<div class="conteneur">
 					<div class="contenu">
-						<div class="message" v-html="$t('confirmationSupprimerMur')" v-if="modale === 'supprimer-mur'" />
+						<div class="message" v-html="$t('confirmationRattacherMur')" v-if="modale === 'rattacher-mur'" />
+						<div class="message" v-html="$t('confirmationSupprimerMur')" v-else-if="modale === 'supprimer-mur'" />
 						<div class="message" v-html="$t('confirmationTransfererCompte')" v-else-if="modale === 'transferer-compte'" />
 						<div class="message" v-html="$t('confirmationSupprimerCompteAdmin')" v-else-if="modale === 'supprimer-compte'" />
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="modale = ''">{{ $t('non') }}</span>
-							<span role="button" tabindex="0" class="bouton" @click="supprimerMur" v-if="modale === 'supprimer-mur'">{{ $t('oui') }}</span>
+							<span role="button" tabindex="0" class="bouton" @click="rattacherMur" v-if="modale === 'rattacher-mur'">{{ $t('oui') }}</span>
+							<span role="button" tabindex="0" class="bouton" @click="supprimerMur" v-else-if="modale === 'supprimer-mur'">{{ $t('oui') }}</span>
 							<span role="button" tabindex="0" class="bouton" @click="transfererCompte" v-else-if="modale === 'transferer-compte'">{{ $t('oui') }}</span>
 							<span role="button" tabindex="0" class="bouton" @click="supprimerCompte" v-else-if="modale === 'supprimer-compte'">{{ $t('oui') }}</span>
 						</div>
@@ -200,11 +216,13 @@ export default {
 			murIdS: '',
 			murIdM: '',
 			murIdE: '',
+			murIdR: '',
 			donneesMur: '',
 			identifiantS: '',
 			identifiantR: '',
 			identifiantO: '',
 			identifiantT: '',
+			identifiantRa: '',
 			donneesUtilisateur: '',
 			champ: '',
 			valeur: '',
@@ -358,6 +376,35 @@ export default {
 				}.bind(this)).catch(function () {
 					this.chargement = false
 					this.murIdE = ''
+					this.message = this.$t('erreurCommunicationServeur')
+				}.bind(this))
+			}
+		},
+		rattacherMur () {
+			if (this.murIdR !== '' && this.identifiantRa !== '') {
+				this.modale = ''
+				this.chargement = true
+				axios.post(this.hote + '/api/rattacher-mur', {
+					murId: this.murIdR,
+					identifiant: this.identifiantRa
+				}).then(function (reponse) {
+					this.chargement = false
+					const donnees = reponse.data
+					if (donnees === 'erreur') {
+						this.message = this.$t('erreurActionServeur')
+					} else if (donnees === 'utilisateur_inexistant') {
+						this.message = this.$t('utilisateurInexistant')
+					} else if (donnees === 'mur_inexistant') {
+						this.message = this.$t('murInexistant')
+					} else if (donnees === 'mur_cree_avec_compte') {
+						this.message = this.$t('murCreeAvecCompte')
+					} else {
+						this.notification = this.$t('murTransfere')
+						this.murIdR = ''
+						this.identifiantRa = ''
+					}
+				}.bind(this)).catch(function () {
+					this.chargement = false
 					this.message = this.$t('erreurCommunicationServeur')
 				}.bind(this))
 			}

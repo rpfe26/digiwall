@@ -1944,6 +1944,42 @@ async function demarrerServeur () {
 		})
 	})
 
+	app.post('/api/rattacher-mur', function (req, res) {
+		const mur = req.body.murId
+		const identifiant = req.body.identifiant
+		db.exists('utilisateurs:' + identifiant, function (err, reponse) {
+			if (err) { res.send('erreur'); return false  }
+			if (reponse === 1) {
+				db.exists('murs:' + mur, function (err, resultat) {
+					if (err) { res.send('erreur'); return false  }
+					if (resultat === 1) {
+						db.hgetall('murs:' + mur, function (err, donnees) {
+							if (err || !donnees || donnees === null) { res.send('erreur'); return false }
+							if (donnees.hasOwnProperty('motdepasse')) {
+								const multi = db.multi()
+								multi.sadd('murs-crees:' + identifiant, mur)
+								multi.sadd('utilisateurs-murs:' + mur, identifiant)
+								multi.hset('murs:' + mur, 'identifiant', identifiant)
+								multi.hdel('murs:' + mur, 'motdepasse')
+								multi.srem('murs-rejoints:' + identifiant, mur)
+								multi.srem('murs-utilisateurs:' + identifiant, mur)
+								multi.exec(function () {
+									res.send('mur_transfere')
+								})
+							} else {
+								res.send('mur_cree_avec_compte')
+							}
+						})
+					} else {
+						res.send('mur_inexistant')
+					}
+				})
+			} else {
+				res.send('utilisateur_inexistant')
+			}
+		})
+	})
+
 	app.post('/api/transferer-compte', function (req, res) {
 		const identifiant = req.body.identifiant
 		const nouvelIdentifiant = req.body.nouvelIdentifiant
@@ -1962,6 +1998,7 @@ async function demarrerServeur () {
 								multi.sadd('utilisateurs-murs:' + mur, nouvelIdentifiant)
 								multi.srem('utilisateurs-murs:' + mur, identifiant)
 								multi.hset('murs:' + mur, 'identifiant', nouvelIdentifiant)
+								multi.srem('murs-admins:' + nouvelIdentifiant, mur)
 								multi.srem('murs-rejoints:' + nouvelIdentifiant, mur)
 								multi.srem('murs-utilisateurs:' + nouvelIdentifiant, mur)
 								multi.exec()
