@@ -412,5 +412,6 @@
 	"rattacherMur": "Link a wall created without an account to an account",
 	"confirmationRattacherMur": "Are you sure you want to transfer this wall to this user?",
 	"murTransfere": "Wall transferred.",
-	"murCreeAvecCompte": "This wall already belongs to another user."
+	"murCreeAvecCompte": "This wall already belongs to another user.",
+	"identifiantNonConforme": "Username is too short or contains illegal characters."
 }

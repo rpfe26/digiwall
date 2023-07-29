@@ -412,5 +412,6 @@
 	"rattacherMur": "Povežite podloga kreiran bez računa s računom",
 	"confirmationRattacherMur": "Jeste li sigurni da želite prenijeti ovu podlogu na ovaj ID?",
 	"murTransfere": "Podloga prenesena.",
-	"murCreeAvecCompte": "Ova podloga već pripada drugom korisniku."
+	"murCreeAvecCompte": "Ova podloga već pripada drugom korisniku.",
+	"identifiantNonConforme": "Korisničko ime je prekratko ili sadrži nedopuštene znakove."
 }
