@@ -917,16 +917,16 @@
 						<div class="interrupteur">
 							<span>{{ $t('capsulePrivee') }}</span>
 							<label class="bouton-interrupteur">
-								<input type="checkbox" :checked="visibilite" @change="modifierVisibiliteCapsule">
-								<span class="barre" />
+								<input type="checkbox" :checked="visibilite" :disabled="mode === 'edition' && visibiliteInitiale === 'privee'" @change="modifierVisibiliteCapsule">
+								<span class="barre" :class="{'desactive': mode === 'edition' && visibiliteInitiale === 'privee'}" />
 							</label>
 						</div>
 					</div>
 					<div class="conteneur-interrupteur" v-else-if="admin && mur.fichiers !== 'actives'">
 						<span>{{ $t('capsulePrivee') }}</span>
 						<label class="bouton-interrupteur">
-							<input type="checkbox" :checked="visibilite" @change="modifierVisibiliteCapsule">
-							<span class="barre" />
+							<input type="checkbox" :checked="visibilite" :disabled="mode === 'edition' && visibiliteInitiale === 'privee'" @change="modifierVisibiliteCapsule">
+							<span class="barre" :class="{'desactive': mode === 'edition' && visibiliteInitiale === 'privee'}" />
 						</label>
 					</div>
 					<div class="conteneur-interrupteur" v-else-if="!admin && mur.fichiers === 'actives'">
