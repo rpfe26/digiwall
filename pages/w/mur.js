@@ -2571,7 +2571,7 @@ export default {
 			}
 		},
 		definirActionsEditeur (type) {
-			let actions = [
+			const actions = [
 				{ name: 'gras', title: this.$t('gras'), icon: '<i class="material-icons">format_bold</i>', result: () => pell.exec('bold') },
 				{ name: 'italique', title: this.$t('italique'), icon: '<i class="material-icons">format_italic</i>', result: () => pell.exec('italic') },
 				{ name: 'souligne', title: this.$t('souligne'), icon: '<i class="material-icons">format_underlined</i>', result: () => pell.exec('underline') },
@@ -2580,9 +2580,6 @@ export default {
 				{ name: 'lien', title: this.$t('lien'), icon: '<i class="material-icons">link</i>', result: () => { const url = window.prompt(this.$t('adresseLien')); if (url) { pell.exec('createLink', url) } } },
 				{ name: 'emojis', title: this.$t('emoticones'), icon: '<i class="material-icons">insert_emoticon</i>', result: function () { this.afficherEmojis(type) }.bind(this) }
 			]
-			if (this.mobile === true) {
-				actions = [{ name: 'gras', title: this.$t('gras'), icon: '<i class="material-icons">format_bold</i>', result: () => pell.exec('bold') }, { name: 'italique', title: this.$t('italique'), icon: '<i class="material-icons">format_italic</i>', result: () => pell.exec('italic') }, { name: 'souligne', title: this.$t('souligne'), icon: '<i class="material-icons">format_underlined</i>', result: () => pell.exec('underline') }, { name: 'barre', title: this.$t('barre'), icon: '<i class="material-icons">format_strikethrough</i>', result: () => pell.exec('strikethrough') }]
-			}
 			return actions
 		},
 		afficherEmojis (type) {
