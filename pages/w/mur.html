@@ -948,7 +948,7 @@
 					<label for="champ-titre">{{ $t('titre') }}</label>
 					<input id="champ-titre" type="text" maxlength="96" :placeholder="$t('ajouterTitre')" :value="titre" @input="titre = $event.target.value">
 					<label>{{ $t('texte') }}</label>
-					<div id="texte" />
+					<div id="texte" :class="{'mobile': mobile === true }" />
 					<template v-if="typeBloc === 'classique'">
 						<div class="televerser fichier" v-show="media === '' && !chargementLien && !enregistrement" v-if="mur.fichiers === 'actives'">
 							<label for="televerser-fichier" class="bouton" role="button" tabindex="0" v-show="progressionFichier === 0">{{ $t('ajouterFichier') }}</label>
@@ -1244,7 +1244,7 @@
 							</div>
 							<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
 							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
-								<div id="commentaire-modifie" />
+								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
 								<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
 								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :diaporama="modaleDiaporama" @emoji="insererEmoji" />
 							</div>
@@ -1254,7 +1254,7 @@
 						{{ $t('aucunCommentaire') }}
 					</div>
 					<div class="ecrire-commentaire">
-						<div id="commentaire" />
+						<div id="commentaire" :class="{'mobile': mobile === true }" />
 						<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
 						<Emojis v-if="emojis === 'commentaire'" :type="emojis" :diaporama="modaleDiaporama" @emoji="insererEmoji" />
 					</div>
@@ -1320,7 +1320,7 @@
 					</div>
 					<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
 					<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
-						<div id="commentaire-modifie" />
+						<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
 						<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
 						<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :diaporama="modaleDiaporama" @emoji="insererEmoji" />
 					</div>
@@ -1330,7 +1330,7 @@
 				</li>
 			</ul>
 			<div class="ecrire-commentaire">
-				<div id="commentaire" />
+				<div id="commentaire" :class="{'mobile': mobile === true }" />
 				<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
 				<Emojis v-if="emojis === 'commentaire'" :type="emojis" :diaporama="modaleDiaporama" @emoji="insererEmoji" />
 			</div>

@@ -175,6 +175,13 @@ export default {
 		admin () {
 			return (this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant) || (this.mur.hasOwnProperty('admins') && this.mur.admins.includes(this.identifiant)) || (this.statut === 'auteur' && this.mur.hasOwnProperty('id') && this.murs.includes(this.mur.id))
 		},
+		mobile () {
+			if (((this.userAgent.match(/iPhone/i) || this.userAgent.match(/iPad/i) || this.userAgent.match(/iPod/i)) && this.userAgent.match(/Mobile/i)) || this.userAgent.match(/Android/i)) {
+				return true
+			} else {
+				return false
+			}
+		},
 		digidrive () {
 			return this.statut === 'auteur' && this.mursDigidrive.includes(this.mur.id)
 		},
@@ -2573,7 +2580,7 @@ export default {
 				{ name: 'lien', title: this.$t('lien'), icon: '<i class="material-icons">link</i>', result: () => { const url = window.prompt(this.$t('adresseLien')); if (url) { pell.exec('createLink', url) } } },
 				{ name: 'emojis', title: this.$t('emoticones'), icon: '<i class="material-icons">insert_emoticon</i>', result: function () { this.afficherEmojis(type) }.bind(this) }
 			]
-			if (((this.userAgent.match(/iPhone/i) || this.userAgent.match(/iPad/i) || this.userAgent.match(/iPod/i)) && this.userAgent.match(/Mobile/i)) || this.userAgent.match(/Android/i)) {
+			if (this.mobile === true) {
 				actions = [{ name: 'gras', title: this.$t('gras'), icon: '<i class="material-icons">format_bold</i>', result: () => pell.exec('bold') }, { name: 'italique', title: this.$t('italique'), icon: '<i class="material-icons">format_italic</i>', result: () => pell.exec('italic') }, { name: 'souligne', title: this.$t('souligne'), icon: '<i class="material-icons">format_underlined</i>', result: () => pell.exec('underline') }, { name: 'barre', title: this.$t('barre'), icon: '<i class="material-icons">format_strikethrough</i>', result: () => pell.exec('strikethrough') }]
 			}
 			return actions
