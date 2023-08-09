@@ -18,7 +18,9 @@
 						<div id="actions">
 							<span class="bouton" role="button" tabindex="0" @click="afficherModaleConnexion">{{ $t('seConnecter') }}</span>
 							<span class="bouton" role="button" tabindex="1" @click="afficherModaleInscription" v-if="creationCompte === 1">{{ $t('sInscrire') }}</span>
-							<span class="bouton" role="button" tabindex="2" @click="afficherModaleCreer" v-if="creationMurSansCompte === 1">{{ $t('creerMur') }}</span>
+							<div v-if="creationMurSansCompte === 1">
+								<span class="bouton" role="button" tabindex="2" @click="afficherModaleCreer">{{ $t('creerMur') }}</span>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -646,7 +648,6 @@ export default {
 
 	#actions .bouton {
 		font-size: 0.85em;
-		margin-bottom: 1em;
 	}
 
 	#credits p {
@@ -661,6 +662,21 @@ export default {
 	#hub span svg {
 		width: 24px;
 		height: 24px;
+	}
+}
+
+@media screen and (max-width: 767px) {
+	#actions .bouton:last-of-type {
+		margin-right: 0;
+	}
+
+	#actions div {
+		width: 100%;
+		margin-top: 1em;
+	}
+
+	#actions div .bouton {
+		margin: auto!important;
 	}
 }
 
