@@ -22,7 +22,7 @@ async function onBeforeRender (pageContext) {
 		}
 		pageProps = { redirection }
 	})
-	if (!reponse || !reponse.hasOwnProperty('data') || (reponse.data && reponse.data === 'erreur_mur')) {
+	if (!reponse || !reponse.hasOwnProperty('data') || !reponse.data.hasOwnProperty('mur') || !reponse.data.hasOwnProperty('blocs') || !reponse.data.hasOwnProperty('activite') || (reponse.data && reponse.data === 'erreur_mur')) {
 		if (statut === 'utilisateur') {
 			redirection = '/u/' + identifiant
 		}
