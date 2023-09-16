@@ -3220,7 +3220,6 @@ async function demarrerServeur () {
 				db.hgetall('murs:' + mur, function (err, donnees) {
 					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('bloc')) { socket.emit('erreur'); return false }
 					const id = parseInt(donnees.bloc) + 1
-					db.hincrby('murs:' + mur, 'bloc', 1)
 					if (donnees.id === mur && donnees.token === token) {
 						const date = dayjs().format()
 						const activiteId = parseInt(donnees.activite) + 1
@@ -3241,6 +3240,7 @@ async function demarrerServeur () {
 						}
 						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', 'oui', 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'couleur', couleur)
 						multi.zadd('blocs:' + mur, id, bloc)
+						multi.hset('murs:' + mur, 'bloc', id)
 						multi.hset('dates-murs:' + mur, 'date', date)
 						if (visibilite === 'visible') {
 							// Enregistrer entrée du registre d'activité
@@ -3461,7 +3461,6 @@ async function demarrerServeur () {
 				db.hgetall('murs:' + mur, function (err, donnees) {
 					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('bloc')) { socket.emit('erreur'); return false }
 					const id = parseInt(donnees.bloc) + 1
-					db.hincrby('murs:' + mur, 'bloc', 1)
 					if (donnees.id === mur && donnees.token === token) {
 						const date = dayjs().format()
 						const activiteId = parseInt(donnees.activite) + 1
@@ -3478,6 +3477,7 @@ async function demarrerServeur () {
 						}
 						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', 'oui', 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'couleur', couleur)
 						multi.zadd('blocs:' + mur, id, bloc)
+						multi.hset('murs:' + mur, 'bloc', id)
 						multi.hset('dates-murs:' + mur, 'date', date)
 						if (visibilite === 'visible') {
 							// Enregistrer entrée du registre d'activité
