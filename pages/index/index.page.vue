@@ -40,10 +40,10 @@
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-titre-mur">{{ $t('titreMur') }}</label>
-						<input id="champ-titre-mur" type="text" maxlength="48" :value="titre" @input="titre = $event.target.value">
+						<input id="champ-titre-mur" type="text" maxlength="48" v-model.lazy="titre">
 						<label for="champ-motdepasse-mur">{{ $t('motDePasseMur') }}</label>
 						<p class="information">{{ $t('infoMotDePasseMur') }}</p>
-						<input id="champ-motdepasse-mur" type="text" maxlength="48" :value="motDePasseMur" @input="motDePasseMur = $event.target.value" @keydown.enter="creerMur">
+						<input id="champ-motdepasse-mur" type="text" maxlength="48" v-model.lazy="motDePasseMur" @keydown.enter="creerMur">
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="creerMur" v-if="!chargement">{{ $t('creer') }}</span>
 							<div class="conteneur-chargement" v-else>
@@ -64,9 +64,9 @@
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-identifiant">{{ $t('identifiant') }}</label>
-						<input id="champ-identifiant" type="text" maxlength="48" :value="identifiant" @input="identifiant = $event.target.value">
+						<input id="champ-identifiant" type="text" maxlength="48" v-model.lazy="identifiant">
 						<label for="champ-motdepasse">{{ $t('motDePasse') }}</label>
-						<input id="champ-motdepasse" type="password" maxlength="48" :value="motDePasse" @input="motDePasse = $event.target.value" @keydown.enter="seConnecter">
+						<input id="champ-motdepasse" type="password" maxlength="48" v-model.lazy="motDePasse" @keydown.enter="seConnecter">
 						<div class="mot-de-passe-oublie" @click="afficherModaleMotDePasseOublie" v-html="$t('motDePasseOublie')" />
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="seConnecter" v-if="!chargement">{{ $t('valider') }}</span>
@@ -85,7 +85,7 @@
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-email">{{ $t('email') }}</label>
-						<input id="champ-email" type="text" :value="email" @input="email = $event.target.value" @keydown.enter="envoyerMotDePasse">
+						<input id="champ-email" type="text" v-model.lazy="email" @keydown.enter="envoyerMotDePasse">
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="envoyerMotDePasse" v-if="!chargement">{{ $t('valider') }}</span>
 							<div class="conteneur-chargement" v-else>
@@ -107,14 +107,14 @@
 					<div class="contenu">
 						<label for="champ-identifiant">{{ $t('identifiant') }}</label>
 						<p class="information">{{ $t('infoIdentifiant') }}</p>
-						<input id="champ-identifiant" type="text" maxlength="48" :value="identifiant" @input="identifiant = $event.target.value">
+						<input id="champ-identifiant" type="text" maxlength="48" v-model.lazy="identifiant">
 						<label for="champ-email">{{ $t('email') }}</label>
-						<input id="champ-email" type="text" :value="email" @input="email = $event.target.value">
+						<input id="champ-email" type="text" v-model="email">
 						<label for="champ-motdepasse">{{ $t('motDePasse') }}</label>
 						<p class="information">{{ $t('infoMotDePasse') }}</p>
-						<input id="champ-motdepasse" type="password" maxlength="48" :value="motDePasse" @input="motDePasse = $event.target.value">
+						<input id="champ-motdepasse" type="password" maxlength="48" v-model.lazy="motDePasse">
 						<label for="champ-confirmation-motdepasse">{{ $t('confirmationMotDePasse') }}</label>
-						<input id="champ-confirmation-motdepasse" type="password" maxlength="48" :value="confirmationMotDePasse" @input="confirmationMotDePasse = $event.target.value" @keydown.enter="sInscrire">
+						<input id="champ-confirmation-motdepasse" type="password" maxlength="48" v-model.lazy="confirmationMotDePasse" @keydown.enter="sInscrire">
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="sInscrire" v-if="!chargement">{{ $t('valider') }}</span>
 							<div class="conteneur-chargement" v-else>
