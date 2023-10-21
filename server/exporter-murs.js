@@ -22,7 +22,7 @@ exporterMursJson(10)
 function exporterMursJson (jours) {
 	db.get('mur', function (err, mur) {
 		const exportMurs = []
-		for (let i = 0; i < mur; i++) {
+		for (let i = 0; i < mur + 1; i++) {
 			const exportMur = new Promise(function (resolveExport) {
 				const id = i
 				const chemin = path.join(__dirname, '..', '/static/murs')
