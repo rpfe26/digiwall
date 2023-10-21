@@ -89,7 +89,7 @@
 				<div id="afficher">
 					<div class="rechercher">
 						<span><i class="material-icons">search</i></span>
-						<input type="search" :value="requete" :placeholder="$t('rechercher')" @input="requete = $event.target.value">
+						<input type="search" v-model.lazy="requete" :placeholder="$t('rechercher')">
 					</div>
 					<div class="classer">
 						<span><i class="material-icons">sort</i></span>
@@ -251,11 +251,11 @@
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-motdepasse-actuel">{{ $t('motDePasseActuel') }}</label>
-						<input id="champ-motdepasse-actuel" type="password" maxlength="48" :value="motDePasse" @input="motDePasse = $event.target.value">
+						<input id="champ-motdepasse-actuel" type="password" maxlength="48" v-model.lazy="motDePasse">
 						<label for="champ-nouveau-motdepasse">{{ $t('nouveauMotDePasse') }}</label>
-						<input id="champ-nouveau-motdepasse" type="password" maxlength="48" :value="nouveauMotDePasse" @input="nouveauMotDePasse = $event.target.value">
+						<input id="champ-nouveau-motdepasse" type="password" maxlength="48" v-model.lazy="nouveauMotDePasse">
 						<label for="champ-confirmation-motdepasse">{{ $t('confirmationNouveauMotDePasse') }}</label>
-						<input id="champ-confirmation-motdepasse" type="password" maxlength="48" :value="confirmationNouveauMotDePasse" @input="confirmationNouveauMotDePasse = $event.target.value" @keydown.enter="modifierMotDePasse">
+						<input id="champ-confirmation-motdepasse" type="password" maxlength="48" v-model.lazy="confirmationNouveauMotDePasse" @keydown.enter="modifierMotDePasse">
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="modifierMotDePasse">{{ $t('modifier') }}</span>
 						</div>
@@ -273,7 +273,7 @@
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-titre-mur">{{ $t('titreMur') }}</label>
-						<input id="champ-titre-mur" type="text" maxlength="48" :value="titre" @input="titre = $event.target.value" @keydown.enter="creerMur">
+						<input id="champ-titre-mur" type="text" maxlength="48" v-model.lazy="titre" @keydown.enter="creerMur">
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="creerMur" v-if="!chargementModale">{{ $t('creer') }}</span>
 							<div class="conteneur-chargement" v-else>
@@ -360,7 +360,7 @@
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-nom-dossier">{{ $t('nomDossier') }}</label>
-						<input id="champ-nom-dossier" type="text" maxlength="48" :value="dossier" @input="dossier = $event.target.value" @keydown.enter="ajouterDossier">
+						<input id="champ-nom-dossier" type="text" maxlength="48" v-model.lazy="dossier" @keydown.enter="ajouterDossier">
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="ajouterDossier">{{ $t('valider') }}</span>
 						</div>
@@ -378,7 +378,7 @@
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-nom-dossier">{{ $t('nomDossier') }}</label>
-						<input id="champ-nom-dossier" type="text" maxlength="48" :value="dossier" @input="dossier = $event.target.value" @keydown.enter="modifierDossier">
+						<input id="champ-nom-dossier" type="text" maxlength="48" v-model.lazy="dossier" @keydown.enter="modifierDossier">
 						<div class="actions">
 							<span role="button" tabindex="0" class="bouton" @click="modifierDossier">{{ $t('valider') }}</span>
 						</div>
