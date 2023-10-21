@@ -12,7 +12,7 @@
 				<h1>
 					<span>{{ $t('maintenance') }}</span>
 				</h1>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton maintenance" role="button" tabindex="0" @click="activerMaintenance" v-if="maintenance === false">{{ $t('activerMaintenance') }}</span>
 					<span class="bouton maintenance" role="button" tabindex="0" @click="desactiverMaintenance" v-else>{{ $t('desactiverMaintenance') }}</span>
 				</div>
@@ -21,17 +21,17 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('identifiant') }}</label>
-					<input type="text" :value="identifiant" @input="identifiant = $event.target.value">
+					<input type="text" v-model.lazy="identifiant">
 				</div>
 				<div class="conteneur">
 					<label>{{ $t('email') }}</label>
-					<input type="text" :value="email" @input="email = $event.target.value">
+					<input type="text" v-model.lazy="email">
 				</div>
 				<div class="conteneur">
 					<label>{{ $t('motDePasse') }}</label>
-					<input type="text" maxlength="48" :value="motdepasse" @input="motdepasse = $event.target.value">
+					<input type="text" maxlength="48" v-model.lazy="motdepasse">
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="modifierMotDePasse">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -39,12 +39,12 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" :value="murId" @input="murId = $event.target.value">
+					<input type="number" v-model.lazy="murId">
 				</div>
 				<div class="conteneur" v-if="donneesMur !== ''">
 					<span class="donnees">{{ donneesMur }}</span>
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="recupererDonneesMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -52,7 +52,7 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" :value="murIdM" @input="murIdM = $event.target.value">
+					<input type="number" v-model.lazy="murIdM">
 				</div>
 				<div class="conteneur">
 					<label>{{ $t('champ') }}</label>
@@ -64,10 +64,10 @@
 				</div>
 				<div class="conteneur">
 					<label>{{ $t('valeur') }}</label>
-					<input type="text" :value="valeur" :maxlength="4" @input="valeur = $event.target.value" v-if="champ === 'code'">
-					<input type="text" :value="valeur" @input="valeur = $event.target.value" v-else>
+					<input type="text" v-model.lazy="valeur" :maxlength="18" v-if="champ === 'code'">
+					<input type="text" v-model.lazy="valeur" v-else>
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="modifierDonneesMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -75,9 +75,9 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" :value="murIdE" @input="murIdE = $event.target.value">
+					<input type="number" v-model.lazy="murIdE">
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="exporterMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -85,13 +85,13 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" :value="murIdR" @input="murIdR = $event.target.value">
+					<input type="number" v-model.lazy="murIdR">
 				</div>
 				<div class="conteneur">
 					<label>{{ $t('identifiantDestination') }}</label>
-					<input type="text" :value="identifiantRa" @input="identifiantRa = $event.target.value">
+					<input type="text" v-model.lazy="identifiantRa">
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="modale = 'rattacher-mur'">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -99,7 +99,7 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" :value="murIdS" @input="murIdS = $event.target.value">
+					<input type="number" v-model.lazy="murIdS">
 				</div>
 				<div class="conteneur">
 					<div class="conteneur-interrupteur">
@@ -110,7 +110,7 @@
 						</label>
 					</div>
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="modale = 'supprimer-mur'">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -118,12 +118,12 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('identifiant') }}</label>
-					<input type="text" :value="identifiantR" @input="identifiantR = $event.target.value">
+					<input type="text" v-model.lazy="identifiantR">
 				</div>
 				<div class="conteneur" v-if="donneesUtilisateur !== ''">
 					<span class="donnees">{{ donneesUtilisateur }}</span>
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="recupererDonneesUtilisateur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -131,13 +131,13 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('identifiantCompteATransferer') }}</label>
-					<input type="text" :value="identifiantO" @input="identifiantO = $event.target.value">
+					<input type="text" v-model.lazy="identifiantO">
 				</div>
 				<div class="conteneur">
 					<label>{{ $t('identifiantDestination') }}</label>
-					<input type="text" :value="identifiantT" @input="identifiantT = $event.target.value">
+					<input type="text" v-model.lazy="identifiantT">
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="modale = 'transferer-compte'">{{ $t('valider') }}</span>
 				</div>
 				<h1>
@@ -145,9 +145,9 @@
 				</h1>
 				<div class="conteneur">
 					<label>{{ $t('identifiant') }}</label>
-					<input type="text" :value="identifiantS" @input="identifiantS = $event.target.value">
+					<input type="text" v-model.lazy="identifiantS">
 				</div>
-				<div class="actions">
+				<div class="conteneur actions">
 					<span class="bouton" role="button" tabindex="0" @click="modale = 'supprimer-compte'">{{ $t('valider') }}</span>
 				</div>
 			</div>
