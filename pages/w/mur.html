@@ -355,6 +355,13 @@
 						<span class="barre" />
 					</label>
 				</div>
+				<div class="conteneur-interrupteur">
+					<span>{{ $t('epinglage') }}</span>
+					<label class="bouton-interrupteur">
+						<input type="checkbox" :checked="mur.epinglage === 'active'" @change="modifierEpinglage">
+						<span class="barre" />
+					</label>
+				</div>
 				<div class="conteneur-interrupteur" v-if="statut === 'utilisateur' || digidrive">
 					<span>{{ $t('copieCapsule') }}</span>
 					<label class="bouton-interrupteur">
@@ -448,14 +455,16 @@
 						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(item.bloc, item.titre, item.evaluations)" v-else><i class="material-icons">rate_review</i></span>
 					</div>
 					<div class="action" :style="{'color': item.couleur}">
-						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="(item.identifiant === identifiant || mur.contributions === 'modifiables') && item.edition === 'non' && !admin && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
+						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('epinglerCapsule')" @click="epinglerBloc(item.bloc)" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'non'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton epinglee" :title="$t('desepinglerCapsule')" @click="desepinglerBloc(item.bloc)" v-else-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="(item.identifiant === identifiant && item.edition === 'oui') || admin"><i class="material-icons">delete</i></span>
 					</div>
 					<div class="moderation" v-if="item.visibilite === 'privee' && admin">
@@ -480,8 +489,8 @@
 					<div class="action" :style="{'color': item.couleur}">
 						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="admin"><i class="material-icons">delete</i></span>
 					</div>
 				</div>
@@ -516,14 +525,16 @@
 						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(item.bloc, item.titre, item.evaluations)" v-else><i class="material-icons">rate_review</i></span>
 					</div>
 					<div class="action" :style="{'color': item.couleur}">
-						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="(item.identifiant === identifiant || mur.contributions === 'modifiables') && item.edition === 'non' && !admin && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
+						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('epinglerCapsule')" @click="epinglerBloc(item.bloc)" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'non'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton epinglee" :title="$t('desepinglerCapsule')" @click="desepinglerBloc(item.bloc)" v-else-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="(item.identifiant === identifiant && item.edition === 'oui') || admin"><i class="material-icons">delete</i></span>
 					</div>
 					<div class="moderation" v-if="item.visibilite === 'privee' && admin">
@@ -548,8 +559,8 @@
 					<div class="action" :style="{'color': item.couleur}">
 						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="admin"><i class="material-icons">delete</i></span>
 					</div>
 				</div>
@@ -584,14 +595,16 @@
 						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(item.bloc, item.titre, item.evaluations)" v-else><i class="material-icons">rate_review</i></span>
 					</div>
 					<div class="action" :style="{'color': item.couleur}">
-						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="(item.identifiant === identifiant || mur.contributions === 'modifiables') && item.edition === 'non' && !admin && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
+						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('epinglerCapsule')" @click="epinglerBloc(item.bloc)" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'non'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton epinglee" :title="$t('desepinglerCapsule')" @click="desepinglerBloc(item.bloc)" v-else-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="(item.identifiant === identifiant && item.edition === 'oui') || admin"><i class="material-icons">delete</i></span>
 					</div>
 					<div class="moderation" v-if="item.visibilite === 'privee' && admin">
@@ -616,8 +629,8 @@
 					<div class="action" :style="{'color': item.couleur}">
 						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="admin"><i class="material-icons">delete</i></span>
 					</div>
 				</div>
@@ -652,14 +665,16 @@
 						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(item.bloc, item.titre, item.evaluations)" v-else><i class="material-icons">rate_review</i></span>
 					</div>
 					<div class="action" :style="{'color': item.couleur}">
-						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="(item.identifiant === identifiant || mur.contributions === 'modifiables') && item.edition === 'non' && !admin && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
+						<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('epinglerCapsule')" @click="epinglerBloc(item.bloc)" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'non'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton epinglee" :title="$t('desepinglerCapsule')" @click="desepinglerBloc(item.bloc)" v-else-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="(item.identifiant === identifiant && item.edition === 'oui') || admin"><i class="material-icons">delete</i></span>
 					</div>
 					<div class="moderation" v-if="item.visibilite === 'privee' && admin">
@@ -684,8 +699,8 @@
 					<div class="action" :style="{'color': item.couleur}">
 						<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, 0)" v-if="admin"><i class="material-icons">edit</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, 0)" v-if="admin"><i class="material-icons">delete</i></span>
 					</div>
 				</div>
@@ -734,14 +749,16 @@
 									<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(item.bloc, item.titre, item.evaluations)" v-else><i class="material-icons">rate_review</i></span>
 								</div>
 								<div class="action" :style="{'color': item.couleur}">
-									<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, indexCol)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 									<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="(item.identifiant === identifiant || mur.contributions === 'modifiables') && item.edition === 'non' && !admin && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-									<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-									<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
+									<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, indexCol)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 									<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('epinglerCapsule')" @click="epinglerBloc(item.bloc)" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'non'"><i class="material-icons">push_pin</i></span>
+									<span role="button" tabindex="0" class="bouton epinglee" :title="$t('desepinglerCapsule')" @click="desepinglerBloc(item.bloc)" v-else-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 									<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 									<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
-									<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 									<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, indexCol)" v-if="(item.identifiant === identifiant && item.edition === 'oui') || admin"><i class="material-icons">delete</i></span>
 								</div>
 								<div class="moderation" v-if="item.visibilite === 'privee' && admin">
@@ -766,8 +783,8 @@
 								<div class="action" :style="{'color': item.couleur}">
 									<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, indexCol)" v-if="admin"><i class="material-icons">edit</i></span>
 									<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-									<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 									<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+									<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 									<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, indexCol)" v-if="admin"><i class="material-icons">delete</i></span>
 								</div>
 							</div>
@@ -825,14 +842,16 @@
 									<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(item.bloc, item.titre, item.evaluations)" v-else><i class="material-icons">rate_review</i></span>
 								</div>
 								<div class="action" :style="{'color': item.couleur}">
-									<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, indexCol)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 									<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="(item.identifiant === identifiant || mur.contributions === 'modifiables') && item.edition === 'non' && !admin && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-									<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
-									<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('verrouillerCapsule')" @click="verrouillerBloc(item.bloc)" v-if="item.edition === 'oui' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
+									<span role="button" tabindex="0" class="bouton cadenas" :title="$t('deverrouillerCapsule')" @click="deverrouillerBloc(item.bloc)" v-else-if="item.edition === 'non' && admin && !admins.includes(item.identifiant) && item.identifiant !== identifiant && mur.verrouillage === 'active'"><i class="material-icons">lock_open</i></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, indexCol)" v-if="((item.identifiant === identifiant || mur.contributions === 'modifiables') && ((item.edition === 'oui' && mur.verrouillage === 'active') || mur.verrouillage === 'desactive')) || admin"><i class="material-icons">edit</i></span>
 									<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('epinglerCapsule')" @click="epinglerBloc(item.bloc)" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'non'"><i class="material-icons">push_pin</i></span>
+									<span role="button" tabindex="0" class="bouton epinglee" :title="$t('desepinglerCapsule')" @click="desepinglerBloc(item.bloc)" v-else-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
+									<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 									<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 									<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
-									<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
 									<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, indexCol)" v-if="(item.identifiant === identifiant && item.edition === 'oui') || admin"><i class="material-icons">delete</i></span>
 								</div>
 								<div class="moderation" v-if="item.visibilite === 'privee' && admin">
@@ -857,8 +876,8 @@
 								<div class="action" :style="{'color': item.couleur}">
 									<span role="button" tabindex="0" class="bouton" :title="$t('modifierCapsule')" @click="ouvrirModaleBloc('edition', item, indexCol)" v-if="admin"><i class="material-icons">edit</i></span>
 									<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-									<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 									<span role="button" tabindex="0" class="bouton" :title="$t('copierCapsule')" @click="afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+									<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 									<span role="button" tabindex="0" class="bouton supprimer" :title="$t('supprimerCapsule')" @click="afficherSupprimerBloc(item.bloc, item.titre, indexCol)" v-if="admin"><i class="material-icons">delete</i></span>
 								</div>
 							</div>
@@ -868,12 +887,12 @@
 			</template>
 		</div>
 		<!-- Mode Organiser // Affichage mur et flux vertical -->
-		<draggable id="blocs" :class="{'mur': mur.affichage === 'mur', 'flux-vertical': mur.affichage === 'flux-vertical', 'large': mur.largeur === 'large'}" v-model="blocs" draggable=".bloc" :sort="true" :animation="250" :swap-threshold="0.5" :force-fallback="true" :fallback-tolerance="10" :scroll-sensitivity="convertirRem(4)" :scroll-speed="convertirRem(4)" @start="demarrerDeplacerBloc" @end="deplacerBloc" v-else-if="(mur.affichage === 'mur' || mur.affichage === 'flux-vertical') && action === 'organiser'">
-			<div :id="item.bloc" class="bloc" :class="{'privee': item.visibilite === 'privee'}" v-for="(item, indexItem) in blocs" :style="{'border-color': item.couleur}" :data-bloc="item.bloc" :key="'bloc_' + indexItem">
+		<draggable id="blocs" :class="{'mur': mur.affichage === 'mur', 'flux-vertical': mur.affichage === 'flux-vertical', 'large': mur.largeur === 'large'}" v-model="blocs" draggable=".bloc" filter=".epinglee" :sort="true" :animation="250" :swap-threshold="0.5" :force-fallback="true" :fallback-tolerance="10" :scroll-sensitivity="convertirRem(4)" :scroll-speed="convertirRem(4)" @start="demarrerDeplacerBloc" @end="arreterDeplacerBloc" :move="deplacerBloc" v-else-if="(mur.affichage === 'mur' || mur.affichage === 'flux-vertical') && action === 'organiser'">
+			<div :id="item.bloc" class="bloc" :class="{'privee': item.visibilite === 'privee', 'epinglee': mur.epinglage === 'active' && item.epinglee === 'oui'}" v-for="(item, indexItem) in blocs" :style="{'border-color': item.couleur}" :data-bloc="item.bloc" :key="'bloc_' + indexItem">
 				<div class="contenu" v-if="item.visibilite !== 'protegee' || blocsAutorises.includes(item.bloc)">
 					<div class="titre" v-if="item.titre !== ''" :style="{'background': eclaircirCouleur(item.couleur)}">
 						<span>{{ item.titre }}</span>
-						<i class="material-icons">drag_indicator</i>
+						<i class="material-icons" v-if="mur.epinglage === 'desactive' || (mur.epinglage === 'active' && item.epinglee === 'non')">drag_indicator</i>
 					</div>
 					<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 					<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
@@ -895,8 +914,9 @@
 						</span>
 					</div>
 					<div class="action" :style="{'color': item.couleur}">
-						<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="item.edition === 'non'"><i class="material-icons">lock</i></span>
+						<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="item.identifiant !== identifiant && !admins.includes(item.identifiant) && item.edition === 'non' && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
 						<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+						<span class="epinglee" :title="$t('capsuleEpinglee')" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
 						<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 						<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
 					</div>
@@ -937,12 +957,12 @@
 						<span role="button" tabindex="0" class="bouton droite" :title="$t('deplacerDroite')" @click="deplacerColonne('droite', indexCol)" v-if="indexCol < (mur.colonnes.length - 1)"><i class="material-icons">arrow_forward</i></span>
 					</div>
 				</div>
-				<draggable class="conteneur-colonne ascenseur" v-model="colonnes[indexCol]" group="colonne" draggable=".bloc" :sort="true" :animation="250" :swap-threshold="0.5" :force-fallback="true" :fallback-tolerance="10" :scroll-sensitivity="convertirRem(4)" :scroll-speed="convertirRem(4)" :data-index="indexCol" @start="demarrerDeplacerBloc" @end="deplacerBloc">
-					<div :id="item.bloc" class="bloc" :class="{'privee': item.visibilite === 'privee'}" v-for="(item, indexItem) in colonnes[indexCol]" :style="{'border-color': item.couleur}" :data-bloc="item.bloc" :key="'bloc_' + indexItem">
+				<draggable class="conteneur-colonne ascenseur" v-model="colonnes[indexCol]" group="colonne" draggable=".bloc" filter=".epinglee" :sort="true" :animation="250" :swap-threshold="0.5" :force-fallback="true" :fallback-tolerance="10" :scroll-sensitivity="convertirRem(4)" :scroll-speed="convertirRem(4)" :data-index="indexCol" @start="demarrerDeplacerBloc" @end="arreterDeplacerBloc" :move="deplacerBloc">
+					<div :id="item.bloc" class="bloc" :class="{'privee': item.visibilite === 'privee', 'epinglee': mur.epinglage === 'active' && item.epinglee === 'oui'}" v-for="(item, indexItem) in colonnes[indexCol]" :style="{'border-color': item.couleur}" :data-bloc="item.bloc" :key="'bloc_' + indexItem">
 						<div class="contenu" v-if="item.visibilite !== 'protegee' || blocsAutorises.includes(item.bloc)">
 							<div class="titre" v-if="item.titre !== ''" :style="{'background': eclaircirCouleur(item.couleur)}">
 								<span>{{ item.titre }}</span>
-								<i class="material-icons" v-show="item.identifiant === identifiant || admin">drag_indicator</i>
+								<i class="material-icons" v-if="mur.epinglage === 'desactive' || (mur.epinglage === 'active' && item.epinglee === 'non')">drag_indicator</i>
 							</div>
 							<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 							<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
@@ -964,8 +984,9 @@
 								</span>
 							</div>
 							<div class="action" :style="{'color': item.couleur}">
-								<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="item.edition === 'non'"><i class="material-icons">lock</i></span>
+								<span class="cadenas" :title="$t('capsuleVerrouillee')" v-if="item.identifiant !== identifiant && !admins.includes(item.identifiant) && item.edition === 'non' && mur.verrouillage === 'active'"><i class="material-icons">lock</i></span>
 								<span role="button" tabindex="0" class="bouton" :title="$t('commenterCapsule')" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+								<span class="epinglee" :title="$t('capsuleEpinglee')" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
 								<span role="button" tabindex="0" class="bouton info" :title="$t('informationsCapsule')" :data-description="definirDescription(item)"><i class="material-icons">info</i></span>
 								<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
 							</div>

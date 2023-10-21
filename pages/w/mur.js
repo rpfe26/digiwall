@@ -577,6 +577,18 @@ export default {
 				this.mur.affichageColonnes.push(true)
 				affichageColonnes.push(true)
 			}
+			if (this.mur.epinglage === 'active') {
+				colonnes.forEach(function (colonne) {
+					const blocsEpingles = []
+					colonne.forEach(function (item, index) {
+						if (item.epinglee === 'oui') {
+							blocsEpingles.push(item)
+							colonne.splice(index, 1)
+						}
+					})
+					colonne.unshift(...blocsEpingles)
+				})
+			}
 			this.blocs = blocs
 			this.colonnes = colonnes
 			this.affichageColonnes = affichageColonnes
@@ -1833,6 +1845,14 @@ export default {
 			this.messageConfirmation = ''
 			this.typeConfirmation = ''
 		},
+		epinglerBloc (bloc) {
+			this.chargement = true
+			this.$socket.emit('epinglerbloc', this.mur.id, bloc, this.identifiant)
+		},
+		desepinglerBloc (bloc) {
+			this.chargement = true
+			this.$socket.emit('desepinglerbloc', this.mur.id, bloc, this.identifiant)
+		},
 		async afficherEnvoyerBloc (bloc, titre) {
 			this.blocId = bloc
 			this.titre = titre
@@ -1926,7 +1946,7 @@ export default {
 				if (Object.keys(donneesBloc).length > 0 && token !== '') {
 					this.chargement = true
 					const id = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-					this.$socket.emit('copierbloc', id, donneesBloc.typeBloc, this.murDestination, token, donneesBloc.titre, donneesBloc.texte, donneesBloc.media, donneesBloc.iframe, donneesBloc.type, donneesBloc.source, donneesBloc.vignette, donneesBloc.vignetteActivee, donneesBloc.mediaExtra, donneesBloc.medias, donneesBloc.couleur, colonneDestination, donneesBloc.visibilite, this.identifiant, this.nom, this.mur.id)
+					this.$socket.emit('copierbloc', id, donneesBloc.typeBloc, this.murDestination, token, donneesBloc.titre, donneesBloc.texte, donneesBloc.media, donneesBloc.iframe, donneesBloc.type, donneesBloc.source, donneesBloc.vignette, donneesBloc.vignetteActivee, donneesBloc.mediaExtra, donneesBloc.medias, donneesBloc.couleur, colonneDestination, donneesBloc.visibilite, donneesBloc.motdepasse, this.identifiant, this.nom, this.mur.id)
 					this.fermerModaleCopieBloc()
 				}
 			}
@@ -2717,6 +2737,9 @@ export default {
 			}
 		},
 		deplacerBloc (event) {
+			return event.related.className.indexOf('epinglee') === -1
+		},
+		arreterDeplacerBloc (event) {
 			this.chargement = true
 			if (this.mur.affichage === 'colonnes') {
 				this.activerDefilementHorizontal()
@@ -3151,6 +3174,14 @@ export default {
 				this.$socket.emit('modifierverrouillage', this.mur.id, 'active', this.identifiant)
 			} else {
 				this.$socket.emit('modifierverrouillage', this.mur.id, 'desactive', this.identifiant)
+			}
+			this.chargement = true
+		},
+		modifierEpinglage (event) {
+			if (event.target.checked === true) {
+				this.$socket.emit('modifierepinglage', this.mur.id, 'active', this.identifiant)
+			} else {
+				this.$socket.emit('modifierepinglage', this.mur.id, 'desactive', this.identifiant)
 			}
 			this.chargement = true
 		},
@@ -3621,16 +3652,48 @@ export default {
 				this.action = 'ajouter'
 				this.utilisateur = donnees.identifiant
 				if (donnees.visibilite === 'visible' || this.admin || (this.mur.contributions === 'moderees' && (this.utilisateur === this.identifiant))) {
-					if (this.mur.affichage === 'colonnes') {
+					if (this.mur.affichage === 'colonnes' && this.mur.epinglage === 'desactive') {
 						if (this.mur.ordre === 'croissant') {
 							this.colonnes[donnees.colonne].push(donnees)
 						} else {
 							this.colonnes[donnees.colonne].unshift(donnees)
 						}
+					} else if (this.mur.affichage === 'colonnes' && this.mur.epinglage === 'active') {
+						const blocsColonneEpingles = []
+						const blocsColonne = JSON.parse(JSON.stringify(this.colonnes[donnees.colonne]))
+						if (this.mur.ordre === 'croissant') {
+							blocsColonne.push(donnees)
+						} else {
+							blocsColonne.unshift(donnees)
+						}
+						blocsColonne.forEach(function (item, index) {
+							if (item.epinglee === 'oui') {
+								blocsColonneEpingles.push(item)
+								blocsColonne.splice(index, 1)
+							}
+						})
+						blocsColonne.unshift(...blocsColonneEpingles)
+						this.colonnes[donnees.colonne] = blocsColonne
 					}
-					if (this.mur.ordre === 'croissant') {
+					if (this.mur.epinglage === 'active') {
+						const blocsEpingles = []
+						const blocs = JSON.parse(JSON.stringify(this.blocs))
+						if (this.mur.ordre === 'croissant') {
+							blocs.push(donnees)
+						} else {
+							blocs.unshift(donnees)
+						}
+						blocs.forEach(function (item, index) {
+							if (item.epinglee === 'oui') {
+								blocsEpingles.push(item)
+								blocs.splice(index, 1)
+							}
+						})
+						blocs.unshift(...blocsEpingles)
+						this.blocs = blocs
+					} else if (this.mur.epinglage === 'desactive' && this.mur.ordre === 'croissant') {
 						this.blocs.push(donnees)
-					} else {
+					} else if (this.mur.epinglage === 'desactive' && this.mur.ordre === 'decroissant') {
 						this.blocs.unshift(donnees)
 					}
 					if (donnees.visibilite === 'visible' || this.admin || (this.mur.contributions === 'moderees' && (this.utilisateur === this.identifiant))) {
@@ -3653,11 +3716,6 @@ export default {
 					}
 					this.envoyerNotificationAdmins()
 				}
-			}.bind(this))
-
-			this.$socket.on('copierbloc', function () {
-				this.chargement = false
-				this.notification = this.$t('capsuleCopiee')
 			}.bind(this))
 
 			this.$socket.on('modifierbloc', function (donnees) {
@@ -3687,6 +3745,73 @@ export default {
 					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.modifie, type: 'bloc-modifie' })
 				}
 				this.envoyerNotificationAdmins()
+			}.bind(this))
+
+			this.$socket.on('epinglerbloc', function (donnees) {
+				this.chargement = false
+				const blocActif = document.querySelector('.bloc.actif')
+				let blocId = ''
+				if (blocActif && donnees.identifiant !== this.identifiant) {
+					blocId = blocActif.id
+				}
+				const blocsEpingles = []
+				const blocs = JSON.parse(JSON.stringify(this.blocs))
+				blocs.forEach(function (item) {
+					if (item.bloc === donnees.bloc) {
+						item.epinglee = 'oui'
+					}
+				})
+				blocs.forEach(function (item, index) {
+					if (item.epinglee === 'oui') {
+						blocsEpingles.push(item)
+						blocs.splice(index, 1)
+					}
+				})
+				blocs.unshift(...blocsEpingles)
+				if (this.mur.affichage === 'colonnes') {
+					this.definirColonnes(blocs)
+				} else {
+					this.blocs = blocs
+				}
+				if (this.identifiant === donnees.identifiant) {
+					this.notification = this.$t('capsuleEpinglee') + '.'
+					this.$nextTick(function () {
+						blocActif.classList.remove('actif')
+						if (document.querySelector('#' + donnees.bloc)) {
+							document.querySelector('#' + donnees.bloc).classList.add('actif')
+						}
+					})
+				} else {
+					this.$nextTick(function () {
+						if (blocActif && document.querySelector('#' + blocId)) {
+							blocActif.classList.remove('actif')
+							document.querySelector('#' + blocId).classList.add('actif')
+						}
+					})
+				}
+			}.bind(this))
+
+			this.$socket.on('desepinglerbloc', function (donnees) {
+				this.chargement = false
+				const blocs = JSON.parse(JSON.stringify(this.blocs))
+				blocs.forEach(function (item) {
+					if (item.bloc === donnees.bloc) {
+						item.epinglee = 'non'
+					}
+				})
+				if (this.mur.affichage === 'colonnes') {
+					this.definirColonnes(blocs)
+				} else {
+					this.blocs = blocs
+				}
+				if (this.identifiant === donnees.identifiant) {
+					this.notification = this.$t('capsuleDesepinglee')
+				}
+			}.bind(this))
+
+			this.$socket.on('copierbloc', function () {
+				this.chargement = false
+				this.notification = this.$t('capsuleCopiee')
 			}.bind(this))
 
 			this.$socket.on('autoriserbloc', function (donnees) {
@@ -3759,7 +3884,7 @@ export default {
 					}
 				}.bind(this))
 				if (this.admin && this.identifiant === donnees.identifiant) {
-					this.notification = this.$t('capsuleVerrouillee')
+					this.notification = this.$t('capsuleVerrouillee') + '.'
 				}
 			}.bind(this))
 
@@ -3783,10 +3908,9 @@ export default {
 			}.bind(this))
 
 			this.$socket.on('deplacerbloc', function (donnees) {
-				this.utilisateur = donnees.identifiant
 				const blocActif = document.querySelector('.bloc.actif')
 				let blocId = ''
-				if (blocActif && this.utilisateur !== this.identifiant) {
+				if (blocActif && donnees.identifiant !== this.identifiant) {
 					blocId = blocActif.id
 				}
 				if (this.admin && this.mur.affichage === 'colonnes') {
@@ -3811,7 +3935,7 @@ export default {
 					}
 				}
 				this.$nextTick(function () {
-					if (blocActif && this.utilisateur !== this.identifiant && document.querySelector('#' + blocId)) {
+					if (blocActif && donnees.identifiant !== this.identifiant && document.querySelector('#' + blocId)) {
 						blocActif.classList.remove('actif')
 						document.querySelector('#' + blocId).classList.add('actif')
 					}
@@ -4038,6 +4162,18 @@ export default {
 				}
 				this.mur.ordre = ordre
 				this.blocs.reverse()
+				if (this.mur.epinglage === 'active') {
+					const blocsEpingles = []
+					const blocs = JSON.parse(JSON.stringify(this.blocs))
+					blocs.forEach(function (item, index) {
+						if (item.epinglee === 'oui') {
+							blocsEpingles.push(item)
+							blocs.splice(index, 1)
+						}
+					})
+					blocs.unshift(...blocsEpingles)
+					this.blocs = blocs
+				}
 				if (this.mur.affichage === 'colonnes') {
 					this.definirColonnes(this.blocs)
 				}
@@ -4173,6 +4309,14 @@ export default {
 				this.chargement = false
 				if (this.admin && this.identifiant === identifiant) {
 					this.notification = this.$t('parametreVerrouillageModifie')
+				}
+			}.bind(this))
+
+			this.$socket.on('modifierepinglage', function (statut, identifiant) {
+				this.mur.epinglage = statut
+				this.chargement = false
+				if (this.admin && this.identifiant === identifiant) {
+					this.notification = this.$t('parametreEpinglageModifie')
 				}
 			}.bind(this))
 

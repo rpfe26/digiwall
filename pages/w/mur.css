@@ -318,6 +318,7 @@
 	cursor: move;
 }
 
+.organiser #blocs .bloc.epinglee,
 .organiser #blocs .bloc.haut {
 	animation: none;
 	cursor: default;
@@ -524,6 +525,10 @@
 	cursor: move;
 }
 
+.organiser #blocs .bloc.epinglee .media {
+	cursor: default;
+}
+
 #blocs .bloc .media span {
 	display: block;
     text-align: center;
@@ -668,6 +673,11 @@
 	font-size: 24px;
 	color: #f3aa15;
 	padding: 0;
+}
+
+#blocs .bloc .action .epinglee {
+	font-size: 24px;
+	color: #f3aa15;
 }
 
 #blocs .bloc .action .bouton .badge {

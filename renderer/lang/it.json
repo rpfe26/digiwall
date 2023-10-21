@@ -369,7 +369,7 @@
 	"verrouillerCapsule": "Blocca la capsula",
 	"deverrouillerCapsule": "Sblocca la capsula",
 	"capsuleDeverrouillee": "Capsula sbloccata.",
-	"parametreVerrouillageModifie": "L'impostazione di blocco della capsula è stata modificata.",
+	"parametreVerrouillageModifie": "Impostazione di blocco della capsula modificata.",
 	"verrouillage": "Blocco",
 	"copierCapsule": "Copia della capsula su un'altro muro",
 	"copieCapsule": "Copia su un'altro muro",
@@ -414,5 +414,11 @@
 	"murTransfere": "Muro trasferito.",
 	"murCreeAvecCompte": "Questo muro appartiene già a un altro utente.",
 	"identifiantNonConforme": "Il nome utente è troppo corto o contiene caratteri non validi.",
-	"capsuleProtegee": "Capsula protetta"
+	"capsuleProtegee": "Capsula protetta",
+	"epinglerCapsule": "Appunta la capsula",
+	"desepinglerCapsule": "Sblocca la capsula",
+	"capsuleEpinglee": "Capsula appuntata",
+	"capsuleDesepinglee": "Capsula non appuntata.",
+	"epinglage": "Appuntamento",
+	"parametreEpinglageModifie": "Impostazione di puntamento della capsula modificata."
 }

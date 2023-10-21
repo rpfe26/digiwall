@@ -414,5 +414,11 @@
 	"murTransfere": "Podloga prenesena.",
 	"murCreeAvecCompte": "Ova podloga već pripada drugom korisniku.",
 	"identifiantNonConforme": "Korisničko ime je prekratko ili sadrži nedopuštene znakove.",
-	"capsuleProtegee": "Zaštićena kapsula"
+	"capsuleProtegee": "Zaštićena kapsula",
+	"epinglerCapsule": "Zakačite kapsulu",
+	"desepinglerCapsule": "Otkvačite kapsulu",
+	"capsuleEpinglee": "Zakačena kapsula",
+	"capsuleDesepinglee": "Otkvačena kapsula.",
+	"epinglage": "Prikvačivanje",
+	"parametreEpinglageModifie": "Postavka pričvršćivanja kapsule je promijenjena."
 }

@@ -870,9 +870,13 @@ async function demarrerServeur () {
 											if (infos.hasOwnProperty('motdepasse')) {
 												motdepasse = infos.motdepasse
 											}
+											let epinglee = 'non'
+											if (infos.hasOwnProperty('epinglee')) {
+												epinglee = infos.epinglee
+											}
 											const multi = db.multi()
 											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-											multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'couleur', infos.couleur)
+											multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', infos.couleur)
 											multi.zadd('blocs:' + id, indexBloc, blocId)
 											multi.exec(function () {
 												resolve(blocId)
@@ -889,12 +893,16 @@ async function demarrerServeur () {
 									if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
 										donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
 									}
+									let epinglage = 'desactive'
+									if (donnees.hasOwnProperty('epinglage')) {
+										epinglage = donnees.epinglage
+									}
 									const multi = db.multi()
 									multi.incr('mur')
 									if (donnees.hasOwnProperty('code')) {
-										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
 									} else {
-										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
 									}
 									multi.sadd('murs-crees:' + identifiant, id)
 									multi.sadd('utilisateurs-murs:' + id, identifiant)
@@ -902,7 +910,7 @@ async function demarrerServeur () {
 										if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
 											await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
 										}
-										res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
+										res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
 									})
 								})
 							})
@@ -930,9 +938,13 @@ async function demarrerServeur () {
 										if (bloc.hasOwnProperty('motdepasse')) {
 											motdepasse = bloc.motdepasse
 										}
+										let epinglee = 'non'
+										if (bloc.hasOwnProperty('epinglee')) {
+											epinglee = bloc.epinglee
+										}
 										const multi = db.multi()
 										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-										multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'couleur', bloc.couleur)
+										multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
 										multi.zadd('blocs:' + id, indexBloc, blocId)
 										multi.exec(function () {
 											resolve(blocId)
@@ -950,12 +962,16 @@ async function demarrerServeur () {
 								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
 									donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
 								}
+								let epinglage = 'desactive'
+								if (donnees.mur.hasOwnProperty('epinglage')) {
+									epinglage = donnees.mur.epinglage
+								}
 								const multi = db.multi()
 								multi.incr('mur')
 								if (donnees.mur.hasOwnProperty('code')) {
-									multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+									multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
 								} else {
-									multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+									multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
 								}
 								multi.sadd('murs-crees:' + identifiant, id)
 								multi.sadd('utilisateurs-murs:' + id, identifiant)
@@ -963,7 +979,7 @@ async function demarrerServeur () {
 									if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
 										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
 									}
-									res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
+									res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
 								})
 							})
 						} else {
@@ -1263,9 +1279,13 @@ async function demarrerServeur () {
 										if (bloc.hasOwnProperty('motdepasse')) {
 											motdepasse = bloc.motdepasse
 										}
+										let epinglee = 'non'
+										if (bloc.hasOwnProperty('epinglee')) {
+											epinglee = bloc.epinglee
+										}
 										const multi = db.multi()
 										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-										multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'couleur', bloc.couleur)
+										multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
 										multi.zadd('blocs:' + id, indexBloc, blocId)
 										if (parametres.commentaires === true) {
 											for (const commentaire of bloc.listeCommentaires) {
@@ -1319,9 +1339,13 @@ async function demarrerServeur () {
 								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
 									await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
 								}
+								let epinglage = 'desactive'
+								if (donnees.mur.hasOwnProperty('epinglage')) {
+									epinglage = donnees.mur.epinglage
+								}
 								const multi = db.multi()
 								multi.incr('mur')
-								multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId, 'admins', JSON.stringify([]), 'vues', 0)
+								multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId, 'admins', JSON.stringify([]), 'vues', 0)
 								multi.sadd('murs-crees:' + identifiant, id)
 								multi.sadd('utilisateurs-murs:' + id, identifiant)
 								if (parametres.activite === true) {
@@ -1349,7 +1373,7 @@ async function demarrerServeur () {
 								multi.exec(async function () {
 									await fs.remove(source)
 									await fs.remove(cible)
-									res.json({ id: id, token: token, slug: slug, titre: donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: activiteId, admins: [], vues: 0 })
+									res.json({ id: id, token: token, slug: slug, titre: donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: activiteId, admins: [], vues: 0 })
 								})
 							})
 						})
@@ -1422,9 +1446,13 @@ async function demarrerServeur () {
 												if (bloc.hasOwnProperty('motdepasse')) {
 													motdepasse = bloc.motdepasse
 												}
+												let epinglee = 'non'
+												if (bloc.hasOwnProperty('epinglee')) {
+													epinglee = bloc.epinglee
+												}
 												const multi = db.multi()
 												const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-												multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'couleur', bloc.couleur)
+												multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
 												multi.zadd('blocs:' + id, indexBloc, blocId)
 												if (parametres.commentaires === true) {
 													for (const commentaire of bloc.listeCommentaires) {
@@ -1477,8 +1505,12 @@ async function demarrerServeur () {
 										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
 										}
+										let epinglage = 'desactive'
+										if (donnees.mur.hasOwnProperty('epinglage')) {
+											epinglage = donnees.mur.epinglage
+										}
 										const multi = db.multi()
-										multi.hmset('murs:' + id, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId)
+										multi.hmset('murs:' + id, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId)
 										if (parametres.activite === true) {
 											if (parametres.commentaires === false) {
 												donnees.activite = donnees.activite.filter(function (element) {
@@ -1536,9 +1568,13 @@ async function demarrerServeur () {
 											if (bloc.hasOwnProperty('motdepasse')) {
 												motdepasse = bloc.motdepasse
 											}
+											let epinglee = 'non'
+											if (bloc.hasOwnProperty('epinglee')) {
+												epinglee = bloc.epinglee
+											}
 											const multi = db.multi()
 											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-											multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'couleur', bloc.couleur)
+											multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
 											multi.zadd('blocs:' + id, indexBloc, blocId)
 											if (parametres.commentaires === true) {
 												for (const commentaire of bloc.listeCommentaires) {
@@ -3303,7 +3339,7 @@ async function demarrerServeur () {
 						if (vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
 							vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
 						}
-						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', edition, 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'couleur', couleur)
+						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', edition, 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'epinglee', 'non', 'couleur', couleur)
 						multi.zadd('blocs:' + mur, id, bloc)
 						multi.hset('murs:' + mur, 'bloc', id)
 						multi.hset('dates-murs:' + mur, 'date', date)
@@ -3428,7 +3464,7 @@ async function demarrerServeur () {
 											})
 										} else if (visibilite === 'privee' || visibilite === 'masquee') {
 											const multi = db.multi()
-											multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'modifie', date, 'couleur', couleur)
+											multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur)
 											multi.hset('dates-murs:' + mur, 'date', date)
 											multi.exec(async function () {
 												if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
@@ -3521,7 +3557,7 @@ async function demarrerServeur () {
 			}
 		})
 
-		socket.on('copierbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visibilite, identifiant, nom, murOrigine) {
+		socket.on('copierbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visibilite, motdepasse, identifiant, nom, murOrigine) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
@@ -3544,11 +3580,11 @@ async function demarrerServeur () {
 							vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
 							vignetteOrigine = '/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + path.basename(vignette)
 						}
-						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', 'oui', 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'couleur', couleur)
+						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', 'oui', 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'epinglee', 'non', 'couleur', couleur)
 						multi.zadd('blocs:' + mur, id, bloc)
 						multi.hset('murs:' + mur, 'bloc', id)
 						multi.hset('dates-murs:' + mur, 'date', date)
-						if (visibilite === 'visible') {
+						if (visibilite === 'visible' || visibilite === 'protegee') {
 							// Enregistrer entrée du registre d'activité
 							multi.hincrby('murs:' + mur, 'activite', 1)
 							multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }))
@@ -3568,7 +3604,7 @@ async function demarrerServeur () {
 							if (vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + vignetteOrigine))) {
 								await fs.copy(path.join(__dirname, '..', '/static' + vignetteOrigine), path.join(__dirname, '..', '/static' + vignette))
 							}
-							io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, activiteId: activiteId })
+							io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, epinglee: 'non', activiteId: activiteId })
 							socket.emit('copierbloc')
 							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 							socket.request.session.save()
@@ -3612,6 +3648,38 @@ async function demarrerServeur () {
 			})
 		})
 
+		socket.on('epinglerbloc', function (mur, bloc, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
+				if (err) { socket.emit('erreur'); return false }
+				if (resultat === 1) {
+					db.hmset('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'oui')
+					io.in('mur-' + mur).emit('epinglerbloc', { bloc: bloc, identifiant: identifiant })
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				}
+			})
+		})
+
+		socket.on('desepinglerbloc', function (mur, bloc, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
+				if (err) { socket.emit('erreur'); return false }
+				if (resultat === 1) {
+					db.hmset('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'non')
+					io.in('mur-' + mur).emit('desepinglerbloc', { bloc: bloc, identifiant: identifiant })
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				}
+			})
+		})
+
 		socket.on('autoriserbloc', function (mur, token, item, indexBloc, indexBlocColonne, moderation, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
@@ -3636,7 +3704,7 @@ async function demarrerServeur () {
 								multi.hincrby('murs:' + mur, 'activite', 1)
 								multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: item.bloc, identifiant: item.identifiant, titre: item.titre, date: date, type: 'bloc-ajoute' }))
 								multi.exec(function () {
-									io.in('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: item.nom, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
+									io.in('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: item.nom, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', motdepasse: item.motdepasse, epinglee: item.epinglee, activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
 									socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 									socket.request.session.save()
 								})
@@ -4399,6 +4467,22 @@ async function demarrerServeur () {
 			}
 		})
 
+		socket.on('modifierepinglage', function (mur, statut, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				db.hset('murs:' + mur, 'epinglage', statut, function () {
+					io.in('mur-' + mur).emit('modifierepinglage', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				})
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
 		socket.on('modifiercopiebloc', function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
@@ -4869,14 +4953,14 @@ async function demarrerServeur () {
 		} else {
 			multi.incr('mur')
 		}
-		multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+		multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'epinglage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
 		multi.sadd('murs-crees:' + identifiant, id)
 		multi.sadd('utilisateurs-murs:' + id, identifiant)
 		multi.hset('dates-murs:' + id, 'date', date)
 		multi.exec(async function () {
 			const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
 			await fs.mkdirs(chemin)
-			res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
+			res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', epinglage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
 		})
 	}
 
@@ -4887,7 +4971,7 @@ async function demarrerServeur () {
 		} else {
 			multi.incr('mur')
 		}
-		multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'motdepasse', hash, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+		multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'motdepasse', hash, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'epinglage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
 		if (type === 'api') {
 			multi.sadd('murs-crees:' + identifiant, id)
 		}
@@ -4912,7 +4996,7 @@ async function demarrerServeur () {
 			for (const [indexItem, item] of donnees.blocs.entries()) {
 				const donneesBloc = new Promise(function (resolve) {
 					const multi = db.multi()
-					multi.hmset('contenu-blocs:' + id + ':' + item.bloc, 'id', item.id, 'bloc', item.bloc, 'typeBloc', item.typeBloc, 'titre', item.titre, 'texte', item.texte, 'media', item.media, 'iframe', item.iframe, 'type', item.type, 'source', item.source, 'vignette', item.vignette, 'vignetteActivee', item.vignetteActivee, 'mediaExtra', item.mediaExtra, 'medias', item.medias, 'edition', item.edition, 'date', item.date, 'identifiant', item.identifiant, 'commentaires', item.commentaires, 'evaluations', item.evaluations, 'colonne', item.colonne, 'visibilite', item.visibilite, 'couleur', item.couleur)
+					multi.hmset('contenu-blocs:' + id + ':' + item.bloc, 'id', item.id, 'bloc', item.bloc, 'typeBloc', item.typeBloc, 'titre', item.titre, 'texte', item.texte, 'media', item.media, 'iframe', item.iframe, 'type', item.type, 'source', item.source, 'vignette', item.vignette, 'vignetteActivee', item.vignetteActivee, 'mediaExtra', item.mediaExtra, 'medias', item.medias, 'edition', item.edition, 'date', item.date, 'identifiant', item.identifiant, 'commentaires', item.commentaires, 'evaluations', item.evaluations, 'colonne', item.colonne, 'visibilite', item.visibilite, 'motdepasse', item.motdepasse, 'epinglee', item.epinglee, 'couleur', item.couleur)
 					multi.zadd('blocs:' + id, indexItem, item.bloc)
 					for (const commentaire of item.listeCommentaires) {
 						if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
@@ -4931,15 +5015,19 @@ async function demarrerServeur () {
 				donneesBlocs.push(donneesBloc)
 			}
 			Promise.all(donneesBlocs).then(function () {
+				let epinglage = 'desactive'
+				if (donnees.mur.hasOwnProperty('epinglage')) {
+					epinglage = donnees.mur.epinglage
+				}
 				const multi = db.multi()
 				if (donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.hasOwnProperty('code')) {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
 				} else if (donnees.mur.hasOwnProperty('motdepasse') && !donnees.mur.hasOwnProperty('code')) {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
 				} else if (donnees.mur.hasOwnProperty('code')) {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
 				} else {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
 				}
 				for (const activite of donnees.activite) {
 					if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
@@ -5367,6 +5455,9 @@ async function demarrerServeur () {
 				const vues = parseInt(mur.vues) + 1
 				mur.admins = JSON.parse(mur.admins)
 				mur.affichageColonnes = JSON.parse(mur.affichageColonnes)
+				if (!mur.hasOwnProperty('epinglage')) {
+					mur.epinglage = 'desactive'
+				}
 				const blocsMur = new Promise(function (resolveMain) {
 					const donneesBlocs = []
 					db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
@@ -5381,6 +5472,12 @@ async function demarrerServeur () {
 											donnees.colonne = nombreColonnes - 1
 										}
 										donnees.medias = JSON.parse(donnees.medias)
+										if (!donnees.hasOwnProperty('motdepasse')) {
+											donnees.motdepasse = ''
+										}
+										if (!donnees.hasOwnProperty('epinglee')) {
+											donnees.epinglee = 'non'
+										}
 										// Ne pas ajouter les capsules en attente de modération ou privées
 										if (((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') && donnees.identifiant !== identifiant && mur.identifiant !== identifiant && !mur.admins.includes(identifiant)) {
 											resolve({})
@@ -5517,6 +5614,15 @@ async function demarrerServeur () {
 					if (mur.ordre === 'decroissant') {
 						blocs.reverse()
 					}
+					// Vérifier capsules épinglées
+					const blocsEpingles = []
+					blocs.forEach(function (item, index) {
+						if (item.epinglee === 'oui') {
+							blocsEpingles.push(item)
+							blocs.splice(index, 1)
+						}
+					})
+					blocs.unshift(...blocsEpingles)
 					// Ajouter nombre de vues
 					db.hset('murs:' + id, 'vues', vues, function () {
 						// Ajouter dans murs rejoints

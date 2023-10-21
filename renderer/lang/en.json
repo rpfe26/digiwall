@@ -414,5 +414,11 @@
 	"murTransfere": "Wall transferred.",
 	"murCreeAvecCompte": "This wall already belongs to another user.",
 	"identifiantNonConforme": "Username is too short or contains illegal characters.",
-	"capsuleProtegee": "Protected capsule"
+	"capsuleProtegee": "Protected capsule",
+	"epinglerCapsule": "Pin the capsule",
+	"desepinglerCapsule": "Unpin the capsule",
+	"capsuleEpinglee": "Capsule pinned",
+	"capsuleDesepinglee": "Capsule unpinned.",
+	"epinglage": "Pinning",
+	"parametreEpinglageModifie": "Capsule pinning setting changed."
 }

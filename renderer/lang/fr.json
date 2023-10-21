@@ -365,7 +365,7 @@
 	"ajouterFichierAudio": "Ajouter un fichier audio",
 	"image": "Image",
 	"audio": "Audio",
-	"capsuleVerrouillee": "Capsule verrouillée.",
+	"capsuleVerrouillee": "Capsule verrouillée",
 	"verrouillerCapsule": "Verrouiller la capsule",
 	"deverrouillerCapsule": "Déverrouiller la capsule",
 	"capsuleDeverrouillee": "Capsule déverrouillée.",
@@ -414,5 +414,11 @@
 	"murTransfere": "Mur transféré.",
 	"murCreeAvecCompte": "Ce mur appartient déjà à un autre utilisateur.",
 	"identifiantNonConforme": "L'identifiant est trop court ou comporte des caractères non autorisés.",
-	"capsuleProtegee": "Capsule protégée"
+	"capsuleProtegee": "Capsule protégée",
+	"epinglerCapsule": "Éplingler la capsule",
+	"desepinglerCapsule": "Déséplingler la capsule",
+	"capsuleEpinglee": "Capsule épinglée",
+	"capsuleDesepinglee": "Capsule désépinglée.",
+	"epinglage": "Épinglage",
+	"parametreEpinglageModifie": "Paramètre d'épinglage des capsules modifié."
 }
