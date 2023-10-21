@@ -32,7 +32,7 @@ export default {
 	name: 'Emojis',
 	props: {
 		type: String,
-		diaporama: Boolean
+		modale: String
 	},
 	data () {
 		return {
@@ -52,7 +52,7 @@ export default {
 	},
 	methods: {
 		definirClasses () {
-			if (this.diaporama === true) {
+			if (this.modale === 'diaporama') {
 				return this.type + ' diaporama'
 			} else {
 				return this.type
