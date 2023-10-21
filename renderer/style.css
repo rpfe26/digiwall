@@ -23,7 +23,7 @@
     font-family: 'Material Icons';
     font-style: normal;
     font-weight: 400;
-    src: local('Material Icons'), local('MaterialIcons-Regular'), url('/fonts/MaterialIcons-Regular.woff2') format('woff2'), url('/fonts/MaterialIcons-Regular.woff') format('woff')
+    src: url('/fonts/MaterialIcons-Regular.woff2') format('woff2'), url('/fonts/MaterialIcons-Regular.woff') format('woff')
 }
 
 .material-icons {
@@ -668,6 +668,7 @@ label.bouton-bleu {
 	display: flex;
 	align-items: center;
 	justify-content: flex-end;
+	margin-left: 2.5rem;
 }
 
 .modale .conteneur-interrupteur select {
@@ -675,8 +676,8 @@ label.bouton-bleu {
 	margin: 0;
 }
 
-.modale .interrupteur:last-child {
-	margin-left: 2.5rem;
+.modale .interrupteur:first-child {
+	margin-left: 0;
 }
 
 #bloc .conteneur-interrupteur {

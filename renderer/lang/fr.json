@@ -413,5 +413,6 @@
 	"confirmationRattacherMur": "Souhaitez-vous vraiment transférer ce mur vers cet identifiant&nbsp;?",
 	"murTransfere": "Mur transféré.",
 	"murCreeAvecCompte": "Ce mur appartient déjà à un autre utilisateur.",
-	"identifiantNonConforme": "L'identifiant est trop court ou comporte des caractères non autorisés."
+	"identifiantNonConforme": "L'identifiant est trop court ou comporte des caractères non autorisés.",
+	"capsuleProtegee": "Capsule protégée"
 }

@@ -463,6 +463,13 @@
 	right: 1rem;
 }
 
+#diapositive .cadenas,
+#blocs .bloc .cadenas {
+	text-align: center;
+	padding: 3rem 0;
+	font-size: 7rem;
+}
+
 #blocs .bloc .texte {
 	font-size: 16px;
 	margin-top: 1rem;
@@ -577,6 +584,57 @@
 	cursor: pointer;
 }
 
+#blocs .bloc .motdepasse {
+	display: flex;
+	align-items: center;
+	padding: 10px;
+}
+
+#diapositive .motdepasse {
+	display: flex;
+	align-items: center;
+	margin-bottom: 2rem;
+}
+
+#diapositive .motdepasse input,
+#blocs .bloc .motdepasse input {
+	display: inline-flex;
+	width: calc(100% - 50px);
+	height: 40px;
+	font-size: 16px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	padding: 7px 15px;
+	line-height: 1.5;
+}
+
+#diapositive .motdepasse span,
+#blocs .bloc .motdepasse span {
+	display: inline-flex;
+	width: 40px;
+	height: 40px;
+	justify-content: center;
+	align-items: center;
+	cursor: pointer;
+  	color: #001d1d;
+  	text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.1);
+  	background: #00ced1;
+ 	border-radius: 5px;
+	margin-left: 10px;
+	transition: all 0.1s ease-in;
+}
+
+#diapositive .motdepasse span:hover,
+#blocs .bloc .motdepasse span:hover {
+  	background: #001d1d;
+  	color: #fff;
+}
+
+#diapositive .motdepasse span i,
+#blocs .bloc .motdepasse span i {
+	font-size: 24px;
+}
+
 #blocs .bloc .action {
 	display: flex;
     justify-content: space-evenly;
@@ -609,6 +667,7 @@
 #blocs .bloc .action .cadenas {
 	font-size: 24px;
 	color: #f3aa15;
+	padding: 0;
 }
 
 #blocs .bloc .action .bouton .badge {
@@ -2070,13 +2129,18 @@
 }
 
 @media screen and (max-width: 599px) {
+	.modale .conteneur-interrupteur {
+		margin-bottom: 20px;
+	}
+
 	.modale .interrupteur {
 		width: 100%;
 		margin-left: 0;
+		margin-bottom: 20px;
 	}
 
-	.modale .interrupteur:first-child {
-		margin-bottom: 20px;
+	.modale .interrupteur:last-child {
+		margin-bottom: 0;
 	}
 }
 
@@ -2203,11 +2267,16 @@
 		display: none!important;
 	}
 
+	header {
+		height: auto!important;
+	}
+
 	#mur {
 		height: auto!important;
 		margin-left: 0!important;
 		width: 100%!important;
-		padding-bottom: 100rem!important;
+		padding-top: 1.5rem!important;
+		padding-bottom: 10rem!important;
 	}
 
 	#titre {
@@ -2249,7 +2318,7 @@
 	#blocs.colonnes .colonne {
 		width: 100%!important;
 		height: auto!important;
-		margin-bottom: 5rem!important;
+		margin-bottom: 3rem!important;
 	}
 
 	#blocs.colonnes .bloc {

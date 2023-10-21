@@ -413,5 +413,6 @@
 	"confirmationRattacherMur": "¿Estás seguro de que quieres transferir este muro a este usuario?",
 	"murTransfere": "Muro transferido.",
 	"murCreeAvecCompte": "Este muro ya pertenece a otro usuario.",
-	"identifiantNonConforme": "El nombre de usuario es demasiado corto o contiene caracteres ilegales."
+	"identifiantNonConforme": "El nombre de usuario es demasiado corto o contiene caracteres ilegales.",
+	"capsuleProtegee": "Cápsula protegida"
 }

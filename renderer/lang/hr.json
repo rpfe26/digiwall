@@ -413,5 +413,6 @@
 	"confirmationRattacherMur": "Jeste li sigurni da želite prenijeti ovu podlogu na ovaj ID?",
 	"murTransfere": "Podloga prenesena.",
 	"murCreeAvecCompte": "Ova podloga već pripada drugom korisniku.",
-	"identifiantNonConforme": "Korisničko ime je prekratko ili sadrži nedopuštene znakove."
+	"identifiantNonConforme": "Korisničko ime je prekratko ili sadrži nedopuštene znakove.",
+	"capsuleProtegee": "Zaštićena kapsula"
 }

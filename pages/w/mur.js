@@ -31,7 +31,7 @@ export default {
 			chargement: false,
 			message: '',
 			notification: '',
-			modaleBloc: false,
+			modale: '',
 			titreModale: '',
 			action: '',
 			mode: '',
@@ -39,7 +39,6 @@ export default {
 			colonnes: [],
 			affichageColonnes: [],
 			colonne: 0,
-			modaleColonne: false,
 			titreModaleColonne: '',
 			modeColonne: '',
 			titreColonne: '',
@@ -60,16 +59,13 @@ export default {
 			progressionVignette: 0,
 			progressionFond: 0,
 			progressionEnregistrement: false,
-			visibilite: false,
+			visibilite: true,
 			visibiliteInitiale: '',
+			protection: false,
 			chargementLien: false,
 			chargementMedia: false,
 			chargementMediaExtra: false,
-			menuActivite: false,
-			menuChat: false,
-			menuOptions: false,
-			menuUtilisateurs: false,
-			modaleCommentaires: false,
+			menu: '',
 			commentaires: [],
 			commentaire: '',
 			commentaireId: '',
@@ -77,7 +73,6 @@ export default {
 			editeurCommentaire: '',
 			editionCommentaire: false,
 			emojis: '',
-			modaleEvaluations: false,
 			evaluations: [],
 			evaluation: 0,
 			evaluationId: '',
@@ -86,7 +81,6 @@ export default {
 			nouveauxMessagesChat: 0,
 			utilisateurs: [],
 			utilisateur: '',
-			modaleModifierNom: false,
 			nomUtilisateur: '',
 			couleur: '#000000',
 			couleurs: ['#f76707', '#f59f00', '#74b816', '#37b24d', '#0ca678', '#1098ad', '#1c7ed6', '#4263eb', '#7048e8', '#ae3ec9', '#d6336c', '#f03e3e', '#495057'],
@@ -96,11 +90,8 @@ export default {
 			modaleConfirmer: false,
 			messageConfirmation: '',
 			typeConfirmation: '',
-			modaleDiaporama: false,
 			donneesBloc: {},
 			motDePasse: '',
-			modaleMotDePasse: false,
-			modaleModifierMotDePasse: false,
 			nouveauMotDePasse: '',
 			defilement: false,
 			depart: 0,
@@ -111,13 +102,10 @@ export default {
 			codeAcces: '',
 			codeVisible: false,
 			modificationCode: false,
-			modaleCodeAcces: false,
 			codeqr: '',
-			modaleCodeQR: false,
 			recherche: false,
 			requete: '',
 			chargementVignette: false,
-			modaleAdmins: false,
 			admins: [],
 			blob: '',
 			transcodage: false,
@@ -132,7 +120,6 @@ export default {
 			typeBloc: 'classique',
 			vignetteActivee: true,
 			donneesUtilisateur: {},
-			modaleCopieBloc: false,
 			murDestination: '',
 			colonneDestination: '',
 			motDePasseAdmin: '',
@@ -144,7 +131,6 @@ export default {
 			modaleLegende: false,
 			indexGalerie: -1,
 			legende: '',
-			modaleImporterMur: false,
 			parametresImport: {
 				contenu: 'ajouter',
 				commentaires: false,
@@ -161,6 +147,7 @@ export default {
 			langue: this.$pageContext.pageProps.langue,
 			acces: this.$pageContext.pageProps.acces,
 			murs: this.$pageContext.pageProps.murs,
+			blocsAutorises: this.$pageContext.pageProps.blocsAutorises,
 			mursDigidrive: this.$pageContext.pageProps.digidrive,
 			mur: this.$pageContext.pageProps.mur,
 			blocs: this.$pageContext.pageProps.blocs,
@@ -214,6 +201,11 @@ export default {
 			case '!priv':
 				blocs = this.blocs.filter(function (element) {
 					return element.visibilite === 'privee'
+				})
+				break
+			case '!prot':
+				blocs = this.blocs.filter(function (element) {
+					return element.visibilite === 'protegee'
 				})
 				break
 			case '!comm+':
@@ -371,7 +363,7 @@ export default {
 				this.$socket.emit('connexion', { mur: this.mur.id, identifiant: this.identifiant, nom: this.nom })
 			}
 			if (!this.accesAutorise) {
-				this.modaleCodeAcces = true
+				this.modale = 'code-acces'
 			}
 		} else if (this.statut === 'utilisateur') {
 			window.location.href = '/u/' + this.identifiant
@@ -444,7 +436,7 @@ export default {
 				document.querySelector('#mur').addEventListener('drop', function (event) {
 					event.preventDefault()
 					event.stopPropagation()
-					if (event.dataTransfer.files && event.dataTransfer.files[0] && this.accesAutorise && !this.recherche && ((this.admin && this.action !== 'organiser') || (!this.admin && this.mur.contributions !== 'fermees'))) {
+					if (event.dataTransfer.files && event.dataTransfer.files[0] && this.accesAutorise && !this.recherche && this.mur.fichiers === 'actives' && ((this.admin && this.action !== 'organiser') || (!this.admin && this.mur.contributions !== 'fermees'))) {
 						let indexColonne = 0
 						if (this.mur.affichage === 'colonnes') {
 							this.mur.colonnes.forEach(function (colonne, index) {
@@ -455,6 +447,21 @@ export default {
 						}
 						this.ouvrirModaleBloc('creation', '', indexColonne)
 						this.ajouterFichier(event.dataTransfer)
+					}
+				}.bind(this), false)
+
+				window.addEventListener('paste', function (event) {
+					if (event.clipboardData.files && event.clipboardData.files[0] && event.clipboardData.files[0].type.includes('image') && this.accesAutorise && !this.recherche && this.mur.fichiers === 'actives' && ((this.admin && this.action !== 'organiser') || (!this.admin && this.mur.contributions !== 'fermees')) && this.modale === '' && this.menu === '') {
+						let indexColonne = 0
+						if (this.mur.affichage === 'colonnes') {
+							this.mur.colonnes.forEach(function (colonne, index) {
+								if (document.querySelector('#colonne' + index).contains(event.target) === true) {
+									indexColonne = index
+								}
+							})
+						}
+						this.ouvrirModaleBloc('creation', '', indexColonne)
+						this.ajouterFichier(event.clipboardData)
 					}
 				}.bind(this), false)
 			}
@@ -732,7 +739,7 @@ export default {
 				this.titreModaleColonne = this.$t('ajouterColonne')
 			}
 			this.modeColonne = type
-			this.modaleColonne = true
+			this.modale = 'colonne'
 			this.$nextTick(function () {
 				document.querySelector('#champ-nom-colonne').focus()
 			})
@@ -773,7 +780,7 @@ export default {
 			this.fermerModaleColonne()
 		},
 		fermerModaleColonne () {
-			this.modaleColonne = false
+			this.modale = ''
 			this.titreModaleColonne = ''
 			this.titreColonne = ''
 			this.modeColonne = ''
@@ -826,10 +833,14 @@ export default {
 				}
 				this.mediaExtra = item.mediaExtra
 				this.medias = JSON.parse(JSON.stringify(item.medias))
-				if (item.visibilite === 'privee') {
+				if (item.hasOwnProperty('protection') === true || item.visibilite === 'protegee') {
+					this.protection = true
 					this.visibilite = true
-				} else {
+					this.motDePasse = item.motdepasse
+				} else if (item.visibilite === 'privee') {
 					this.visibilite = false
+				} else {
+					this.visibilite = true
 				}
 				if (mode === 'edition' && item.visibilite === 'privee') {
 					this.visibiliteInitiale = 'privee'
@@ -841,10 +852,8 @@ export default {
 			if (this.mur.affichage === 'colonnes') {
 				this.colonne = colonne
 			}
-			this.menuActivite = false
-			this.menuChat = false
-			this.menuOptions = false
-			this.modaleBloc = true
+			this.menu = ''
+			this.modale = 'bloc'
 			this.$nextTick(function () {
 				if (mode === 'creation') {
 					document.querySelector('#champ-titre').focus()
@@ -1121,6 +1130,11 @@ export default {
 				this.legende = this.medias[index].legende
 			}
 			this.modaleLegende = true
+			if (this.legende === '') {
+				this.$nextTick(function () {
+					document.querySelector('#legende textarea').focus()
+				})
+			}
 		},
 		modifierLegende () {
 			if (this.indexGalerie !== -1 && this.legende !== '') {
@@ -1233,15 +1247,15 @@ export default {
 					this.progressionEnregistrement = false
 					this.message = this.$t('erreurTeleversementFichier')
 				} else {
-					this.modaleBloc = false
+					this.modale = ''
 					if (this.mode === 'creation' && this.typeBloc === 'classique') {
-						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
 					} else if (this.mode === 'edition' && this.typeBloc === 'classique') {
-						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
 					} else if (this.mode === 'creation' && this.typeBloc === 'image-audio') {
-						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
 					} else if (this.mode === 'edition' && this.typeBloc === 'image-audio') {
-						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
 					}
 				}
 				this.progressionEnregistrement = false
@@ -1668,6 +1682,15 @@ export default {
 		modifierVisibiliteCapsule () {
 			this.visibilite = !this.visibilite
 		},
+		modifierProtectionCapsule () {
+			this.protection = !this.protection
+			if (this.protection === true && this.motDePasse === '') {
+				this.motDePasse = Math.floor(1000 + Math.random() * 9000)
+				this.$nextTick(function () {
+					document.querySelector('#champ-motdepasse').focus()
+				})
+			}
+		},
 		modifierTypeBloc (event) {
 			if (event.target.value === 'image-audio') {
 				this.typeBloc = event.target.value
@@ -1704,20 +1727,20 @@ export default {
 		},
 		ajouterBloc () {
 			this.bloc = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-			if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '')) || (this.typeBloc === 'galerie' && this.medias.length > 1) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '')) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
+			if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '') && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'galerie' && this.medias.length > 1 && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
 				this.chargement = true
-				this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.identifiant, this.nom, this.admin)
-				this.modaleBloc = false
-			} else if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '')) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '')) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
+				this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+				this.modale = ''
+			} else if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '') && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
 				this.ajouterAudio()
 			}
 		},
 		modifierBloc () {
-			if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '')) || (this.typeBloc === 'galerie' && this.medias.length > 1) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '')) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
+			if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '') && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'galerie' && this.medias.length > 1 && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
 				this.chargement = true
-				this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.identifiant, this.nom, this.admin)
-				this.modaleBloc = false
-			} else if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '')) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '')) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
+				this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+				this.modale = ''
+			} else if (((this.typeBloc === 'classique' && (this.titre !== '' || this.texte !== '' || this.media !== '') && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
 				this.ajouterAudio()
 			}
 		},
@@ -1741,7 +1764,7 @@ export default {
 			this.$socket.emit('autoriserbloc', this.mur.id, this.mur.token, donneesBloc, indexBloc, indexBlocColonne, moderation, this.identifiant)
 		},
 		fermerModaleBloc () {
-			this.modaleBloc = false
+			this.modale = ''
 			this.mode = ''
 			this.action = ''
 			this.titreModale = ''
@@ -1773,8 +1796,10 @@ export default {
 			this.chargementMediaExtra = false
 			this.chargementVignette = false
 			this.resultats = {}
-			this.visibilite = false
+			this.visibilite = true
 			this.visibiliteInitiale = ''
+			this.protection = false
+			this.motDePasse = ''
 			this.donneesBloc = {}
 			this.blob = ''
 			this.enregistrement = false
@@ -1841,7 +1866,7 @@ export default {
 				this.donneesUtilisateur.mursCrees = mursCrees
 				this.donneesUtilisateur.mursAdmins = mursAdmins
 			}
-			this.modaleCopieBloc = true
+			this.modale = 'copier-bloc'
 		},
 		verifierColonnesDestination () {
 			if (this.murDestination !== '') {
@@ -1907,7 +1932,7 @@ export default {
 			}
 		},
 		fermerModaleCopieBloc () {
-			this.modaleCopieBloc = false
+			this.modale = ''
 			this.blocId = ''
 			this.titre = ''
 			this.murDestination = ''
@@ -2018,6 +2043,11 @@ export default {
 									width: largeurPanneau,
 									height: '150px'
 								}).reposition()
+								panel.addControl({
+									html: '<a class="material-icons telecharger" download href="/' + that.definirDossierFichiers(that.mur.id) + '/' + that.mur.id + '/' + item.media + '" target="_blank">file_download</a>',
+									name: 'telecharger',
+									handler: function () {}
+								})
 							} else if (item.type === 'embed') {
 								panel.addControl({
 									html: '<span class="material-icons lien">link</span>',
@@ -2043,8 +2073,9 @@ export default {
 								})
 							} else if (item.type === 'pdf' || item.type === 'document' || item.type === 'office') {
 								panel.addControl({
-									html: '<a class="material-icons telecharger" href="/' + that.definirDossierFichiers(that.mur.id) + '/' + that.mur.id + '/' + item.media + '" target="_blank">file_download</a>',
-									name: 'telecharger'
+									html: '<a class="material-icons telecharger" download href="/' + that.definirDossierFichiers(that.mur.id) + '/' + that.mur.id + '/' + item.media + '" target="_blank">file_download</a>',
+									name: 'telecharger',
+									handler: function () {}
 								})
 							} else if (item.typeBloc === 'galerie') {
 								let indexGalerie = 0
@@ -2210,9 +2241,7 @@ export default {
 		activerModeOrganiser () {
 			if (this.blocs.length > 1 || (this.mur.affichage === 'colonnes' && this.mur.colonnes.length > 1)) {
 				this.chargement = true
-				this.menuActivite = false
-				this.menuChat = false
-				this.menuOptions = false
+				this.menu = ''
 				this.recherche = false
 				setTimeout(function () {
 					this.chargement = false
@@ -2223,9 +2252,7 @@ export default {
 		},
 		desactiverModeOrganiser () {
 			this.chargement = true
-			this.menuActivite = false
-			this.menuChat = false
-			this.menuOptions = false
+			this.menu = ''
 			this.recherche = false
 			setTimeout(function () {
 				this.chargement = false
@@ -2254,10 +2281,8 @@ export default {
 					this.definirBlocActif(donneesBloc.bloc)
 				}
 				this.donneesBloc = donneesBloc
-				this.menuActivite = false
-				this.menuChat = false
-				this.menuOptions = false
-				this.modaleDiaporama = true
+				this.menu = ''
+				this.modale = 'diaporama'
 				if (this.mur.commentaires === 'actives') {
 					this.$socket.emit('commentaires', donneesBloc.bloc, 'diapositive')
 				} else {
@@ -2379,7 +2404,7 @@ export default {
 			}
 		},
 		fermerModaleDiaporama () {
-			this.modaleDiaporama = false
+			this.modale = ''
 			this.commentaires = []
 			this.commentaire = ''
 			this.commentaireId = ''
@@ -2389,10 +2414,10 @@ export default {
 			this.donneesBloc = {}
 		},
 		ouvrirModaleAdmins () {
-			this.menuOptions = false
+			this.menu = ''
 			this.admins = JSON.parse(JSON.stringify(this.mur.admins))
 			this.motDePasseAdmin = this.mur.motdepasseAdmin
-			this.modaleAdmins = true
+			this.modale = 'admins'
 		},
 		ajouterAdmin () {
 			const identifiantAdmin = document.querySelector('#ajouter-admin input').value.trim()
@@ -2423,13 +2448,13 @@ export default {
 		},
 		modifierAdmins () {
 			if (this.admins.toString() !== this.mur.admins.toString() || this.motDePasseAdmin !== '') {
-				this.modaleAdmins = false
+				this.modale = ''
 				this.$socket.emit('modifieradmins', this.mur.id, this.admins, this.motDePasseAdmin, this.identifiant)
 				this.chargement = true
 			}
 		},
 		fermerModaleAdmins () {
-			this.modaleAdmins = false
+			this.modale = ''
 			this.admins = []
 			this.motDePasseAdmin = ''
 			this.motDePasseVisible = false
@@ -2598,7 +2623,7 @@ export default {
 			pell.exec('insertText', emoji)
 		},
 		fermerModaleCommentaire () {
-			this.modaleCommentaires = false
+			this.modale = ''
 			this.commentaires = []
 			this.commentaire = ''
 			this.commentaireId = ''
@@ -2649,7 +2674,7 @@ export default {
 					}
 				}.bind(this))
 			}
-			this.modaleEvaluations = true
+			this.modale = 'evaluations'
 		},
 		envoyerEvaluation () {
 			let bloc = this.bloc
@@ -2676,7 +2701,7 @@ export default {
 			this.fermerModaleEvaluations()
 		},
 		fermerModaleEvaluations () {
-			this.modaleEvaluations = false
+			this.modale = ''
 			this.evaluations = []
 			this.evaluation = 0
 			this.evaluationId = ''
@@ -2746,6 +2771,40 @@ export default {
 				}
 			}
 		},
+		verifierMotDePasseBloc (bloc, colonne) {
+			let motdepasse = ''
+			if (this.modale === 'diaporama') {
+				motdepasse = document.querySelector('#diapositive .motdepasse input').value
+			} else {
+				motdepasse = document.querySelector('#' + bloc + ' .motdepasse input').value
+			}
+			if (motdepasse && motdepasse !== '') {
+				if (this.mur.affichage === 'colonnes') {
+					this.colonnes[colonne].forEach(function (item, index) {
+						if (item.bloc === bloc && item.motdepasse === motdepasse) {
+							this.colonnes[colonne][index].visibilite = 'visible'
+						}
+					}.bind(this))
+				}
+				if (this.modale === 'diaporama' && this.donneesBloc.motdepasse === motdepasse) {
+					this.donneesBloc.visibilite = 'visible'
+					this.$nextTick(function () {
+						this.chargerDiapositive()
+					}.bind(this))
+				}
+				this.blocs.forEach(function (item) {
+					if (item.bloc === bloc && item.motdepasse === motdepasse) {
+						item.visibilite = 'visible'
+						if (!this.admin) {
+							this.$socket.emit('autoriserblocprotege', bloc, this.identifiant)
+							this.notification = this.$t('capsuleDeverrouillee')
+						} else {
+							item.protection = true
+						}
+					}
+				}.bind(this))
+			}
+		},
 		redimensionner () {
 			const diapositive = document.querySelector('#diapositive')
 			if (diapositive) {
@@ -2773,30 +2832,34 @@ export default {
 			}
 		},
 		afficherActivite () {
-			this.menuUtilisateurs = false
-			this.menuChat = false
-			this.menuOptions = false
-			this.menuActivite = !this.menuActivite
+			if (this.menu === 'activite') {
+				this.menu = ''
+			} else {
+				this.menu = 'activite'
+			}
 		},
 		afficherChat () {
-			this.menuUtilisateurs = false
-			this.menuActivite = false
-			this.menuOptions = false
-			this.menuChat = !this.menuChat
+			if (this.menu === 'chat') {
+				this.menu = ''
+			} else {
+				this.menu = 'chat'
+			}
 			this.nouveauxMessagesChat = 0
 		},
 		afficherOptions () {
-			this.menuUtilisateurs = false
-			this.menuActivite = false
-			this.menuChat = false
-			this.menuOptions = !this.menuOptions
+			if (this.menu === 'options') {
+				this.menu = ''
+			} else {
+				this.menu = 'options'
+			}
 		},
 		afficherUtilisateurs () {
-			this.menuActivite = false
-			this.menuChat = false
-			this.menuOptions = false
 			this.listeCouleurs = false
-			this.menuUtilisateurs = !this.menuUtilisateurs
+			if (this.menu === 'utilisateurs') {
+				this.menu = ''
+			} else {
+				this.menu = 'utilisateurs'
+			}
 		},
 		envoyerMessage () {
 			if (this.messageChat !== '') {
@@ -2812,7 +2875,7 @@ export default {
 		reinitialiserMessages () {
 			this.$socket.emit('reinitialisermessages', this.mur.id, this.identifiant)
 			this.chargement = true
-			this.menuChat = false
+			this.menu = ''
 			this.fermerModaleConfirmer()
 		},
 		afficherReinitialiserActivite () {
@@ -2823,7 +2886,7 @@ export default {
 		reinitialiserActivite () {
 			this.$socket.emit('reinitialiseractivite', this.mur.id, this.identifiant)
 			this.chargement = true
-			this.menuActivite = false
+			this.menu = ''
 			this.fermerModaleConfirmer()
 		},
 		supprimerActivite (id) {
@@ -2853,7 +2916,7 @@ export default {
 			}
 		},
 		afficherCodeQR () {
-			this.modaleCodeQR = true
+			this.modale = 'code-qr'
 			this.$nextTick(function () {
 				// eslint-disable-next-line
 				this.codeqr = new QRCode('qr', {
@@ -2868,7 +2931,7 @@ export default {
 			}.bind(this))
 		},
 		fermerModaleCodeQR () {
-			this.modaleCodeQR = false
+			this.modale = ''
 		},
 		modifierAcces (acces) {
 			if (this.mur.acces !== acces) {
@@ -2924,7 +2987,7 @@ export default {
 		},
 		fermerModaleCodeAcces () {
 			this.codeAcces = ''
-			this.modaleCodeAcces = false
+			this.modale = ''
 		},
 		modifierContributions (contributions) {
 			if (this.mur.contributions !== contributions) {
@@ -3100,7 +3163,7 @@ export default {
 			this.chargement = true
 		},
 		fermerMenuOptions () {
-			this.menuOptions = false
+			this.menu = ''
 			if (document.querySelector('#titre-mur')) {
 				document.querySelector('#titre-mur').value = this.mur.titre
 			}
@@ -3108,7 +3171,7 @@ export default {
 		},
 		afficherModifierNom () {
 			this.nomUtilisateur = this.nom
-			this.modaleModifierNom = true
+			this.modale = 'modifier-nom'
 			this.$nextTick(function () {
 				document.querySelector('#champ-nom').focus()
 			})
@@ -3122,7 +3185,7 @@ export default {
 			}
 		},
 		fermerModaleModifierNom () {
-			this.modaleModifierNom = false
+			this.modale = ''
 			this.nomUtilisateur = ''
 		},
 		modifierCaracteristique (identifiant, caracteristique, valeur) {
@@ -3175,8 +3238,8 @@ export default {
 			}.bind(this))
 		},
 		afficherModaleModifierMotDePasse () {
-			this.menuOptions = false
-			this.modaleModifierMotDePasse = true
+			this.menu = ''
+			this.modale = 'modifier-mot-de-passe'
 			this.$nextTick(function () {
 				document.querySelector('#champ-motdepasse-actuel').focus()
 			})
@@ -3185,7 +3248,7 @@ export default {
 			const motDePasse = this.motDePasse
 			const nouveauMotDePasse = this.nouveauMotDePasse
 			if (motDePasse !== '' && nouveauMotDePasse !== '') {
-				this.modaleModifierMotDePasse = false
+				this.modale = ''
 				this.chargement = true
 				axios.post(this.hote + '/api/modifier-mot-de-passe-mur', {
 					mur: this.mur.id,
@@ -3216,13 +3279,12 @@ export default {
 			}
 		},
 		fermerModaleModifierMotDePasse () {
-			this.modaleModifierMotDePasse = false
+			this.modale = ''
 			this.motDePasse = ''
 			this.nouveauMotDePasse = ''
 		},
 		afficherModaleMotDePasse () {
-			this.modaleCodeAcces = false
-			this.modaleMotDePasse = true
+			this.modale = 'mot-de-passe'
 			this.$nextTick(function () {
 				document.querySelector('#champ-motdepasse').focus()
 			})
@@ -3256,7 +3318,7 @@ export default {
 		},
 		fermerModaleMotDePasse () {
 			this.motDePasse = ''
-			this.modaleMotDePasse = false
+			this.modale = ''
 		},
 		afficherSeDeconnecterMur () {
 			this.messageConfirmation = this.$t('confirmationSeDeconnecterMur')
@@ -3352,7 +3414,7 @@ export default {
 			}
 		},
 		fermerModaleImporterMur () {
-			this.modaleImporterMur = false
+			this.modale = ''
 			this.parametresImport.contenu = 'ajouter'
 			this.parametresImport.commentaires = false
 			this.parametresImport.evaluations = false
@@ -3606,7 +3668,7 @@ export default {
 							if (donnees.visibilite === 'privee' && !this.admin) {
 								this.colonnes[donnees.colonne].splice(index, 1)
 							} else {
-								this.colonnes[donnees.colonne][index] = { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivite: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite }
+								this.colonnes[donnees.colonne].splice(index, 1, { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivite: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite, motdepasse: donnees.motdepasse })
 							}
 						}
 					}.bind(this))
@@ -3617,11 +3679,11 @@ export default {
 						if (donnees.visibilite === 'privee' && !this.admin) {
 							this.blocs.splice(index, 1)
 						} else {
-							this.blocs.splice(index, 1, { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivee: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite })
+							this.blocs.splice(index, 1, { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivee: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite, motdepasse: donnees.motdepasse })
 						}
 					}
 				}.bind(this))
-				if (donnees.visibilite === 'visible') {
+				if (donnees.visibilite === 'visible' || donnees.visibilite === 'protegee') {
 					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.modifie, type: 'bloc-modifie' })
 				}
 				this.envoyerNotificationAdmins()
@@ -3675,7 +3737,7 @@ export default {
 				} else if (!this.admin && donnees.identifiant === this.identifiant) {
 					this.notification = this.$t('capsulePubliee', { titre: donnees.titre })
 				}
-				if (this.modaleDiaporama) {
+				if (this.modale === 'diaporama') {
 					this.$nextTick(function () {
 						this.chargerDiapositive()
 					}.bind(this))
@@ -3697,7 +3759,7 @@ export default {
 					}
 				}.bind(this))
 				if (this.admin && this.identifiant === donnees.identifiant) {
-					this.notification = this.$t('capsuleVerrouillee') + '.'
+					this.notification = this.$t('capsuleVerrouillee')
 				}
 			}.bind(this))
 
@@ -3789,7 +3851,7 @@ export default {
 					}
 				})
 				this.blocs = blocs
-				if ((this.modaleCommentaires && this.bloc === donnees.bloc) || (this.modaleDiaporama && this.donneesBloc.bloc === donnees.bloc)) {
+				if ((this.modale === 'commentaires' && this.bloc === donnees.bloc) || (this.modale === 'diaporama' && this.donneesBloc.bloc === donnees.bloc)) {
 					this.commentaires.unshift({ id: donnees.id, identifiant: donnees.identifiant, nom: donnees.nom, texte: donnees.texte, date: donnees.date })
 				}
 				this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-commente' })
@@ -3827,7 +3889,7 @@ export default {
 				this.commentaires = donnees.commentaires
 				if (donnees.type === 'discussion') {
 					this.chargement = false
-					this.modaleCommentaires = true
+					this.modale = 'commentaires'
 					this.$nextTick(function () {
 						this.genererEditeur()
 					}.bind(this))
@@ -4041,7 +4103,7 @@ export default {
 
 			this.$socket.on('modifierlisteutilisateurs', function (statut, identifiant) {
 				if (statut === 'desactivee') {
-					this.menuUtilisateurs = false
+					this.menu = ''
 				}
 				this.mur.listeUtilisateurs = statut
 				this.chargement = false
@@ -4132,7 +4194,7 @@ export default {
 					target: '_blank'
 				})
 				this.messagesChat.push(message)
-				if (message.identifiant !== this.identifiant && !this.menuChat) {
+				if (message.identifiant !== this.identifiant && this.menu !== 'chat') {
 					this.nouveauxMessagesChat++
 				}
 			}.bind(this))
@@ -4209,7 +4271,7 @@ export default {
 				this.activite.unshift({ id: donnees.activiteId, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'colonne-supprimee' })
 				if (this.admin && this.identifiant === donnees.identifiant) {
 					this.notification = this.$t('colonneSupprimee')
-				} else if (!this.admin && this.modaleBloc && parseInt(this.colonne) === parseInt(donnees.colonne)) {
+				} else if (!this.admin && this.modale === 'bloc' && parseInt(this.colonne) === parseInt(donnees.colonne)) {
 					this.fermerModaleBloc()
 					this.notification = this.$t('colonneActuelleSupprimee')
 				}
@@ -4248,13 +4310,13 @@ export default {
 				if (this.admin && this.identifiant === donnees.identifiant) {
 					this.notification = this.$t('colonneDeplacee')
 				} else {
-					if (this.modaleBloc && parseInt(this.colonne) === parseInt(donnees.colonne) && donnees.direction === 'gauche') {
+					if (this.modale === 'bloc' && parseInt(this.colonne) === parseInt(donnees.colonne) && donnees.direction === 'gauche') {
 						this.colonne = parseInt(donnees.colonne) - 1
-					} else if (this.modaleBloc && parseInt(this.colonne) === parseInt(donnees.colonne) && donnees.direction === 'droite') {
+					} else if (this.modale === 'bloc' && parseInt(this.colonne) === parseInt(donnees.colonne) && donnees.direction === 'droite') {
 						this.colonne = parseInt(donnees.colonne) + 1
-					} else if (this.modaleBloc && parseInt(this.colonne) === (parseInt(donnees.colonne) - 1) && donnees.direction === 'gauche') {
+					} else if (this.modale === 'bloc' && parseInt(this.colonne) === (parseInt(donnees.colonne) - 1) && donnees.direction === 'gauche') {
 						this.colonne = parseInt(donnees.colonne)
-					} else if (this.modaleBloc && parseInt(this.colonne) === (parseInt(donnees.colonne) + 1) && donnees.direction === 'droite') {
+					} else if (this.modale === 'bloc' && parseInt(this.colonne) === (parseInt(donnees.colonne) + 1) && donnees.direction === 'droite') {
 						this.colonne = parseInt(donnees.colonne)
 					}
 				}
@@ -4282,7 +4344,7 @@ export default {
 			}.bind(this))
 
 			this.$socket.on('verifiermodifierbloc', function (donnees) {
-				if (this.modaleBloc === true && this.bloc === donnees.bloc) {
+				if (this.modale === 'bloc' && this.bloc === donnees.bloc) {
 					this.$socket.emit('reponsemodifierbloc', this.mur.id, donnees.identifiant, true)
 				} else {
 					this.$socket.emit('reponsemodifierbloc', this.mur.id, donnees.identifiant, false)

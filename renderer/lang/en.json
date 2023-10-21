@@ -413,5 +413,6 @@
 	"confirmationRattacherMur": "Are you sure you want to transfer this wall to this user?",
 	"murTransfere": "Wall transferred.",
 	"murCreeAvecCompte": "This wall already belongs to another user.",
-	"identifiantNonConforme": "Username is too short or contains illegal characters."
+	"identifiantNonConforme": "Username is too short or contains illegal characters.",
+	"capsuleProtegee": "Protected capsule"
 }
