@@ -101,7 +101,6 @@ function exporterMursJson (jours) {
 									parametres.activite = donnees[2]
 									fs.writeFile(path.normalize(chemin + '/' + id + '.json'), JSON.stringify(parametres, '', 4), 'utf8', function (err) {
 										fs.writeFile(path.normalize(chemin + '/mur-' + id + '.json'), JSON.stringify(parametres.mur, '', 4), 'utf8', function () {
-											console.log(id)
 											// Suppression données redis
 											db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
 												const multi = db.multi()
@@ -113,7 +112,9 @@ function exporterMursJson (jours) {
 												multi.del('blocs:' + id)
 												multi.del('murs:' + id)
 												multi.del('activite:' + id)
-												multi.exec()
+												multi.exec(function () {
+													console.log(id)
+												})
 											})
 										})
 									})
