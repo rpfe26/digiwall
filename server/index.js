@@ -405,11 +405,11 @@ async function demarrerServeur () {
 				db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
 					if (err) { res.send('erreur_connexion'); return false }
 					let comparaison = false
-					if (motdepasse !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse !== '') {
+					if (motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '') {
 						comparaison = await bcrypt.compare(motdepasse, donnees.motdepasse)
 					}
 					let comparaisonTemp = false
-					if (donnees.hasOwnProperty('motdepassetemp') && donnees.motdepassetemp !== '') {
+					if (donnees.hasOwnProperty('motdepassetemp') && donnees.motdepassetemp.trim() !== '' && motdepasse.trim() !== '') {
 						comparaisonTemp = await bcrypt.compare(motdepasse, donnees.motdepassetemp)
 					}
 					if (comparaison === true || comparaisonTemp === true) {
@@ -765,8 +765,10 @@ async function demarrerServeur () {
 			const mur = req.body.mur
 			db.hgetall('murs:' + mur, async function (err, donnees) {
 				if (err) { res.send('erreur'); return false }
-				if (await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
-					const hash = await bcrypt.hash(req.body.nouveaumotdepasse, 10)
+				const motdepasse = req.body.motdepasse
+				const nouveaumotdepasse = req.body.nouveaumotdepasse
+				if (motdepasse.trim() !== '' && nouveaumotdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
+					const hash = await bcrypt.hash(nouveaumotdepasse, 10)
 					db.hset('murs:' + mur, 'motdepasse', hash)
 					res.send('motdepasse_modifie')
 				} else {
@@ -1870,8 +1872,10 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant) {
 			db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
 				if (err) { res.send('erreur'); return false }
-				if (await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
-					const hash = await bcrypt.hash(req.body.nouveaumotdepasse, 10)
+				const motdepasse = req.body.motdepasse
+				const nouveaumotdepasse = req.body.nouveaumotdepasse
+				if (motdepasse.trim() !== '' && nouveaumotdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
+					const hash = await bcrypt.hash(nouveaumotdepasse, 10)
 					db.hset('utilisateurs:' + identifiant, 'motdepasse', hash)
 					res.send('motdepasse_modifie')
 				} else {
@@ -2484,9 +2488,9 @@ async function demarrerServeur () {
 		const mur = req.body.mur
 		db.hgetall('murs:' + mur, async function (err, donnees) {
 			if (err || !donnees || donnees === null || !donnees.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
-			if (await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
+			if (req.body.motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
 				res.send('motdepasse_correct')
-			} else if (req.body.motdepasse === donnees.motdepasseAdmin) {
+			} else if (donnees.hasOwnProperty('motdepasseAdmin') && req.body.motdepasse === donnees.motdepasseAdmin) {
 				res.send('motdepasseadmin_correct')
 			} else {
 				res.send('motdepasse_incorrect')
@@ -2528,9 +2532,10 @@ async function demarrerServeur () {
 	app.post('/api/verifier-acces', function (req, res) {
 		const mur = req.body.mur
 		const identifiant = req.body.identifiant
+		const motdepasse = req.body.motdepasse
 		db.hgetall('murs:' + mur, async function (err, donnees) {
 			if (err) { res.send('erreur'); return false }
-			if (identifiant === donnees.identifiant && donnees.hasOwnProperty('motdepasse') && await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
+			if (identifiant === donnees.identifiant && motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
 				db.hgetall('utilisateurs:' + identifiant, function (err, utilisateur) {
 					if (err) { res.send('erreur'); return false }
 					req.session.identifiant = identifiant
@@ -2561,7 +2566,7 @@ async function demarrerServeur () {
 					if (resultat === 1) {
 						db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
 							if (err) { res.send('erreur'); return false }
-							if (await bcrypt.compare(req.body.motdepasse, utilisateur.motdepasse)) {
+							if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 								req.session.identifiant = identifiant
 								req.session.nom = utilisateur.nom
 								req.session.statut = 'auteur'
@@ -2999,7 +3004,7 @@ async function demarrerServeur () {
 					if (resultat === 1) {
 						db.hgetall('murs:' + mur, async function (err, donneesMur) {
 							if (err) { res.send('erreur'); return false }
-							if (donneesMur.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
 								const date = dayjs().format()
 								let langue = 'fr'
 								if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
@@ -3018,7 +3023,7 @@ async function demarrerServeur () {
 									if (resultat === 1) {
 										db.hgetall('utilisateurs:' + donneesMur.identifiant, async function (err, utilisateur) {
 											if (err) { res.send('erreur'); return false }
-											if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 												res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
 											} else {
 												res.send('non_autorise')
@@ -3035,7 +3040,7 @@ async function demarrerServeur () {
 					} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
 						const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
 						if (typeof donneesMur === 'object' && donneesMur !== null) {
-							if (donneesMur.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
 								const date = dayjs().format()
 								let langue = 'fr'
 								if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
@@ -3065,7 +3070,7 @@ async function demarrerServeur () {
 									if (resultat === 1) {
 										db.hgetall('utilisateurs:' + donneesMur.identifiant, async function (err, utilisateur) {
 											if (err) { res.send('erreur'); return false }
-											if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 												res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
 											} else {
 												res.send('non_autorise')
@@ -3094,7 +3099,7 @@ async function demarrerServeur () {
 					if (resultat === 1) {
 						db.hgetall('murs:' + mur, async function (err, donneesMur) {
 							if (err) { res.send('erreur'); return false }
-							if (donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
+							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
 								db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
 									if (err) { res.send('erreur'); return false }
 									const multi = db.multi()
@@ -3130,7 +3135,7 @@ async function demarrerServeur () {
 									if (resultat === 1) {
 										db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
 											if (err) { res.send('erreur'); return false }
-											if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 												db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
 													if (err) { res.send('erreur'); return false }
 													const multi = db.multi()
@@ -3176,7 +3181,7 @@ async function demarrerServeur () {
 						const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
 						if (typeof donneesMur === 'object' && donneesMur !== null) {
 							const multi = db.multi()
-							if (donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
+							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
 								multi.srem('murs-crees:' + identifiant, mur)
 								multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
 									if (err) { res.send('erreur'); return false }
@@ -3200,7 +3205,7 @@ async function demarrerServeur () {
 									if (resultat === 1) {
 										db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
 											if (err) { res.send('erreur'); return false }
-											if (await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 												db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
 													if (err) { res.send('erreur'); return false }
 													const multi = db.multi()
