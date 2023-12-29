@@ -270,7 +270,7 @@ export default {
 			this.$socket.emit('desactivermaintenance')
 		},
 		modifierMotDePasse () {
-			if (this.motdepasse !== '' && (this.identifiant !== '' || this.email !== '')) {
+			if (this.motdepasse.trim() !== '' && (this.identifiant !== '' || this.email !== '')) {
 				this.chargement = true
 				axios.post(this.hote + '/api/modifier-mot-de-passe-admin', {
 					admin: this.admin,
@@ -324,7 +324,7 @@ export default {
 			}
 		},
 		modifierDonneesMur () {
-			if (this.murIdM !== '' && this.champ !== '' && this.valeur !== '') {
+			if (this.murIdM !== '' && this.champ !== '' && this.valeur.trim() !== '') {
 				this.chargement = true
 				axios.post(this.hote + '/api/modifier-donnees-mur-admin', {
 					murId: this.murIdM,
