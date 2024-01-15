@@ -3416,7 +3416,7 @@ async function demarrerServeur () {
 										}
 										const edition = objet.edition
 										const date = dayjs().format()
-										if (vignette && objet.vignette && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+										if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
 											vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
 										}
 										if (visibilite === 'visible' || visibilite === 'protegee') {
@@ -3457,7 +3457,7 @@ async function demarrerServeur () {
 													})
 												}
 												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
+													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)))
 													await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 												}
 												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
