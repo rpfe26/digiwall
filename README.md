@@ -55,10 +55,10 @@ VITE_MATOMO (lien vers un serveur Matomo)
 VITE_MATOMO_SITE_ID (id de site Matomo / par défaut : 1)
 VITE_NFS_WALL_NUMBER (id de mur à partir de laquelle les fichiers seront enregistrés dans un dossier monté NFS - environ 200 000 pour 1 To de capacité disque)
 VITE_NFS_FOLDER (nom du dossier monté NFS, obligatoirement situé dans le dossier /static/)
-AUTORIZED_DOMAINS (domaines autorisés pour api serveur. ex : ladigitale.dev,example.com / par défaut : *)
+AUTHORIZED_DOMAINS (domaines autorisés pour api serveur. ex : ladigitale.dev,example.com / par défaut : *)
 ```
 
-### Projet Vue (Vue.js 3 et Vite SSR Plugin) avec serveur Node.js (Express) et base de données Redis
+### Projet Vue (Vue.js 3 et Vike) avec serveur Node.js (Express) et base de données Redis
 
 ### Démo
 https://digiwall.app
@@ -71,5 +71,7 @@ Traduction en espagnol par Fernando S. Delgado Trujillo (https://gitlab.com/fers
 Traduction en croate par Ksenija Lekić (https://gitlab.com/Ksenija66L)
 
 ### Soutien
-https://opencollective.com/ladigitale
+Open Collective : https://opencollective.com/ladigitale
+
+Liberapay : https://liberapay.com/ladigitale/
 
