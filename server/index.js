@@ -106,8 +106,8 @@ async function demarrerServeur () {
 	}
 	const sessionMiddleware = session(sessionOptions)
 
-	if (production && process.env.AUTORIZED_DOMAINS) {
-		domainesAutorises = process.env.AUTORIZED_DOMAINS.split(',')
+	if (production && process.env.AUTHORIZED_DOMAINS) {
+		domainesAutorises = process.env.AUTHORIZED_DOMAINS.split(',')
 	} else {
 		domainesAutorises = '*'
 	}
@@ -5986,8 +5986,8 @@ async function demarrerServeur () {
 							</div>
 						</div>
 
-						<div class="conteneur-modale" v-if="modaleCommentaires">
-							<div id="discussion" class="modale">
+						<div class="conteneur-modale" role="dialog" tabindex="-1" v-if="modaleCommentaires">
+							<div id="discussion" class="modale" role="document">
 								<div class="en-tete">
 									<span class="titre">{{ titre }}</span>
 									<span role="button" tabindex="0" class="fermer" @click="fermerModaleCommentaires"><i class="material-icons">close</i></span>
