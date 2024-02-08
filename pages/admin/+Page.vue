@@ -153,8 +153,8 @@
 			</div>
 		</div>
 
-		<div id="conteneur-message" class="conteneur-modale" v-if="modale !== ''">
-			<div class="modale">
+		<div id="conteneur-message" class="conteneur-modale" role="dialog" tabindex="-1" v-if="modale !== ''">
+			<div class="modale" role="document">
 				<div class="conteneur">
 					<div class="contenu">
 						<div class="message" v-html="$t('confirmationRattacherMur')" v-if="modale === 'rattacher-mur'" />
