@@ -87,6 +87,7 @@ export default {
 			listeCouleurs: false,
 			panneaux: [],
 			fonds: ['fond1.png', 'fond2.png', 'fond3.png', 'fond4.png', 'fond5.png', 'fond6.png', 'fond7.png', 'fond8.png', 'fond9.png', 'fond10.png', 'fond11.png'],
+			modaleDiaporama: false,
 			modaleConfirmer: false,
 			messageConfirmation: '',
 			typeConfirmation: '',
@@ -314,21 +315,8 @@ export default {
 		const identifiant = params.id
 		const motdepasse = params.mdp
 		if (identifiant && identifiant !== '' && motdepasse && motdepasse !== '') {
-			const reponse = await axios.post(this.hote + '/api/verifier-acces', {
-				mur: this.mur.id,
-				identifiant: identifiant,
-				motdepasse: window.atob(motdepasse)
-			})
-			if (reponse.data.hasOwnProperty('message') && reponse.data.message === 'mur_debloque') {
-				this.identifiant = identifiant
-				this.nom = reponse.data.nom
-				this.langue = reponse.data.langue
-				this.statut = 'auteur'
-				this.mursDigidrive = reponse.data.digidrive
-			}
 			window.history.replaceState({}, document.title, window.location.href.split('?')[0])
 		}
-
 		const langue = params.lang
 		if (langue && this.langues.includes(langue) === true) {
 			this.$i18n.locale = langue
@@ -447,6 +435,24 @@ export default {
 						}
 						this.ouvrirModaleBloc('creation', '', indexColonne)
 						this.ajouterFichier(event.dataTransfer)
+					}
+				}.bind(this), false)
+
+				document.addEventListener('keydown', function (event) {
+					if (this.modaleDiaporama && this.modale !== 'evaluations' && this.blocs.length > 1) {
+						let input = false
+						if (document.querySelector('#commentaire') && document.querySelector('#commentaire').contains(event.target)) {
+							input = true
+						} else if (document.querySelector('#commentaire-modifie') && document.querySelector('#commentaire-modifie').contains(event.target)) {
+							input = true
+						}
+						if (input === false && event.key === 'ArrowLeft') {
+							event.preventDefault()
+							this.afficherBlocPrecedent()
+						} else if (input === false && event.key === 'ArrowRight') {
+							event.preventDefault()
+							this.afficherBlocSuivant()
+						}
 					}
 				}.bind(this), false)
 
@@ -2321,7 +2327,8 @@ export default {
 				}
 				this.donneesBloc = donneesBloc
 				this.menu = ''
-				this.modale = 'diaporama'
+				this.modale = ''
+				this.modaleDiporama = true
 				if (this.mur.commentaires === 'actives') {
 					this.$socket.emit('commentaires', donneesBloc.bloc, 'diapositive')
 				} else {
@@ -2815,7 +2822,7 @@ export default {
 		},
 		verifierMotDePasseBloc (bloc, colonne) {
 			let motdepasse = ''
-			if (this.modale === 'diaporama') {
+			if (this.modaleDiporama) {
 				motdepasse = document.querySelector('#diapositive .motdepasse input').value
 			} else {
 				motdepasse = document.querySelector('#' + bloc + ' .motdepasse input').value
@@ -2828,7 +2835,7 @@ export default {
 						}
 					}.bind(this))
 				}
-				if (this.modale === 'diaporama' && this.donneesBloc.motdepasse === motdepasse) {
+				if (this.modaleDiporama && this.donneesBloc.motdepasse === motdepasse) {
 					this.donneesBloc.visibilite = 'visible'
 					this.$nextTick(function () {
 						this.chargerDiapositive()
@@ -3881,7 +3888,7 @@ export default {
 				} else if (!this.admin && donnees.identifiant === this.identifiant) {
 					this.notification = this.$t('capsulePubliee', { titre: donnees.titre })
 				}
-				if (this.modale === 'diaporama') {
+				if (this.modaleDiporama) {
 					this.$nextTick(function () {
 						this.chargerDiapositive()
 					}.bind(this))
@@ -3994,7 +4001,7 @@ export default {
 					}
 				})
 				this.blocs = blocs
-				if ((this.modale === 'commentaires' && this.bloc === donnees.bloc) || (this.modale === 'diaporama' && this.donneesBloc.bloc === donnees.bloc)) {
+				if ((this.modale === 'commentaires' && this.bloc === donnees.bloc) || (this.modaleDiporama && this.donneesBloc.bloc === donnees.bloc)) {
 					this.commentaires.unshift({ id: donnees.id, identifiant: donnees.identifiant, nom: donnees.nom, texte: donnees.texte, date: donnees.date })
 				}
 				this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-commente' })

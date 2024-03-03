@@ -1353,139 +1353,6 @@
 		</div>
 	</div>
 
-	<div class="conteneur-modale" role="dialog" tabindex="-1" v-else-if="modale === 'diaporama'">
-		<div id="diapositive" class="modale-diapositive" :class="{'privee': donneesBloc.visibilite === 'privee'}" :style="{'border-color': donneesBloc.couleur}" role="document" v-show="!chargement">
-			<div class="en-tete">
-				<span class="titre"><span>{{ donneesBloc.titre }}</span> <span>{{ $t('par') }} {{ definirNom(donneesBloc) }}</span></span>
-				<span role="button" tabindex="0" class="fermer" @click="fermerModaleDiaporama"><i class="material-icons">close</i></span>
-			</div>
-			<div class="contenu ascenseur" :class="{'vide': donneesBloc.texte === '' && donneesBloc.media === '' && mur.evaluations === 'desactivees' && mur.commentaires === 'desactives' && ((mur.contributions !== 'moderees') || (mur.contributions === 'moderees' && donneesBloc.visibilite === 'visible'))}" v-if="donneesBloc.visibilite !== 'protegee' || blocsAutorises.includes(donneesBloc.bloc)">
-				<div class="conteneur conteneur-texte" v-if="donneesBloc.texte !== ''">
-					<div class="texte" v-html="donneesBloc.texte" />
-				</div>
-				<div class="conteneur conteneur-media" v-if="donneesBloc.media !== '' || donneesBloc.medias.length > 0">
-					<div class="media" v-if="donneesBloc.iframe === ''">
-						<img :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-if="donneesBloc.type === 'image' || donneesBloc.typeBloc === 'image-audio'">
-						<img :src="donneesBloc.media" v-else-if="donneesBloc.type === 'lien-image'">
-						<audio controls :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'audio'" />
-						<video controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'video'" />
-						<iframe class="document" :src="'/pdfjs/web/viewer.html?file=' + hote + '/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="donneesBloc.type === 'pdf'" />
-						<iframe class="document" :src="'https://view.officeapps.live.com/op/embed.aspx?src=' + hote + '/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="donneesBloc.type === 'office' || donneesBloc.type === 'document'" />
-						<span v-else-if="donneesBloc.type === 'lien'">
-							<a :href="donneesBloc.media" target="_blank">
-								<img :src="donneesBloc.vignette" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
-								<img src="/img/lien.png" v-else>
-							</a>
-						</span>
-						<div class="galerie" v-else-if="donneesBloc.typeBloc === 'galerie'">
-							<div class="image-galerie" :class="{'avec-legende': imageGalerie.legende !== ''}" v-for="(imageGalerie, index) in donneesBloc.medias" :key="'image_galerie_' + index">
-								<img :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + imageGalerie.fichier">
-								<span class="legende" v-if="imageGalerie.legende !== ''">{{ imageGalerie.legende }}</span>
-							</div>
-						</div>
-						<span v-else>
-							<a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" download>
-								<img :src="donneesBloc.vignette" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
-								<img src="/img/telechargement.png" v-else>
-							</a>
-						</span>
-						<audio controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.mediaExtra" v-if="donneesBloc.typeBloc === 'image-audio'"></audio>
-					</div>
-					<div class="media" :class="definirTypeMedia()" v-else>
-						<div class="conteneur-iframe">
-							<iframe :src="donneesBloc.iframe" allowfullscreen v-if="verifierURL(donneesBloc.iframe) === true" />
-							<div class="html" v-else v-html="donneesBloc.iframe" />
-						</div>
-					</div>
-				</div>
-				<div class="conteneur conteneur-moderation" v-if="donneesBloc.visibilite === 'privee' && admin">
-					<span role="button" tabindex="0" class="bouton" @click="autoriserBloc(donneesBloc, 'privee')">{{ $t('afficherCapsule') }}</span>
-				</div>
-				<div class="conteneur conteneur-moderation" v-else-if="mur.contributions === 'moderees' && donneesBloc.visibilite === 'masquee'">
-					<span role="button" tabindex="0" class="bouton" @click="autoriserBloc(donneesBloc, 'moderee')" v-if="admin">{{ $t('validerCapsule') }}</span>
-					<span class="bouton" v-else-if="donneesBloc.identifiant === identifiant">{{ $t('enAttenteModeration') }}</span>
-				</div>
-				<div class="conteneur conteneur-evaluations" v-if="mur.evaluations === 'activees'">
-					<label>{{ $t('evaluations') }}</label>
-					<div class="evaluation">
-						<span class="etoiles">
-							<i class="material-icons" :class="{'evalue': verifierUtilisateurEvaluation(donneesBloc.evaluations) === true}" v-for="etoile in definirEvaluationCapsule(donneesBloc.evaluations)" :key="'etoilepleine_' + etoile">star</i>
-							<i class="material-icons" :class="{'evalue': verifierUtilisateurEvaluation(donneesBloc.evaluations) === true}" v-for="etoile in (5 - definirEvaluationCapsule(donneesBloc.evaluations))" :key="'etoilevide_' + etoile">star_outline</i>
-							<span>({{ donneesBloc.evaluations.length }})</span>
-						</span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(donneesBloc.bloc, donneesBloc.titre, '')" v-if="verifierUtilisateurEvaluation(donneesBloc.evaluations) === false"><i class="material-icons">add_comment</i></span>
-						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(donneesBloc.bloc, donneesBloc.titre, donneesBloc.evaluations)" v-else><i class="material-icons">rate_review</i></span>
-					</div>
-				</div>
-				<div class="conteneur conteneur-commentaires" v-if="mur.commentaires === 'actives'">
-					<label>{{ $t('commentaires') }}</label>
-					<ul class="commentaires" v-if="commentaires.length > 0">
-						<li :class="{'edition': editionCommentaire && commentaireId === entreeCommentaire.id}" v-for="(entreeCommentaire, indexEntreeCommentaire) in commentaires" :key="'commentaire_' + indexEntreeCommentaire">
-							<span class="meta" :class="{'auteur': entreeCommentaire.identifiant === identifiant || admin}">{{ $t('par') }} {{ definirNom(entreeCommentaire) }}, {{ $formaterDateRelative(entreeCommentaire.date, langue) }}</span>
-							<div class="action" v-if="entreeCommentaire.identifiant === identifiant || admin">
-								<span role="button" tabindex="0" :title="$t('modifierCommentaire')" @click="afficherModifierCommentaire(entreeCommentaire.id, entreeCommentaire.texte)" v-if="commentaireId !== entreeCommentaire.id"><i class="material-icons">edit</i></span>
-								<span role="button" tabindex="0" :title="$t('annuler')" @click="annulerModifierCommentaire" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id"><i class="material-icons">close</i></span>
-								<span role="button" tabindex="0" :title="$t('supprimerCommentaire')" @click="afficherSupprimerCommentaire(entreeCommentaire.id)"><i class="material-icons">delete</i></span>
-							</div>
-							<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
-							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
-								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
-								<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
-								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
-							</div>
-						</li>
-					</ul>
-					<div class="vide" v-else>
-						{{ $t('aucunCommentaire') }}
-					</div>
-					<div class="ecrire-commentaire">
-						<div id="commentaire" :class="{'mobile': mobile === true }" />
-						<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
-						<Emojis v-if="emojis === 'commentaire'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
-					</div>
-				</div>
-			</div>
-			<div class="contenu ascenseur" v-else>
-				<div class="conteneur conteneur-media cadenas" :style="{'background': eclaircirCouleur(donneesBloc.couleur)}">
-					<i class="material-icons">lock_outline</i>
-				</div>
-				<div class="motdepasse">
-					<input type="text" :placeholder="$t('motDePasse')" @keydown.enter="verifierMotDePasseBloc(donneesBloc.bloc, donneesBloc.colonne)">
-					<span role="button" tabindex="0" class="bouton" @click="verifierMotDePasseBloc(donneesBloc.bloc, donneesBloc.colonne)"><i class="material-icons">done</i></span>
-				</div>
-				<div class="conteneur conteneur-commentaires" v-if="mur.commentaires === 'actives'">
-					<label>{{ $t('commentaires') }}</label>
-					<ul class="commentaires" v-if="commentaires.length > 0">
-						<li :class="{'edition': editionCommentaire && commentaireId === entreeCommentaire.id}" v-for="(entreeCommentaire, indexEntreeCommentaire) in commentaires" :key="'commentaire_' + indexEntreeCommentaire">
-							<span class="meta" :class="{'auteur': entreeCommentaire.identifiant === identifiant || admin}">{{ $t('par') }} {{ definirNom(entreeCommentaire) }}, {{ $formaterDateRelative(entreeCommentaire.date, langue) }}</span>
-							<div class="action" v-if="entreeCommentaire.identifiant === identifiant || admin">
-								<span role="button" tabindex="0" :title="$t('modifierCommentaire')" @click="afficherModifierCommentaire(entreeCommentaire.id, entreeCommentaire.texte)" v-if="commentaireId !== entreeCommentaire.id"><i class="material-icons">edit</i></span>
-								<span role="button" tabindex="0" :title="$t('annuler')" @click="annulerModifierCommentaire" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id"><i class="material-icons">close</i></span>
-								<span role="button" tabindex="0" :title="$t('supprimerCommentaire')" @click="afficherSupprimerCommentaire(entreeCommentaire.id)"><i class="material-icons">delete</i></span>
-							</div>
-							<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
-							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
-								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
-								<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
-								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
-							</div>
-						</li>
-					</ul>
-					<div class="vide" v-else>
-						{{ $t('aucunCommentaire') }}
-					</div>
-					<div class="ecrire-commentaire">
-						<div id="commentaire" :class="{'mobile': mobile === true }" />
-						<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
-						<Emojis v-if="emojis === 'commentaire'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
-					</div>
-				</div>
-			</div>
-		</div>
-		<span role="button" tabindex="0" id="precedent" v-if="blocs.length > 1" @click="afficherBlocPrecedent"><i class="material-icons">arrow_back</i></span>
-		<span role="button" tabindex="0" id="suivant" v-if="blocs.length > 1" @click="afficherBlocSuivant"><i class="material-icons">arrow_forward</i></span>
-	</div>
-
 	<div class="conteneur-modale" role="dialog" tabindex="-1" v-else-if="modale === 'admins'">
 		<div id="admins" class="modale" role="document">
 			<div class="en-tete">
@@ -1751,6 +1618,139 @@
 				</div>
 			</div>
 		</div>
+	</div>
+
+	<div class="conteneur-modale" role="dialog" tabindex="-1" v-if="modaleDiporama">
+		<div id="diapositive" class="modale-diapositive" :class="{'privee': donneesBloc.visibilite === 'privee'}" :style="{'border-color': donneesBloc.couleur}" role="document" v-show="!chargement">
+			<div class="en-tete">
+				<span class="titre"><span>{{ donneesBloc.titre }}</span> <span>{{ $t('par') }} {{ definirNom(donneesBloc) }}</span></span>
+				<span role="button" tabindex="0" class="fermer" @click="fermerModaleDiaporama"><i class="material-icons">close</i></span>
+			</div>
+			<div class="contenu ascenseur" :class="{'vide': donneesBloc.texte === '' && donneesBloc.media === '' && mur.evaluations === 'desactivees' && mur.commentaires === 'desactives' && ((mur.contributions !== 'moderees') || (mur.contributions === 'moderees' && donneesBloc.visibilite === 'visible'))}" v-if="donneesBloc.visibilite !== 'protegee' || blocsAutorises.includes(donneesBloc.bloc)">
+				<div class="conteneur conteneur-texte" v-if="donneesBloc.texte !== ''">
+					<div class="texte" v-html="donneesBloc.texte" />
+				</div>
+				<div class="conteneur conteneur-media" v-if="donneesBloc.media !== '' || donneesBloc.medias.length > 0">
+					<div class="media" v-if="donneesBloc.iframe === ''">
+						<img :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-if="donneesBloc.type === 'image' || donneesBloc.typeBloc === 'image-audio'">
+						<img :src="donneesBloc.media" v-else-if="donneesBloc.type === 'lien-image'">
+						<audio controls :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'audio'" />
+						<video controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'video'" />
+						<iframe class="document" :src="'/pdfjs/web/viewer.html?file=' + hote + '/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="donneesBloc.type === 'pdf'" />
+						<iframe class="document" :src="'https://view.officeapps.live.com/op/embed.aspx?src=' + hote + '/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="donneesBloc.type === 'office' || donneesBloc.type === 'document'" />
+						<span v-else-if="donneesBloc.type === 'lien'">
+							<a :href="donneesBloc.media" target="_blank">
+								<img :src="donneesBloc.vignette" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
+								<img src="/img/lien.png" v-else>
+							</a>
+						</span>
+						<div class="galerie" v-else-if="donneesBloc.typeBloc === 'galerie'">
+							<div class="image-galerie" :class="{'avec-legende': imageGalerie.legende !== ''}" v-for="(imageGalerie, index) in donneesBloc.medias" :key="'image_galerie_' + index">
+								<img :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + imageGalerie.fichier">
+								<span class="legende" v-if="imageGalerie.legende !== ''">{{ imageGalerie.legende }}</span>
+							</div>
+						</div>
+						<span v-else>
+							<a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" download>
+								<img :src="donneesBloc.vignette" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
+								<img src="/img/telechargement.png" v-else>
+							</a>
+						</span>
+						<audio controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.mediaExtra" v-if="donneesBloc.typeBloc === 'image-audio'"></audio>
+					</div>
+					<div class="media" :class="definirTypeMedia()" v-else>
+						<div class="conteneur-iframe">
+							<iframe :src="donneesBloc.iframe" allowfullscreen v-if="verifierURL(donneesBloc.iframe) === true" />
+							<div class="html" v-else v-html="donneesBloc.iframe" />
+						</div>
+					</div>
+				</div>
+				<div class="conteneur conteneur-moderation" v-if="donneesBloc.visibilite === 'privee' && admin">
+					<span role="button" tabindex="0" class="bouton" @click="autoriserBloc(donneesBloc, 'privee')">{{ $t('afficherCapsule') }}</span>
+				</div>
+				<div class="conteneur conteneur-moderation" v-else-if="mur.contributions === 'moderees' && donneesBloc.visibilite === 'masquee'">
+					<span role="button" tabindex="0" class="bouton" @click="autoriserBloc(donneesBloc, 'moderee')" v-if="admin">{{ $t('validerCapsule') }}</span>
+					<span class="bouton" v-else-if="donneesBloc.identifiant === identifiant">{{ $t('enAttenteModeration') }}</span>
+				</div>
+				<div class="conteneur conteneur-evaluations" v-if="mur.evaluations === 'activees'">
+					<label>{{ $t('evaluations') }}</label>
+					<div class="evaluation">
+						<span class="etoiles">
+							<i class="material-icons" :class="{'evalue': verifierUtilisateurEvaluation(donneesBloc.evaluations) === true}" v-for="etoile in definirEvaluationCapsule(donneesBloc.evaluations)" :key="'etoilepleine_' + etoile">star</i>
+							<i class="material-icons" :class="{'evalue': verifierUtilisateurEvaluation(donneesBloc.evaluations) === true}" v-for="etoile in (5 - definirEvaluationCapsule(donneesBloc.evaluations))" :key="'etoilevide_' + etoile">star_outline</i>
+							<span>({{ donneesBloc.evaluations.length }})</span>
+						</span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(donneesBloc.bloc, donneesBloc.titre, '')" v-if="verifierUtilisateurEvaluation(donneesBloc.evaluations) === false"><i class="material-icons">add_comment</i></span>
+						<span role="button" tabindex="0" class="bouton" :title="$t('evaluerCapsule')" @click="ouvrirModaleEvaluations(donneesBloc.bloc, donneesBloc.titre, donneesBloc.evaluations)" v-else><i class="material-icons">rate_review</i></span>
+					</div>
+				</div>
+				<div class="conteneur conteneur-commentaires" v-if="mur.commentaires === 'actives'">
+					<label>{{ $t('commentaires') }}</label>
+					<ul class="commentaires" v-if="commentaires.length > 0">
+						<li :class="{'edition': editionCommentaire && commentaireId === entreeCommentaire.id}" v-for="(entreeCommentaire, indexEntreeCommentaire) in commentaires" :key="'commentaire_' + indexEntreeCommentaire">
+							<span class="meta" :class="{'auteur': entreeCommentaire.identifiant === identifiant || admin}">{{ $t('par') }} {{ definirNom(entreeCommentaire) }}, {{ $formaterDateRelative(entreeCommentaire.date, langue) }}</span>
+							<div class="action" v-if="entreeCommentaire.identifiant === identifiant || admin">
+								<span role="button" tabindex="0" :title="$t('modifierCommentaire')" @click="afficherModifierCommentaire(entreeCommentaire.id, entreeCommentaire.texte)" v-if="commentaireId !== entreeCommentaire.id"><i class="material-icons">edit</i></span>
+								<span role="button" tabindex="0" :title="$t('annuler')" @click="annulerModifierCommentaire" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id"><i class="material-icons">close</i></span>
+								<span role="button" tabindex="0" :title="$t('supprimerCommentaire')" @click="afficherSupprimerCommentaire(entreeCommentaire.id)"><i class="material-icons">delete</i></span>
+							</div>
+							<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
+							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
+								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
+								<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
+								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+							</div>
+						</li>
+					</ul>
+					<div class="vide" v-else>
+						{{ $t('aucunCommentaire') }}
+					</div>
+					<div class="ecrire-commentaire">
+						<div id="commentaire" :class="{'mobile': mobile === true }" />
+						<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
+						<Emojis v-if="emojis === 'commentaire'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+					</div>
+				</div>
+			</div>
+			<div class="contenu ascenseur" v-else>
+				<div class="conteneur conteneur-media cadenas" :style="{'background': eclaircirCouleur(donneesBloc.couleur)}">
+					<i class="material-icons">lock_outline</i>
+				</div>
+				<div class="motdepasse">
+					<input type="text" :placeholder="$t('motDePasse')" @keydown.enter="verifierMotDePasseBloc(donneesBloc.bloc, donneesBloc.colonne)">
+					<span role="button" tabindex="0" class="bouton" @click="verifierMotDePasseBloc(donneesBloc.bloc, donneesBloc.colonne)"><i class="material-icons">done</i></span>
+				</div>
+				<div class="conteneur conteneur-commentaires" v-if="mur.commentaires === 'actives'">
+					<label>{{ $t('commentaires') }}</label>
+					<ul class="commentaires" v-if="commentaires.length > 0">
+						<li :class="{'edition': editionCommentaire && commentaireId === entreeCommentaire.id}" v-for="(entreeCommentaire, indexEntreeCommentaire) in commentaires" :key="'commentaire_' + indexEntreeCommentaire">
+							<span class="meta" :class="{'auteur': entreeCommentaire.identifiant === identifiant || admin}">{{ $t('par') }} {{ definirNom(entreeCommentaire) }}, {{ $formaterDateRelative(entreeCommentaire.date, langue) }}</span>
+							<div class="action" v-if="entreeCommentaire.identifiant === identifiant || admin">
+								<span role="button" tabindex="0" :title="$t('modifierCommentaire')" @click="afficherModifierCommentaire(entreeCommentaire.id, entreeCommentaire.texte)" v-if="commentaireId !== entreeCommentaire.id"><i class="material-icons">edit</i></span>
+								<span role="button" tabindex="0" :title="$t('annuler')" @click="annulerModifierCommentaire" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id"><i class="material-icons">close</i></span>
+								<span role="button" tabindex="0" :title="$t('supprimerCommentaire')" @click="afficherSupprimerCommentaire(entreeCommentaire.id)"><i class="material-icons">delete</i></span>
+							</div>
+							<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
+							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
+								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
+								<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
+								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+							</div>
+						</li>
+					</ul>
+					<div class="vide" v-else>
+						{{ $t('aucunCommentaire') }}
+					</div>
+					<div class="ecrire-commentaire">
+						<div id="commentaire" :class="{'mobile': mobile === true }" />
+						<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
+						<Emojis v-if="emojis === 'commentaire'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+					</div>
+				</div>
+			</div>
+		</div>
+		<span role="button" tabindex="0" id="precedent" v-if="blocs.length > 1" @click="afficherBlocPrecedent"><i class="material-icons">arrow_back</i></span>
+		<span role="button" tabindex="0" id="suivant" v-if="blocs.length > 1" @click="afficherBlocSuivant"><i class="material-icons">arrow_forward</i></span>
 	</div>
 
 	<div class="conteneur-modale" role="dialog" tabindex="-1" v-if="transcodage || progressionEnregistrement">
