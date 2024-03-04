@@ -1,5 +1,4 @@
 import axios from 'axios'
-import base64 from 'base-64'
 
 export { onBeforeRender }
 
@@ -8,8 +7,8 @@ async function onBeforeRender (pageContext) {
 	let redirection = '/'
 	const id = pageContext.routeParams.id
 	const token = pageContext.routeParams.token
-	let identifiant = pageContext.identifiant
-	let statut = pageContext.statut
+	const identifiant = pageContext.identifiant
+	const statut = pageContext.statut
 	const reponse = await axios.post(pageContext.hote + '/api/recuperer-donnees-mur', {
 		id: id,
 		token: token,
@@ -43,33 +42,16 @@ async function onBeforeRender (pageContext) {
 			const hote = pageContext.hote
 			const userAgent = pageContext.userAgent
 			const langues = pageContext.langues
-			let nom = pageContext.nom
-			let langue = pageContext.langue
+			const nom = pageContext.nom
+			const langue = pageContext.langue
 			const acces = pageContext.acces
 			const murs = pageContext.murs
 			const blocsAutorises = pageContext.blocsAutorises
-			let digidrive = pageContext.digidrive
+			const digidrive = pageContext.digidrive
 			const mur = reponse.data.mur
 			const blocs = reponse.data.blocs
 			const activite = reponse.data.activite
 			const titre = mur.titre + ' - Digiwall by La Digitale'
-			// Vérification des paramètres Digidrive
-			const paramId = params.id
-			const paramMdp = params.mdp
-			if (paramId && paramId !== '' && paramMdp && paramMdp !== '') {
-				const donneesAcces = await axios.post(hote + '/api/verifier-acces', {
-					mur: id,
-					identifiant: paramId,
-					motdepasse: base64.decode(paramMdp)
-				})
-				if (donneesAcces.data.hasOwnProperty('message') && donneesAcces.data.message === 'mur_debloque') {
-					identifiant = paramId
-					nom = donneesAcces.data.nom
-					langue = donneesAcces.data.langue
-					statut = 'auteur'
-					digidrive = donneesAcces.data.digidrive
-				}
-			}
 			pageProps = { params, hote, userAgent, langues, identifiant, nom, langue, statut, acces, murs, blocsAutorises, digidrive, mur, blocs, activite, titre }
 		}
 	}
