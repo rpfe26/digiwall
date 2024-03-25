@@ -3791,7 +3791,12 @@ async function demarrerServeur () {
 							let commentaireId = parseInt(donnees.commentaires) + 1
 							const listeCommentaires = []
 							for (let commentaire of commentaires) {
-								listeCommentaires.push(JSON.parse(commentaire))
+								const commentaireJSON = verifierJSON(commentaire)
+								if (commentaireJSON === false) {
+									socket.emit('erreur'); return false
+								} else {
+									listeCommentaires.push(commentaireJSON)
+								}
 							}
 							let maxCommentaireId = 0
 							if (listeCommentaires.length > 0) {
@@ -3832,7 +3837,13 @@ async function demarrerServeur () {
 				db.zrangebyscore('commentaires:' + bloc, id, id, function (err, resultats) {
 					if (err || !resultats || resultats === null) { socket.emit('erreur'); return false }
 					const dateModification = dayjs().format()
-					const donnees = JSON.parse(resultats)
+					const resulatsJSON = verifierJSON(resultats)
+					let donnees
+					if (resulatsJSON === false) {
+						socket.emit('erreur'); return false
+					} else {
+						donnees = resulatsJSON
+					}
 					const date = donnees.date
 					const commentaire = { id: id, identifiant: donnees.identifiant, date: date, modifie: dateModification, texte: texte }
 					const multi = db.multi()
@@ -3878,7 +3889,12 @@ async function demarrerServeur () {
 			db.zrange('commentaires:' + bloc, 0, -1, function (err, commentaires) {
 				if (err) { socket.emit('erreur'); return false }
 				for (let commentaire of commentaires) {
-					commentaire = JSON.parse(commentaire)
+					const commentaireJSON = verifierJSON(commentaire)
+					if (commentaireJSON === false) {
+						socket.emit('erreur'); return false
+					} else {
+						commentaire = commentaireJSON
+					}
 					const donneeCommentaire = new Promise(function (resolve) {
 						const identifiant = commentaire.identifiant
 						db.exists('utilisateurs:' + identifiant, function (err, resultat) {
@@ -5623,10 +5639,10 @@ async function demarrerServeur () {
 	async function verifierAcces (req, mur, identifiant, motdepasse) {
 		return new Promise(function (resolve) {
 			db.hgetall('murs:' + mur, async function (err, donnees) {
-				if (err) { resolve('erreur'); return false }
+				if (err || !donnees || !donnees.hasOwnProperty('identifiant')) { resolve('erreur'); return false }
 				if (identifiant === donnees.identifiant && motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
 					db.hgetall('utilisateurs:' + identifiant, function (err, utilisateur) {
-						if (err) { resolve('erreur'); return false }
+						if (err || !utilisateur || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
 						req.session.identifiant = utilisateur.id
 						req.session.nom = utilisateur.nom
 						req.session.statut = 'auteur'
@@ -5654,7 +5670,7 @@ async function demarrerServeur () {
 						if (err) { resolve('erreur'); return false }
 						if (resultat === 1) {
 							db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
-								if (err) { resolve('erreur'); return false }
+								if (err || !utilisateur || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('motdepasse') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
 								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 									req.session.identifiant = utilisateur.id
 									req.session.nom = utilisateur.nom
@@ -5794,6 +5810,17 @@ async function demarrerServeur () {
 		} catch (err) {
 			return false
 		}
+	}
+
+	function verifierJSON (json){
+		try {
+			const o = JSON.parse(json)
+			if (o && typeof o === 'object') {
+				return o
+			}
+		}
+		catch (e) { }
+		return false
 	}
 
 	function formaterDate (donnees, langue) {
