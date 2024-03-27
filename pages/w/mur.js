@@ -1262,6 +1262,7 @@ export default {
 				if (donnees === 'non_connecte') {
 					window.location.replace('/')
 				} else if (donnees === 'erreur_televersement') {
+					this.transcodage = false
 					this.progressionEnregistrement = false
 					this.message = this.$t('erreurTeleversementFichier')
 				} else {
@@ -3097,6 +3098,7 @@ export default {
 					if (donnees === 'non_connecte') {
 						window.location.replace('/')
 					} else if (donnees === 'erreur_televersement') {
+						this.chargement = false
 						champ.value = ''
 						this.progressionFond = 0
 						this.message = this.$t('erreurTeleversementFichier')
@@ -3106,6 +3108,7 @@ export default {
 					this.progressionFond = 0
 					champ.value = ''
 				}.bind(this)).catch(function () {
+					this.chargement = false
 					champ.value = ''
 					this.progressionFond = 0
 					this.message = this.$t('erreurCommunicationServeur')
