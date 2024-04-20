@@ -352,6 +352,9 @@ export default {
 			}
 			if (!this.accesAutorise) {
 				this.modale = 'code-acces'
+				this.$nextTick(function () {
+					document.querySelector('#champ-code').focus()
+				})
 			}
 		} else if (this.statut === 'utilisateur') {
 			window.location.href = '/u/' + this.identifiant
@@ -955,6 +958,10 @@ export default {
 						champ.value = ''
 						this.progressionFichier = 0
 						this.message = this.$t('erreurTeleversementFichier')
+					} else if (donnees === 'erreur_espace_disque') {
+						champ.value = ''
+						this.progressionFichier = 0
+						this.message = this.$t('erreurEspaceDisque')
 					} else {
 						this.chargementMedia = true
 						this.media = donnees.fichier
@@ -1048,6 +1055,10 @@ export default {
 						champ.value = ''
 						this.progressionFichier = 0
 						this.message = this.$t('erreurTeleversementFichier')
+					} else if (donnees === 'erreur_espace_disque') {
+						champ.value = ''
+						this.progressionFichier = 0
+						this.message = this.$t('erreurEspaceDisque')
 					} else {
 						this.chargementMedia = true
 						this.media = donnees.fichier
@@ -1115,7 +1126,7 @@ export default {
 							}.bind(this)
 						}).then(function (reponse) {
 							const donnees = reponse.data
-							if (donnees === 'erreur_televersement') {
+							if (donnees === 'erreur_televersement' || donnees === 'erreur_espace_disque') {
 								resolve('erreur')
 							} else {
 								this.medias.push({ fichier: donnees.fichier, legende: '' })
@@ -1192,6 +1203,10 @@ export default {
 						champ.value = ''
 						this.progressionFichierExtra = 0
 						this.message = this.$t('erreurTeleversementFichier')
+					} else if (donnees === 'erreur_espace_disque') {
+						champ.value = ''
+						this.progressionFichierExtra = 0
+						this.message = this.$t('erreurEspaceDisque')
 					} else {
 						this.chargementMediaExtra = true
 						this.mediaExtra = donnees.fichier
@@ -1265,6 +1280,10 @@ export default {
 					this.transcodage = false
 					this.progressionEnregistrement = false
 					this.message = this.$t('erreurTeleversementFichier')
+				} else if (donnees === 'erreur_espace_disque') {
+					this.transcodage = false
+					this.progressionEnregistrement = false
+					this.message = this.$t('erreurEspaceDisque')
 				} else {
 					this.modale = ''
 					if (this.mode === 'creation' && this.typeBloc === 'classique') {
@@ -1675,6 +1694,10 @@ export default {
 						champ.value = ''
 						this.progressionVignette = 0
 						this.message = this.$t('erreurTeleversementVignette')
+					} else if (donnees === 'erreur_espace_disque') {
+						champ.value = ''
+						this.progressionVignette = 0
+						this.message = this.$t('erreurEspaceDisque')
 					} else {
 						this.vignette = donnees
 						this.$nextTick(function () {
@@ -2329,7 +2352,10 @@ export default {
 				this.donneesBloc = donneesBloc
 				this.menu = ''
 				this.modale = ''
-				this.modaleDiporama = true
+				this.modaleDiaporama = true
+				this.$nextTick(function () {
+					document.querySelector('#diapositive').addEventListener('keydown', this.activerClavierDiaporama)
+				}.bind(this))
 				if (this.mur.commentaires === 'actives') {
 					this.$socket.emit('commentaires', donneesBloc.bloc, 'diapositive')
 				} else {
@@ -2337,6 +2363,13 @@ export default {
 						this.chargerDiapositive()
 					}.bind(this))
 				}
+			}
+		},
+		activerClavierDiaporama (event) {
+			if (event.ctrlKey && event.key === 'ArrowLeft') {
+				this.afficherBlocPrecedent()
+			} else if (event.ctrlKey && event.key === 'ArrowRight') {
+				this.afficherBlocSuivant()
 			}
 		},
 		afficherBlocPrecedent () {
@@ -2357,6 +2390,10 @@ export default {
 			}
 			this.definirBlocActif(this.donneesBloc.bloc)
 			if (this.mur.commentaires === 'actives') {
+				this.editeurCommentaire.content.innerHTML = ''
+				if (this.editionCommentaire) {
+					this.annulerModifierCommentaire()
+				}
 				this.$socket.emit('commentaires', this.donneesBloc.bloc, 'diapositive')
 			} else {
 				this.chargerDiapositive()
@@ -2380,6 +2417,10 @@ export default {
 			}
 			this.definirBlocActif(this.donneesBloc.bloc)
 			if (this.mur.commentaires === 'actives') {
+				this.editeurCommentaire.content.innerHTML = ''
+				if (this.editionCommentaire) {
+					this.annulerModifierCommentaire()
+				}
 				this.$socket.emit('commentaires', this.donneesBloc.bloc, 'diapositive')
 			} else {
 				this.chargerDiapositive()
@@ -2451,7 +2492,8 @@ export default {
 			}
 		},
 		fermerModaleDiaporama () {
-			this.modale = ''
+			document.querySelector('#diapositive').removeEventListener('keydown', this.activerClavierDiaporama)
+			this.modaleDiaporama = false
 			this.commentaires = []
 			this.commentaire = ''
 			this.commentaireId = ''
@@ -2823,7 +2865,7 @@ export default {
 		},
 		verifierMotDePasseBloc (bloc, colonne) {
 			let motdepasse = ''
-			if (this.modaleDiporama) {
+			if (this.modaleDiaporama) {
 				motdepasse = document.querySelector('#diapositive .motdepasse input').value
 			} else {
 				motdepasse = document.querySelector('#' + bloc + ' .motdepasse input').value
@@ -2836,7 +2878,7 @@ export default {
 						}
 					}.bind(this))
 				}
-				if (this.modaleDiporama && this.donneesBloc.motdepasse === motdepasse) {
+				if (this.modaleDiaporama && this.donneesBloc.motdepasse === motdepasse) {
 					this.donneesBloc.visibilite = 'visible'
 					this.$nextTick(function () {
 						this.chargerDiapositive()
@@ -3102,6 +3144,11 @@ export default {
 						champ.value = ''
 						this.progressionFond = 0
 						this.message = this.$t('erreurTeleversementFichier')
+					} else if (donnees === 'erreur_espace_disque') {
+						this.chargement = false
+						champ.value = ''
+						this.progressionFond = 0
+						this.message = this.$t('erreurEspaceDisque')
 					} else {
 						this.$socket.emit('modifierfond', this.mur.id, donnees, this.mur.fond, this.identifiant)
 					}
@@ -3891,7 +3938,7 @@ export default {
 				} else if (!this.admin && donnees.identifiant === this.identifiant) {
 					this.notification = this.$t('capsulePubliee', { titre: donnees.titre })
 				}
-				if (this.modaleDiporama) {
+				if (this.modaleDiaporama) {
 					this.$nextTick(function () {
 						this.chargerDiapositive()
 					}.bind(this))
@@ -4004,7 +4051,7 @@ export default {
 					}
 				})
 				this.blocs = blocs
-				if ((this.modale === 'commentaires' && this.bloc === donnees.bloc) || (this.modaleDiporama && this.donneesBloc.bloc === donnees.bloc)) {
+				if ((this.modale === 'commentaires' && this.bloc === donnees.bloc) || (this.modaleDiaporama && this.donneesBloc.bloc === donnees.bloc)) {
 					this.commentaires.unshift({ id: donnees.id, identifiant: donnees.identifiant, nom: donnees.nom, texte: donnees.texte, date: donnees.date })
 				}
 				this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-commente' })
