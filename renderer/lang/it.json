@@ -420,5 +420,6 @@
 	"capsuleEpinglee": "Capsula appuntata",
 	"capsuleDesepinglee": "Capsula non appuntata.",
 	"epinglage": "Appuntamento",
-	"parametreEpinglageModifie": "Impostazione di puntamento della capsula modificata."
+	"parametreEpinglageModifie": "Impostazione di puntamento della capsula modificata.",
+	"erreurEspaceDisque": "Non c'è più spazio libero sul disco rigido del server. Non è stato possibile caricare il file."
 }

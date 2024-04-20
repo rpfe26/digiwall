@@ -420,5 +420,6 @@
 	"capsuleEpinglee": "Zakačena kapsula",
 	"capsuleDesepinglee": "Otkvačena kapsula.",
 	"epinglage": "Prikvačivanje",
-	"parametreEpinglageModifie": "Postavka pričvršćivanja kapsule je promijenjena."
+	"parametreEpinglageModifie": "Postavka pričvršćivanja kapsule je promijenjena.",
+	"erreurEspaceDisque": "Nema više slobodnog prostora na tvrdom disku poslužitelja. Datoteka se nije mogla učitati."
 }
