@@ -35,6 +35,7 @@ import connectRedis from 'connect-redis'
 import session from 'express-session'
 import events from 'events'
 import base64 from 'base-64'
+import checkDiskSpace from 'check-disk-space'
 import { renderPage } from 'vike/server'
 
 const production = process.env.NODE_ENV === 'production'
@@ -66,7 +67,7 @@ async function demarrerServeur () {
 	} else {
 		db = redis.createClient({ port: db_port })
 	}
-	let storeOptions, cookie, dureeSession, dateCron, domainesAutorises
+	let storeOptions, cookie, dureeSession, dateCron, domainesAutorises, minimumEspaceDisque
 	let maintenance = false
 	if (production) {
 		storeOptions = {
@@ -131,6 +132,11 @@ async function demarrerServeur () {
 	cron.schedule(dateCron, async function () {
 		await fs.emptyDir(path.join(__dirname, '..', '/static/temp'))
 	})
+
+	minimumEspaceDisque = 10
+	if (process.env.ALERT_AVAILABLE_SPACE) {
+		minimumEspaceDisque = process.env.ALERT_AVAILABLE_SPACE
+	}
 
 	// Charger plugin dayjs
 	dayjs.extend(localizedFormat)
@@ -848,149 +854,157 @@ async function demarrerServeur () {
 			db.get('mur', function (err, num) {
 				if (err) { res.send('erreur_duplication'); return false }
 				const id = parseInt(num) + 1
-				db.exists('murs:' + mur, async function (err, resultat) {
-					if (err) { res.send('erreur_duplication'); return false }
-					if (resultat === 1) {
-						db.hgetall('murs:' + mur, function (err, donnees) {
+				const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
+				checkDiskSpace(dossier).then(async function (diskSpace) {
+					const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
+					if (espace < minimumEspaceDisque) {
+						res.send('erreur_espace_disque')
+					} else {
+						db.exists('murs:' + mur, async function (err, resultat) {
 							if (err) { res.send('erreur_duplication'); return false }
-							const donneesBlocs = []
-							db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-								if (err) { res.send('erreur_duplication'); return false }
-								for (const [indexBloc, bloc] of blocs.entries()) {
-									const donneesBloc = new Promise(function (resolve) {
-										db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, infos) {
-											if (err || !infos || infos === null) { resolve({}); return false }
+							if (resultat === 1) {
+								db.hgetall('murs:' + mur, function (err, donnees) {
+									if (err) { res.send('erreur_duplication'); return false }
+									const donneesBlocs = []
+									db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
+										if (err) { res.send('erreur_duplication'); return false }
+										for (const [indexBloc, bloc] of blocs.entries()) {
+											const donneesBloc = new Promise(function (resolve) {
+												db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, infos) {
+													if (err || !infos || infos === null) { resolve({}); return false }
+													const date = dayjs().format()
+													if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && !infos.vignette.includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
+														infos.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(infos.vignette)
+													}
+													if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
+														const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
+														const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
+														const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
+														axios.get(url)
+														infos.iframe = etherpad + '/p/' + destinationId
+														infos.media = etherpad + '/p/' + destinationId
+													}
+													let motdepasse = ''
+													if (infos.hasOwnProperty('motdepasse')) {
+														motdepasse = infos.motdepasse
+													}
+													let epinglee = 'non'
+													if (infos.hasOwnProperty('epinglee')) {
+														epinglee = infos.epinglee
+													}
+													const multi = db.multi()
+													const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+													multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', infos.couleur)
+													multi.zadd('blocs:' + id, indexBloc, blocId)
+													multi.exec(function () {
+														resolve(blocId)
+													})
+												})
+											})
+											donneesBlocs.push(donneesBloc)
+										}
+										Promise.all(donneesBlocs).then(function () {
+											const token = Math.random().toString(16).slice(10)
+											const slug = definirSlug(donnees.titre)
 											const date = dayjs().format()
-											if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && !infos.vignette.includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
-												infos.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(infos.vignette)
+											const code = Math.floor(1000 + Math.random() * 9000)
+											if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
+												donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
 											}
-											if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
-												const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
-												const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
-												const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
-												axios.get(url)
-												infos.iframe = etherpad + '/p/' + destinationId
-												infos.media = etherpad + '/p/' + destinationId
-											}
-											let motdepasse = ''
-											if (infos.hasOwnProperty('motdepasse')) {
-												motdepasse = infos.motdepasse
-											}
-											let epinglee = 'non'
-											if (infos.hasOwnProperty('epinglee')) {
-												epinglee = infos.epinglee
+											let epinglage = 'desactive'
+											if (donnees.hasOwnProperty('epinglage')) {
+												epinglage = donnees.epinglage
 											}
 											const multi = db.multi()
-											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-											multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', infos.couleur)
-											multi.zadd('blocs:' + id, indexBloc, blocId)
-											multi.exec(function () {
-												resolve(blocId)
+											multi.incr('mur')
+											if (donnees.hasOwnProperty('code')) {
+												multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+											} else {
+												multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+											}
+											multi.sadd('murs-crees:' + identifiant, id)
+											multi.sadd('utilisateurs-murs:' + id, identifiant)
+											multi.exec(async function () {
+												if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
+													await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
+												}
+												res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
 											})
 										})
 									})
-									donneesBlocs.push(donneesBloc)
-								}
-								Promise.all(donneesBlocs).then(function () {
-									const token = Math.random().toString(16).slice(10)
-									const slug = definirSlug(donnees.titre)
-									const date = dayjs().format()
-									const code = Math.floor(1000 + Math.random() * 9000)
-									if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
-										donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
-									}
-									let epinglage = 'desactive'
-									if (donnees.hasOwnProperty('epinglage')) {
-										epinglage = donnees.epinglage
-									}
-									const multi = db.multi()
-									multi.incr('mur')
-									if (donnees.hasOwnProperty('code')) {
-										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
-									} else {
-										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
-									}
-									multi.sadd('murs-crees:' + identifiant, id)
-									multi.sadd('utilisateurs-murs:' + id, identifiant)
-									multi.exec(async function () {
-										if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
-											await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
-										}
-										res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
-									})
 								})
-							})
-						})
-					} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-						const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-						if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-							const date = dayjs().format()
-							const donneesBlocs = []
-							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-								const donneesBloc = new Promise(function (resolve) {
-									if (Object.keys(bloc).length > 0) {
-										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-											bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
+							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
+								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
+								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
+									const date = dayjs().format()
+									const donneesBlocs = []
+									for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+										const donneesBloc = new Promise(function (resolve) {
+											if (Object.keys(bloc).length > 0) {
+												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+													bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
+												}
+												if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
+													const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
+													const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
+													const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
+													axios.get(url)
+													bloc.iframe = etherpad + '/p/' + destinationId
+													bloc.media = etherpad + '/p/' + destinationId
+												}
+												let motdepasse = ''
+												if (bloc.hasOwnProperty('motdepasse')) {
+													motdepasse = bloc.motdepasse
+												}
+												let epinglee = 'non'
+												if (bloc.hasOwnProperty('epinglee')) {
+													epinglee = bloc.epinglee
+												}
+												const multi = db.multi()
+												const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+												multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
+												multi.zadd('blocs:' + id, indexBloc, blocId)
+												multi.exec(function () {
+													resolve(blocId)
+												})
+											} else {
+												resolve({})
+											}
+										})
+										donneesBlocs.push(donneesBloc)
+									}
+									Promise.all(donneesBlocs).then(function () {
+										const token = Math.random().toString(16).slice(10)
+										const slug = definirSlug(donnees.mur.titre)
+										const code = Math.floor(1000 + Math.random() * 9000)
+										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
+											donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
 										}
-										if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
-											const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
-											const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
-											const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
-											axios.get(url)
-											bloc.iframe = etherpad + '/p/' + destinationId
-											bloc.media = etherpad + '/p/' + destinationId
-										}
-										let motdepasse = ''
-										if (bloc.hasOwnProperty('motdepasse')) {
-											motdepasse = bloc.motdepasse
-										}
-										let epinglee = 'non'
-										if (bloc.hasOwnProperty('epinglee')) {
-											epinglee = bloc.epinglee
+										let epinglage = 'desactive'
+										if (donnees.mur.hasOwnProperty('epinglage')) {
+											epinglage = donnees.mur.epinglage
 										}
 										const multi = db.multi()
-										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-										multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
-										multi.zadd('blocs:' + id, indexBloc, blocId)
-										multi.exec(function () {
-											resolve(blocId)
+										multi.incr('mur')
+										if (donnees.mur.hasOwnProperty('code')) {
+											multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+										} else {
+											multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+										}
+										multi.sadd('murs-crees:' + identifiant, id)
+										multi.sadd('utilisateurs-murs:' + id, identifiant)
+										multi.exec(async function () {
+											if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
+												await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
+											}
+											res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
 										})
-									} else {
-										resolve({})
-									}
-								})
-								donneesBlocs.push(donneesBloc)
-							}
-							Promise.all(donneesBlocs).then(function () {
-								const token = Math.random().toString(16).slice(10)
-								const slug = definirSlug(donnees.mur.titre)
-								const code = Math.floor(1000 + Math.random() * 9000)
-								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
-									donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
-								}
-								let epinglage = 'desactive'
-								if (donnees.mur.hasOwnProperty('epinglage')) {
-									epinglage = donnees.mur.epinglage
-								}
-								const multi = db.multi()
-								multi.incr('mur')
-								if (donnees.mur.hasOwnProperty('code')) {
-									multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+									})
 								} else {
-									multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+									res.send('erreur_duplication')
 								}
-								multi.sadd('murs-crees:' + identifiant, id)
-								multi.sadd('utilisateurs-murs:' + id, identifiant)
-								multi.exec(async function () {
-									if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
-										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
-									}
-									res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
-								})
-							})
-						} else {
-							res.send('erreur_duplication')
-						}
+							}
+						})
 					}
 				})
 			})
@@ -1263,124 +1277,132 @@ async function demarrerServeur () {
 						db.get('mur', async function (err, resultat) {
 							if (err) { res.send('erreur_import'); return false }
 							const id = parseInt(resultat) + 1
-							const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-							const donneesBlocs = []
-							await fs.mkdirp(chemin)
-							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-								const donneesBloc = new Promise(function (resolve) {
-									if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
+							const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
+							checkDiskSpace(dossier).then(async function (diskSpace) {
+								const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
+								if (espace < minimumEspaceDisque) {
+									res.send('erreur_espace_disque')
+								} else {
+									const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+									const donneesBlocs = []
+									await fs.mkdirp(chemin)
+									for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+										const donneesBloc = new Promise(function (resolve) {
+											if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
+												const date = dayjs().format()
+												let commentaires = 0
+												let evaluations = 0
+												if (parametres.commentaires === true) {
+													commentaires = bloc.commentaires
+												}
+												if (parametres.evaluations === true) {
+													evaluations = bloc.evaluations
+												}
+												if (bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+													bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
+												}
+												let motdepasse = ''
+												if (bloc.hasOwnProperty('motdepasse')) {
+													motdepasse = bloc.motdepasse
+												}
+												let epinglee = 'non'
+												if (bloc.hasOwnProperty('epinglee')) {
+													epinglee = bloc.epinglee
+												}
+												const multi = db.multi()
+												const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+												multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
+												multi.zadd('blocs:' + id, indexBloc, blocId)
+												if (parametres.commentaires === true) {
+													for (const commentaire of bloc.listeCommentaires) {
+														if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
+															multi.zadd('commentaires:' + blocId, commentaire.id, JSON.stringify(commentaire))
+														}
+													}
+												}
+												if (parametres.evaluations === true) {
+													for (const evaluation of bloc.listeEvaluations) {
+														if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
+															multi.zadd('evaluations:' + blocId, evaluation.id, JSON.stringify(evaluation))
+														}
+													}
+												}
+												multi.exec(async function () {
+													if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+														await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+													}
+													if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+														await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+													}
+													if (bloc.hasOwnProperty('medias')) {
+														const medias = JSON.parse(bloc.medias)
+														for (let i = 0; i < medias.length; i++) {
+															if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+																await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+															}
+														}
+													}
+													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+														await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+													}
+													resolve({ bloc: bloc.bloc, blocId: blocId })
+												})
+											} else {
+												resolve({ bloc: 0, blocId: 0 })
+											}
+										})
+										donneesBlocs.push(donneesBloc)
+									}
+									Promise.all(donneesBlocs).then(async function (blocs) {
+										const token = Math.random().toString(16).slice(10)
+										const slug = definirSlug(donnees.mur.titre)
 										const date = dayjs().format()
-										let commentaires = 0
-										let evaluations = 0
-										if (parametres.commentaires === true) {
-											commentaires = bloc.commentaires
+										const code = Math.floor(1000 + Math.random() * 9000)
+										let activiteId = 0
+										if (parametres.activite === true) {
+											activiteId = donnees.mur.activite
 										}
-										if (parametres.evaluations === true) {
-											evaluations = bloc.evaluations
+										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
 										}
-										if (bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-											bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
-										}
-										let motdepasse = ''
-										if (bloc.hasOwnProperty('motdepasse')) {
-											motdepasse = bloc.motdepasse
-										}
-										let epinglee = 'non'
-										if (bloc.hasOwnProperty('epinglee')) {
-											epinglee = bloc.epinglee
+										let epinglage = 'desactive'
+										if (donnees.mur.hasOwnProperty('epinglage')) {
+											epinglage = donnees.mur.epinglage
 										}
 										const multi = db.multi()
-										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-										multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
-										multi.zadd('blocs:' + id, indexBloc, blocId)
-										if (parametres.commentaires === true) {
-											for (const commentaire of bloc.listeCommentaires) {
-												if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
-													multi.zadd('commentaires:' + blocId, commentaire.id, JSON.stringify(commentaire))
-												}
+										multi.incr('mur')
+										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId, 'admins', JSON.stringify([]), 'vues', 0)
+										multi.sadd('murs-crees:' + identifiant, id)
+										multi.sadd('utilisateurs-murs:' + id, identifiant)
+										if (parametres.activite === true) {
+											if (parametres.commentaires === false) {
+												donnees.activite = donnees.activite.filter(function (element) {
+													return element.type !== 'bloc-commente'
+												})
 											}
-										}
-										if (parametres.evaluations === true) {
-											for (const evaluation of bloc.listeEvaluations) {
-												if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
-													multi.zadd('evaluations:' + blocId, evaluation.id, JSON.stringify(evaluation))
+											if (parametres.evaluations === false) {
+												donnees.activite = donnees.activite.filter(function (element) {
+													return element.type !== 'bloc-evalue'
+												})
+											}
+											for (const activite of donnees.activite) {
+												if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
+													blocs.forEach(function (item) {
+														if (activite.bloc === item.bloc) {
+															activite.bloc = item.blocId
+														}
+													})
+													multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
 												}
 											}
 										}
 										multi.exec(async function () {
-											if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
-												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
-											}
-											if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
-												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
-											}
-											if (bloc.hasOwnProperty('medias')) {
-												const medias = JSON.parse(bloc.medias)
-												for (let i = 0; i < medias.length; i++) {
-													if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
-													}
-												}
-											}
-											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
-												await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
-											}
-											resolve({ bloc: bloc.bloc, blocId: blocId })
+											await fs.remove(source)
+											await fs.remove(cible)
+											res.json({ id: id, token: token, slug: slug, titre: donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: activiteId, admins: [], vues: 0 })
 										})
-									} else {
-										resolve({ bloc: 0, blocId: 0 })
-									}
-								})
-								donneesBlocs.push(donneesBloc)
-							}
-							Promise.all(donneesBlocs).then(async function (blocs) {
-								const token = Math.random().toString(16).slice(10)
-								const slug = definirSlug(donnees.mur.titre)
-								const date = dayjs().format()
-								const code = Math.floor(1000 + Math.random() * 9000)
-								let activiteId = 0
-								if (parametres.activite === true) {
-									activiteId = donnees.mur.activite
+									})
 								}
-								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
-									await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
-								}
-								let epinglage = 'desactive'
-								if (donnees.mur.hasOwnProperty('epinglage')) {
-									epinglage = donnees.mur.epinglage
-								}
-								const multi = db.multi()
-								multi.incr('mur')
-								multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId, 'admins', JSON.stringify([]), 'vues', 0)
-								multi.sadd('murs-crees:' + identifiant, id)
-								multi.sadd('utilisateurs-murs:' + id, identifiant)
-								if (parametres.activite === true) {
-									if (parametres.commentaires === false) {
-										donnees.activite = donnees.activite.filter(function (element) {
-											return element.type !== 'bloc-commente'
-										})
-									}
-									if (parametres.evaluations === false) {
-										donnees.activite = donnees.activite.filter(function (element) {
-											return element.type !== 'bloc-evalue'
-										})
-									}
-									for (const activite of donnees.activite) {
-										if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
-											blocs.forEach(function (item) {
-												if (activite.bloc === item.bloc) {
-													activite.bloc = item.blocId
-												}
-											})
-											multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
-										}
-									}
-								}
-								multi.exec(async function () {
-									await fs.remove(source)
-									await fs.remove(cible)
-									res.json({ id: id, token: token, slug: slug, titre: donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: activiteId, admins: [], vues: 0 })
-								})
 							})
 						})
 					} else {
@@ -5768,7 +5790,23 @@ async function demarrerServeur () {
 				nom = nom + '_' + Math.random().toString(36).substring(2) + extension
 				callback(null, nom)
 			}
-		})
+		}),
+		fileFilter: function (req, fichier, callback) {
+			if (req.body.mur) {
+				const mur = req.body.mur
+				const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur))
+				checkDiskSpace(dossier).then(function (diskSpace) {
+					const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
+					if (espace < minimumEspaceDisque) {
+						callback('erreur_espace_disque')
+					} else {
+						callback(null, true)
+					}
+				})
+			} else {
+				callback(null, true)
+			}
+		}
 	}).single('fichier')
 
 	const televerserTemp = multer({
@@ -5789,7 +5827,23 @@ async function demarrerServeur () {
 				nom = nom + '_' + Math.random().toString(36).substring(2) + extension
 				callback(null, nom)
 			}
-		})
+		}),
+		fileFilter: function (req, fichier, callback) {
+			if (req.body.mur) {
+				const mur = req.body.mur
+				const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur))
+				checkDiskSpace(dossier).then(function (diskSpace) {
+					const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
+					if (espace < minimumEspaceDisque) {
+						callback('erreur_espace_disque')
+					} else {
+						callback(null, true)
+					}
+				})
+			} else {
+				callback(null, true)
+			}
+		}
 	}).single('fichier')
 
 	async function supprimerFichier (mur, fichier) {

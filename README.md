@@ -56,6 +56,7 @@ VITE_MATOMO_SITE_ID (id de site Matomo / par défaut : 1)
 VITE_NFS_WALL_NUMBER (id de mur à partir de laquelle les fichiers seront enregistrés dans un dossier monté NFS - environ 200 000 pour 1 To de capacité disque)
 VITE_NFS_FOLDER (nom du dossier monté NFS, obligatoirement situé dans le dossier /static/)
 AUTHORIZED_DOMAINS (domaines autorisés pour api serveur. ex : ladigitale.dev,example.com / par défaut : *)
+ALERT_AVAILABLE_SPACE (pourcentage d'espace libre en dessous duquel une alerte est affichée et le téléversement de fichiers empêché / 10 par défaut)
 ```
 
 ### Projet Vue (Vue.js 3 et Vike) avec serveur Node.js (Express) et base de données Redis
