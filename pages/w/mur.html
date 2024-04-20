@@ -808,13 +808,13 @@
 		<!-- Affichage colonne // avec recherche -->
 		<div id="blocs" class="colonnes" v-else-if="mur.affichage === 'colonnes' && action !== 'organiser' && recherche">
 			<template v-for="(col, indexCol) in mur.colonnes">
-				<section :id="'colonne' + indexCol" class="colonne" :class="{'masquee': admin && !mur.affichageColonnes[indexCol], 'large': mur.largeur === 'large'}" v-if="admin || mur.affichageColonnes[indexCol]" :key="'colonne_' + indexCol">
+				<section :id="'colonne' + indexCol" class="colonne" :class="{'masquee': admin && !mur.affichageColonnes[indexCol], 'large': mur.largeur === 'large'}" v-if="blocsRecherche[indexCol].length > 0 && (admin || mur.affichageColonnes[indexCol])" :key="'colonne_' + indexCol">
 					<div class="bloc haut">
 						<div class="titre-colonne">
 							<span>{{ col }}</span>
 						</div>
 					</div>
-					<div class="conteneur-colonne ascenseur" v-if="blocsRecherche[indexCol].length > 0">
+					<div class="conteneur-colonne ascenseur">
 						<div :id="item.bloc" class="bloc" :class="{'privee': item.visibilite === 'privee'}" v-for="(item, indexItem) in blocsRecherche[indexCol]" :style="{'border-color': item.couleur}" :data-bloc="item.bloc" :key="'bloc_' + indexItem">
 							<div class="contenu" v-if="item.visibilite !== 'protegee' || blocsAutorises.includes(item.bloc)">
 								<div class="titre" v-if="item.titre !== ''" :style="{'background': eclaircirCouleur(item.couleur)}">
@@ -1620,7 +1620,7 @@
 		</div>
 	</div>
 
-	<div class="conteneur-modale" role="dialog" tabindex="-1" v-if="modaleDiporama">
+	<div class="conteneur-modale" role="dialog" tabindex="-1" v-if="modaleDiaporama">
 		<div id="diapositive" class="modale-diapositive" :class="{'privee': donneesBloc.visibilite === 'privee'}" :style="{'border-color': donneesBloc.couleur}" role="document" v-show="!chargement">
 			<div class="en-tete">
 				<span class="titre"><span>{{ donneesBloc.titre }}</span> <span>{{ $t('par') }} {{ definirNom(donneesBloc) }}</span></span>
@@ -1698,7 +1698,7 @@
 							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
 								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
 								<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
-								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" modale="diaporama" @emoji="insererEmoji" />
 							</div>
 						</li>
 					</ul>
@@ -1708,7 +1708,7 @@
 					<div class="ecrire-commentaire">
 						<div id="commentaire" :class="{'mobile': mobile === true }" />
 						<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
-						<Emojis v-if="emojis === 'commentaire'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+						<Emojis v-if="emojis === 'commentaire'" :type="emojis" modale="diaporama" @emoji="insererEmoji" />
 					</div>
 				</div>
 			</div>
@@ -1734,7 +1734,7 @@
 							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
 								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
 								<button :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
-								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" modale="diaporama" @emoji="insererEmoji" />
 							</div>
 						</li>
 					</ul>
@@ -1744,7 +1744,7 @@
 					<div class="ecrire-commentaire">
 						<div id="commentaire" :class="{'mobile': mobile === true }" />
 						<button :title="$t('publier')" @click="envoyerCommentaire"><i class="material-icons">send</i></button>
-						<Emojis v-if="emojis === 'commentaire'" :type="emojis" :modale="modale" @emoji="insererEmoji" />
+						<Emojis v-if="emojis === 'commentaire'" :type="emojis" modale="diaporama" @emoji="insererEmoji" />
 					</div>
 				</div>
 			</div>
