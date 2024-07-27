@@ -421,5 +421,6 @@
 	"capsuleDesepinglee": "Cápsula sin fijar.",
 	"epinglage": "Fijar",
 	"parametreEpinglageModifie": "Parámetro de fijación de la cápsula modificado.",
-	"erreurEspaceDisque": "No hay más espacio libre en el disco duro del servidor. No se ha podido cargar el archivo."
+	"erreurEspaceDisque": "No hay más espacio libre en el disco duro del servidor. No se ha podido cargar el archivo.",
+	"actionNonAutorisee": "No está autorizado a realizar esta acción."
 }
