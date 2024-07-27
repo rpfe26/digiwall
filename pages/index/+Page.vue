@@ -2,11 +2,10 @@
 	<div id="page">
 		<div id="accueil" :style="{'background-image': 'url(./img/fond.png)'}">
 			<div id="langues">
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'fr'}" @click="modifierLangue('fr')">FR</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'es'}" @click="modifierLangue('es')">ES</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'it'}" @click="modifierLangue('it')">IT</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'hr'}" @click="modifierLangue('hr')">HR</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'en'}" @click="modifierLangue('en')">EN</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'fr'}" @click="modifierLangue('fr')" @keydown.enter="modifierLangue('fr')">FR</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'es'}" @click="modifierLangue('es')" @keydown.enter="modifierLangue('es')">ES</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'it'}" @click="modifierLangue('it')" @keydown.enter="modifierLangue('it')">IT</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'en'}" @click="modifierLangue('en')" @keydown.enter="modifierLangue('en')">EN</span>
 			</div>
 			<div id="conteneur">
 				<div id="contenu">
@@ -16,36 +15,36 @@
 					<div>
 						<p v-html="$t('slogan')" />
 						<div id="actions">
-							<span class="bouton" role="button" tabindex="0" @click="afficherModaleConnexion">{{ $t('seConnecter') }}</span>
-							<span class="bouton" role="button" tabindex="0" @click="afficherModaleInscription" v-if="creationCompte === 1">{{ $t('sInscrire') }}</span>
+							<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConnexion" @keydown.enter="afficherModaleConnexion">{{ $t('seConnecter') }}</span>
+							<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleInscription" @keydown.enter="afficherModaleInscription" v-if="creationCompte === 1">{{ $t('sInscrire') }}</span>
 							<div v-if="creationMurSansCompte === 1">
-								<span class="bouton" role="button" tabindex="0" @click="afficherModaleCreer">{{ $t('creerMur') }}</span>
+								<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleCreer" @keydown.enter="afficherModaleCreer">{{ $t('creerMur') }}</span>
 							</div>
 						</div>
 					</div>
 				</div>
 				<div id="credits">
-					<p><span class="mentions-legales" @click="modale = 'mentions-legales'">{{ $t('mentionsLegales') }}</span> - <a href="https://opencollective.com/ladigitale" target="_blank">{{ $t('soutien') }} ❤️.</a></p>
-					<p>{{ new Date().getFullYear() }} - <a href="https://ladigitale.dev" target="_blank" rel="noreferrer">La Digitale</a> - <a href="https://codeberg.org/ladigitale/digiwall" target="_blank" rel="noreferrer">{{ $t('codeSource') }}</a> - <a href="https://codeberg.org/ladigitale/digiwall/releases" target="_blank" rel="noreferrer">v{{ version }}</a> - <span class="hub" @click="ouvrirHub"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#001d1d" width="36px" height="36px"><path d="M0 0h24v24H0z" fill="none" /><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" /></svg></span></p>
+					<p><span class="mentions-legales" role="button" :tabindex="definirTabIndex()" @click="afficherMentionsLegales" @keydown.enter="afficherMentionsLegales">{{ $t('mentionsLegales') }}</span> - <a href="https://opencollective.com/ladigitale" target="_blank">{{ $t('soutien') }} ❤️.</a></p>
+					<p>{{ new Date().getFullYear() }} - <a href="https://ladigitale.dev" target="_blank" rel="noreferrer">La Digitale</a> - <a href="https://codeberg.org/ladigitale/digiwall" target="_blank" rel="noreferrer">{{ $t('codeSource') }}</a> - <a href="https://codeberg.org/ladigitale/digiwall/releases" target="_blank" rel="noreferrer">v{{ version }}</a> - <span class="hub" role="button" :tabindex="definirTabIndex()" @click="ouvrirHub" @keydown.enter="ouvrirHub"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#001d1d" width="36px" height="36px"><path d="M0 0h24v24H0z" fill="none" /><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" /></svg></span></p>
 				</div>
 			</div>
 		</div>
 
-		<div class="conteneur-modale" role="dialog" tabindex="-1" v-if="modale === 'creer'">
-			<div id="creation" class="modale" role="document">
+		<div class="conteneur-modale" v-if="modale === 'creer'">
+			<div id="creation" class="modale" role="dialog">
 				<div class="en-tete">
 					<span class="titre">{{ $t('creerMur') }}</span>
-					<span role="button" tabindex="0" class="fermer" @click="fermerModaleCreer"><i class="material-icons">close</i></span>
+					<span class="fermer" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModaleCreer" @keydown.enter="fermerModaleCreer"><i class="material-icons">close</i></span>
 				</div>
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-titre-mur">{{ $t('titreMur') }}</label>
-						<input id="champ-titre-mur" type="text" maxlength="48" v-model.lazy="titre">
+						<input id="champ-titre-mur" type="text" maxlength="48" v-model="titre">
 						<label for="champ-motdepasse-mur">{{ $t('motDePasseMur') }}</label>
 						<p class="information">{{ $t('infoMotDePasseMur') }}</p>
-						<input id="champ-motdepasse-mur" type="text" maxlength="48" v-model.lazy="motDePasseMur" @keydown.enter="creerMur">
+						<input id="champ-motdepasse-mur" type="text" maxlength="48" v-model="motDePasseMur" @keydown.enter="creerMur">
 						<div class="actions">
-							<span role="button" tabindex="0" class="bouton" @click="creerMur" v-if="!chargement">{{ $t('creer') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="creerMur" @keydown.enter="creerMur" v-if="!chargement">{{ $t('creer') }}</span>
 							<div class="conteneur-chargement" v-else>
 								<div class="chargement" />
 							</div>
@@ -55,21 +54,21 @@
 			</div>
 		</div>
 
-		<div class="conteneur-modale" role="dialog" tabindex="-1" v-else-if="modale === 'connexion' || modale === 'mot-de-passe-oublie'">
-			<div id="connexion" class="modale" role="document" v-if="modale === 'connexion'">
+		<div class="conteneur-modale" v-else-if="modale === 'connexion' || modale === 'mot-de-passe-oublie'">
+			<div id="connexion" class="modale" role="dialog" v-if="modale === 'connexion'">
 				<div class="en-tete">
 					<span class="titre">{{ $t('seConnecter') }}</span>
-					<span role="button" tabindex="0" class="fermer" @click="fermerModaleConnexion"><i class="material-icons">close</i></span>
+					<span class="fermer" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModaleConnexion" @keydown.enter="fermerModaleConnexion"><i class="material-icons">close</i></span>
 				</div>
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-identifiant">{{ $t('identifiant') }}</label>
-						<input id="champ-identifiant" type="text" maxlength="48" v-model.lazy="identifiant">
+						<input id="champ-identifiant" type="text" maxlength="48" v-model="identifiant">
 						<label for="champ-motdepasse">{{ $t('motDePasse') }}</label>
-						<input id="champ-motdepasse" type="password" maxlength="48" v-model.lazy="motDePasse" @keydown.enter="seConnecter">
-						<div class="mot-de-passe-oublie" @click="afficherModaleMotDePasseOublie" v-html="$t('motDePasseOublie')" />
+						<input id="champ-motdepasse" type="password" maxlength="48" v-model="motDePasse" @keydown.enter="seConnecter">
+						<div class="mot-de-passe-oublie" role="button" :tabindex="message === '' ? 0 : -1" @click="afficherModaleMotDePasseOublie" @keydown.enter="afficherModaleMotDePasseOublie" v-html="$t('motDePasseOublie')" />
 						<div class="actions">
-							<span role="button" tabindex="0" class="bouton" @click="seConnecter" v-if="!chargement">{{ $t('valider') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="seConnecter" @keydown.enter="seConnecter" v-if="!chargement">{{ $t('valider') }}</span>
 							<div class="conteneur-chargement" v-else>
 								<div class="chargement" />
 							</div>
@@ -77,17 +76,17 @@
 					</div>
 				</div>
 			</div>
-			<div class="modale" role="document" v-else-if="modale === 'mot-de-passe-oublie'">
+			<div class="modale" role="dialog" v-else-if="modale === 'mot-de-passe-oublie'">
 				<div class="en-tete">
 					<span class="titre">{{ $t('motDePasseOublie') }}</span>
-					<span class="fermer" @click="fermerModaleMotDePasseOublie"><i class="material-icons">close</i></span>
+					<span class="fermer" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModaleMotDePasseOublie" @keydown.enter="fermerModaleMotDePasseOublie"><i class="material-icons">close</i></span>
 				</div>
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-email">{{ $t('email') }}</label>
-						<input id="champ-email" type="text" v-model.lazy="email" @keydown.enter="envoyerMotDePasse">
+						<input id="champ-email" type="text" v-model="email" @keydown.enter="envoyerMotDePasse">
 						<div class="actions">
-							<span role="button" tabindex="0" class="bouton" @click="envoyerMotDePasse" v-if="!chargement">{{ $t('valider') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="envoyerMotDePasse" @keydown.enter="envoyerMotDePasse" v-if="!chargement">{{ $t('valider') }}</span>
 							<div class="conteneur-chargement" v-else>
 								<div class="chargement" />
 							</div>
@@ -97,26 +96,26 @@
 			</div>
 		</div>
 
-		<div class="conteneur-modale" role="dialog" tabindex="-1" v-else-if="modale === 'inscription'">
-			<div id="inscription" class="modale" role="document">
+		<div class="conteneur-modale" v-else-if="modale === 'inscription'">
+			<div id="inscription" class="modale" role="dialog">
 				<div class="en-tete">
 					<span class="titre">{{ $t('sInscrire') }}</span>
-					<span class="fermer" @click="fermerModaleInscription"><i class="material-icons">close</i></span>
+					<span class="fermer" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModaleInscription" @keydown.enter="fermerModaleInscription"><i class="material-icons">close</i></span>
 				</div>
 				<div class="conteneur">
 					<div class="contenu">
 						<label for="champ-identifiant">{{ $t('identifiant') }}</label>
 						<p class="information">{{ $t('infoIdentifiant') }}</p>
-						<input id="champ-identifiant" type="text" maxlength="48" v-model.lazy="identifiant">
+						<input id="champ-identifiant" type="text" maxlength="48" v-model="identifiant">
 						<label for="champ-email">{{ $t('email') }}</label>
 						<input id="champ-email" type="text" v-model="email">
 						<label for="champ-motdepasse">{{ $t('motDePasse') }}</label>
 						<p class="information">{{ $t('infoMotDePasse') }}</p>
-						<input id="champ-motdepasse" type="password" maxlength="48" v-model.lazy="motDePasse">
+						<input id="champ-motdepasse" type="password" maxlength="48" v-model="motDePasse">
 						<label for="champ-confirmation-motdepasse">{{ $t('confirmationMotDePasse') }}</label>
-						<input id="champ-confirmation-motdepasse" type="password" maxlength="48" v-model.lazy="confirmationMotDePasse" @keydown.enter="sInscrire">
+						<input id="champ-confirmation-motdepasse" type="password" maxlength="48" v-model="confirmationMotDePasse" @keydown.enter="sInscrire">
 						<div class="actions">
-							<span role="button" tabindex="0" class="bouton" @click="sInscrire" v-if="!chargement">{{ $t('valider') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="sInscrire" @keydown.enter="sInscrire" v-if="!chargement">{{ $t('valider') }}</span>
 							<div class="conteneur-chargement" v-else>
 								<div class="chargement" />
 							</div>
@@ -126,11 +125,11 @@
 			</div>
 		</div>
 
-		<div class="conteneur-modale" role="dialog" tabindex="-1" v-else-if="modale === 'mentions-legales'">
-			<div id="mentions-legales" class="modale" role="document">
+		<div class="conteneur-modale" v-else-if="modale === 'mentions-legales'">
+			<div id="mentions-legales" class="modale" role="dialog">
 				<div class="en-tete">
 					<span class="titre">{{ $t('mentionsLegales') }}</span>
-					<span class="fermer" @click="modale = ''"><i class="material-icons">close</i></span>
+					<span class="fermer" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModale" @keydown.enter="fermerModale"><i class="material-icons">close</i></span>
 				</div>
 				<div class="conteneur">
 					<div class="contenu">
@@ -138,7 +137,7 @@
 						<label>{{ $t('administrationEtDeveloppement') }}</label>
 						<p>La Digitale - Emmanuel ZIMMERT</p>
 						<label>{{ $t('contact') }}</label>
-						<p>{{ $t('courriel') }} ez@ladigitale.dev – {{ $t('siteWeb') }} https://ladigitale.dev</p>
+						<p>{{ $t('courriel') }} ez[at]ladigitale.dev – {{ $t('siteWeb') }} https://ladigitale.dev</p>
 						<label>{{ $t('proprieteIntellectuelle') }}</label>
 						<p>{{ $t('mentionsLegales2') }}</p>
 						<p>{{ $t('mentionsLegales3') }}</p>
@@ -152,14 +151,14 @@
 			</div>
 		</div>
 
-		<div id="hub" :class="{'ouvert': hub}">
-			<span @click="fermerHub"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff" width="36px" height="36px"><path d="M0 0h24v24H0z" fill="none" /><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg></span>
-			<iframe src="https://ladigitale.dev/hub.html" />
+		<div id="hub" :class="{'ouvert': hub}" :tabindex="hub ? 0 : -1">
+			<span role="button" :tabindex="hub ? 0 : -1" @click="fermerHub" @keydown.enter="fermerHub"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#fff" width="36px" height="36px"><path d="M0 0h24v24H0z" fill="none" /><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg></span>
+			<iframe src="https://ladigitale.dev/hub.html" title="Le Hub by La Digitale"></iframe>
 		</div>
 
 		<Notification :notification="notification" @fermer="notification = ''" v-if="notification !== ''" />
 
-		<Message :message="message" @fermer="message = ''" v-if="message !== ''" />
+		<Message :message="message" @elementPrecedent="definirElementPrecedent" @fermer="fermerMessage" v-if="message !== ''" />
 
 		<ChargementPage v-if="chargementPage" />
 	</div>
@@ -192,6 +191,7 @@ export default {
 			confirmationMotDePasse: '',
 			email: '',
 			hub: false,
+			elementPrecedent: null,
 			hote: this.$pageContext.pageProps.hote,
 			langues: this.$pageContext.pageProps.langues,
 			langue: this.$pageContext.pageProps.langue,
@@ -223,12 +223,21 @@ export default {
 		setTimeout(function () {
 			this.chargementPage = false
 		}.bind(this), 300)
+
+		document.addEventListener('keydown', this.gererClavier, false)
+	},
+	beforeUnmount () {
+		document.removeEventListener('keydown', this.gererClavier, false)
 	},
 	methods: {
+		definirTabIndex () {
+			return this.modale === '' && this.message === '' && !this.hub ? 0 : -1
+		},
 		afficherModaleCreer () {
+			this.elementPrecedent = (document.activeElement || document.body)
 			this.modale = 'creer'
 			this.$nextTick(function () {
-				document.querySelector('input').focus()
+				document.querySelector('.modale input').focus()
 			})
 		},
 		creerMur () {
@@ -256,8 +265,10 @@ export default {
 		fermerModaleCreer () {
 			this.modale = ''
 			this.titre = ''
+			this.gererFocus()
 		},
 		afficherModaleConnexion () {
+			this.elementPrecedent = (document.activeElement || document.body)
 			this.modale = 'connexion'
 			this.$nextTick(function () {
 				document.querySelector('input').focus()
@@ -286,9 +297,10 @@ export default {
 			}
 		},
 		afficherModaleInscription () {
+			this.elementPrecedent = (document.activeElement || document.body)
 			this.modale = 'inscription'
 			this.$nextTick(function () {
-				document.querySelector('input').focus()
+				document.querySelector('.modale input').focus()
 			})
 		},
 		sInscrire () {
@@ -337,7 +349,7 @@ export default {
 			this.motDePasse = ''
 			this.modale = 'mot-de-passe-oublie'
 			this.$nextTick(function () {
-				document.querySelector('input').focus()
+				document.querySelector('.modale input').focus()
 			})
 		},
 		envoyerMotDePasse () {
@@ -372,17 +384,20 @@ export default {
 			this.modale = ''
 			this.identifiant = ''
 			this.motDePasse = ''
+			this.gererFocus()
 		},
 		fermerModaleInscription () {
 			this.modale = ''
 			this.identifiant = ''
 			this.motDePasse = ''
 			this.confirmationMotDePasse = ''
+			this.gererFocus()
 		},
 		fermerModaleMotDePasseOublie () {
 			this.modale = ''
 			this.identifiant = ''
 			this.email = ''
+			this.gererFocus()
 		},
 		modifierLangue (langue) {
 			if (this.langue !== langue) {
@@ -399,11 +414,58 @@ export default {
 				}.bind(this))
 			}
 		},
+		afficherMentionsLegales () {
+			this.elementPrecedent = (document.activeElement || document.body)
+			this.modale = 'mentions-legales'
+			this.$nextTick(function () {
+				document.querySelector('.modale .fermer').focus()
+			})
+		},
 		ouvrirHub () {
+			this.elementPrecedent = (document.activeElement || document.body)
 			this.hub = true
+			this.$nextTick(function () {
+				document.querySelector('#hub span').focus()
+			})
 		},
 		fermerHub () {
 			this.hub = false
+			this.gererFocus()
+		},
+		fermerModale () {
+			this.modale = ''
+			this.gererFocus()
+		},
+		fermerMessage () {
+			this.message = ''
+			this.gererFocus()
+		},
+		definirElementPrecedent (element) {
+			this.elementPrecedent = element
+		},
+		gererFocus () {
+			if (this.elementPrecedent) {
+				this.elementPrecedent.focus()
+				this.elementPrecedent = null
+			}
+		},
+		gererClavier (event) {
+			if (event.key === 'Escape' && this.message !== '') {
+				this.fermerMessage()
+			} else if (event.key === 'Escape' && this.modale === 'creer') {
+				this.fermerModaleCreer()
+			} else if (event.key === 'Escape' && this.modale === 'connexion') {
+				this.fermerModaleConnexion()
+			} else if (event.key === 'Escape' && this.modale === 'mot-de-passe-oublie') {
+				this.fermerModaleMotDePasseOublie()
+			} else if (event.key === 'Escape' && this.modale === 'inscription') {
+				this.fermerModaleInscription()
+			} else if (event.key === 'Escape' && this.modale !== '') {
+				this.fermerModale()
+			} else if (event.key === 'Escape' && this.hub) {
+				this.hub = false
+				this.gererFocus()
+			}
 		}
 	}
 }

@@ -1,37 +1,27 @@
-import axios from 'axios'
-
 export { onBeforeRender }
 
 async function onBeforeRender (pageContext) {
 	let pageProps, erreur
-	const identifiant = pageContext.identifiant
-	const reponse = await axios.post(pageContext.hote + '/api/recuperer-donnees-utilisateur', {
-		identifiant: identifiant
-	}, {
-		headers: { 'Content-Type': 'application/json' }
-	}).catch(function () {
+	if (pageContext.hasOwnProperty('erreur')) {
 		erreur = true
 		pageProps = { erreur }
-	})
-	if (reponse && reponse.hasOwnProperty('data') && pageContext.statut === 'utilisateur') {
+	} else {
 		const params = pageContext.params
 		const hote = pageContext.hote
+		const identifiant = pageContext.identifiant
 		const nom = pageContext.nom
 		const email = pageContext.email
 		const langue = pageContext.langue
 		const statut = pageContext.statut
-		const affichage = reponse.data.affichage
-		const classement = reponse.data.classement
-		const mursCrees = reponse.data.mursCrees
-		const mursRejoints = reponse.data.mursRejoints
-		const mursAdmins = reponse.data.mursAdmins
-		const mursFavoris = reponse.data.mursFavoris
-		const dossiers = reponse.data.dossiers
+		const affichage = pageContext.affichage
+		const classement = pageContext.classement
+		const mursCrees = pageContext.mursCrees
+		const mursRejoints = pageContext.mursRejoints
+		const mursAdmins = pageContext.mursAdmins
+		const mursFavoris = pageContext.mursFavoris
+		const dossiers = pageContext.dossiers
 		const titre = identifiant + ' - Digiwall by La Digitale'
 		pageProps = { params, hote, identifiant, nom, email, langue, statut, affichage, classement, mursCrees, mursRejoints, mursAdmins, mursFavoris, dossiers, titre }
-	} else {
-		erreur = true
-		pageProps = { erreur }
 	}
 	return {
 		pageContext: {

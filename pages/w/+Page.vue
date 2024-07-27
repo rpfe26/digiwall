@@ -4,4 +4,6 @@
 
 <style scoped src="./mur.css"></style>
 
+<style src="./capsule.css"></style>
+
 <style src="./jspanel.css"></style>

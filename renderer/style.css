@@ -83,18 +83,15 @@ body {
 
 audio {
 	width: 100%;
-	outline: none;
 }
 
 video,
 img {
 	max-width: 100%;
 	height: auto;
-	outline: none;
 }
 
 a {
-	outline: none;
 	text-decoration: none;
 }
 
@@ -921,11 +918,6 @@ label.bouton-bleu {
 	color: #aaa;
 }
 
-.contenu-editeur:lang(hr):empty:before {
-	content: 'Dodavanje teksta...';
-	color: #aaa;
-}
-
 #commentaire.mobile .boutons-editeur-commentaire {
 	order: 2;
 	border-top-left-radius: 0;
@@ -1012,7 +1004,7 @@ label.bouton-bleu {
 	line-height: 1;
 	cursor: help;
 }
-  
+
 .info:before {
 	visibility: hidden;
 	font-size: 1.1rem;
@@ -1032,7 +1024,7 @@ label.bouton-bleu {
 	text-align: center;
 	transition: 0.2s ease-in-out;
 }
-  
+
 .info:after {
 	visibility: hidden;
 	content: '';
@@ -1049,13 +1041,15 @@ label.bouton-bleu {
 	transition: 0.2s ease-in-out;
 	opacity: 0;
 }
-  
+
+.info:focus:before,
 .info:active:before {
 	visibility: visible;
 	opacity: 1;
 	bottom: 3rem;
 }
-  
+
+.info:focus:after,
 .info:active:after {
 	visibility: visible;
 	opacity: 1;
@@ -1079,7 +1073,7 @@ label.bouton-bleu {
 	bottom: 3rem;
 	animation: fonduEntrantNotification 0.4s;
 }
-  
+
 @keyframes fonduEntrantNotification {
 	from { bottom: 0; opacity: 0; }
 	to { bottom: 3rem; opacity: 1; }

@@ -2,159 +2,158 @@
 	<div id="page" v-if="acces">
 		<div id="accueil">
 			<div id="langues">
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'fr'}" @click="modifierLangue('fr')">FR</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'es'}" @click="modifierLangue('es')">ES</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'it'}" @click="modifierLangue('it')">IT</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'hr'}" @click="modifierLangue('hr')">HR</span>
-				<span class="bouton" role="button" tabindex="0" :class="{'selectionne': langue === 'en'}" @click="modifierLangue('en')">EN</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'fr'}" @click="modifierLangue('fr')" @keydown.enter="modifierLangue('fr')">FR</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'es'}" @click="modifierLangue('es')" @keydown.enter="modifierLangue('es')">ES</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'it'}" @click="modifierLangue('it')" @keydown.enter="modifierLangue('it')">IT</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'en'}" @click="modifierLangue('en')" @keydown.enter="modifierLangue('en')">EN</span>
 			</div>
 			<div id="conteneur">
 				<h1>
 					<span>{{ $t('maintenance') }}</span>
 				</h1>
 				<div class="conteneur actions">
-					<span class="bouton maintenance" role="button" tabindex="0" @click="activerMaintenance" v-if="maintenance === false">{{ $t('activerMaintenance') }}</span>
-					<span class="bouton maintenance" role="button" tabindex="0" @click="desactiverMaintenance" v-else>{{ $t('desactiverMaintenance') }}</span>
+					<span class="bouton maintenance" role="button" :tabindex="definirTabIndex()" @click="activerMaintenance" @keydown.enter="activerMaintenance" v-if="maintenance === false">{{ $t('activerMaintenance') }}</span>
+					<span class="bouton maintenance" role="button" :tabindex="definirTabIndex()" @click="desactiverMaintenance" @keydown.enter="desactiverMaintenance" v-else>{{ $t('desactiverMaintenance') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('modifierMotDePasseUtilisateur') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('identifiant') }}</label>
-					<input type="text" v-model.lazy="identifiant">
+					<label for="champ-identifiant">{{ $t('identifiant') }}</label>
+					<input id="champ-identifiant" type="text" v-model.lazy="identifiant">
 				</div>
 				<div class="conteneur">
-					<label>{{ $t('email') }}</label>
-					<input type="text" v-model.lazy="email">
+					<label for="champ-email">{{ $t('email') }}</label>
+					<input id="champ-email" type="text" v-model.lazy="email">
 				</div>
 				<div class="conteneur">
-					<label>{{ $t('motDePasse') }}</label>
-					<input type="text" maxlength="48" v-model.lazy="motdepasse">
+					<label for="champ-motdepasse">{{ $t('motDePasse') }}</label>
+					<input id="champ-motdepasse" type="text" maxlength="48" v-model.lazy="motdepasse">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="modifierMotDePasse">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="modifierMotDePasse" @keydown.enter="modifierMotDePasse">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('recupererDonneesMur') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" v-model.lazy="murId">
+					<label for="champ-numero-mur">{{ $t('numeroMur') }}</label>
+					<input id="champ-numero-mur" type="number" v-model.lazy="murId">
 				</div>
 				<div class="conteneur" v-if="donneesMur !== ''">
 					<span class="donnees">{{ donneesMur }}</span>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="recupererDonneesMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesMur" @keydown.enter="recupererDonneesMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('modifierDonneesMur') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" v-model.lazy="murIdM">
+					<label for="champ-numero-mur-m">{{ $t('numeroMur') }}</label>
+					<input id="champ-numero-mur-m" type="number" v-model.lazy="murIdM">
 				</div>
 				<div class="conteneur">
-					<label>{{ $t('champ') }}</label>
-					<select @change="champ = $event.target.value">
+					<label for="champ">{{ $t('champ') }}</label>
+					<select id="champ" @change="champ = $event.target.value">
 						<option value="" :selected="champ === ''">-</option>
 						<option value="code" :selected="champ === 'code'">{{ $t('codeAcces') }}</option>
 						<option value="motdepasse" :selected="champ === 'motdepasse'">{{ $t('motDePasse') }}</option>
 					</select>
 				</div>
 				<div class="conteneur">
-					<label>{{ $t('valeur') }}</label>
-					<input type="text" v-model.lazy="valeur" :maxlength="18" v-if="champ === 'code'">
-					<input type="text" v-model.lazy="valeur" v-else>
+					<label for="champ-valeur">{{ $t('valeur') }}</label>
+					<input id="champ-valeur" type="text" v-model.lazy="valeur" :maxlength="18" v-if="champ === 'code'">
+					<input id="champ-valeur" type="text" v-model.lazy="valeur" v-else>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="modifierDonneesMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="modifierDonneesMur" @keydown.enter="modifierDonneesMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('exporterMur') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" v-model.lazy="murIdE">
+					<label for="champ-numero-mur-e">{{ $t('numeroMur') }}</label>
+					<input id="champ-numero-mur-e" type="number" v-model.lazy="murIdE">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="exporterMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="exporterMur" @keydown.enter="exporterMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('rattacherMur') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" v-model.lazy="murIdR">
+					<label for="champ-numero-mur-r">{{ $t('numeroMur') }}</label>
+					<input id="champ-numero-mur-r" type="number" v-model.lazy="murIdR">
 				</div>
 				<div class="conteneur">
-					<label>{{ $t('identifiantDestination') }}</label>
-					<input type="text" v-model.lazy="identifiantRa">
+					<label for="champ-identifiant-ra">{{ $t('identifiantDestination') }}</label>
+					<input id="champ-identifiant-ra" type="text" v-model.lazy="identifiantRa">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="modale = 'rattacher-mur'">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleRattacher" @keydown.enter="afficherModaleRattacher">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('supprimerMur') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('numeroMur') }}</label>
-					<input type="number" v-model.lazy="murIdS">
+					<label for="champ-numero-mur-s">{{ $t('numeroMur') }}</label>
+					<input id="champ-numero-mur-s" type="number" v-model.lazy="murIdS">
 				</div>
 				<div class="conteneur">
 					<div class="conteneur-interrupteur">
 						<span>{{ $t('supprimerFichiersServeur') }}</span>
-						<label class="bouton-interrupteur">
-							<input type="checkbox" :checked="suppressionFichiers" @change="modifierSuppressionFichiers">
+						<label class="bouton-interrupteur" :tabindex="definirTabIndex()" @keydown.enter="activerInput('suppression-fichier')">
+							<input id="suppression-fichier" type="checkbox" :checked="suppressionFichiers" @change="modifierSuppressionFichiers">
 							<span class="barre" />
 						</label>
 					</div>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="modale = 'supprimer-mur'">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleSupprimerMur" @keydown.enter="afficherModaleSupprimerMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('recupererDonneesUtilisateur') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('identifiant') }}</label>
-					<input type="text" v-model.lazy="identifiantR">
+					<label for="champ-identifiant-r">{{ $t('identifiant') }}</label>
+					<input id="champ-identifiant-r" type="text" v-model.lazy="identifiantR">
 				</div>
 				<div class="conteneur" v-if="donneesUtilisateur !== ''">
 					<span class="donnees">{{ donneesUtilisateur }}</span>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="recupererDonneesUtilisateur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesUtilisateur" @keydown.enter="recupererDonneesUtilisateur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('transfererCompte') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('identifiantCompteATransferer') }}</label>
-					<input type="text" v-model.lazy="identifiantO">
+					<label for="champ-identifiant-o">{{ $t('identifiantCompteATransferer') }}</label>
+					<input id="champ-identifiant-o" type="text" v-model.lazy="identifiantO">
 				</div>
 				<div class="conteneur">
-					<label>{{ $t('identifiantDestination') }}</label>
-					<input type="text" v-model.lazy="identifiantT">
+					<label for="champ-identifiant-t">{{ $t('identifiantDestination') }}</label>
+					<input id="champ-identifiant-t" type="text" v-model.lazy="identifiantT">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="modale = 'transferer-compte'">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererCompte" @keydown.enter="afficherModaleTransfererCompte">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('supprimerCompte') }}</span>
 				</h1>
 				<div class="conteneur">
-					<label>{{ $t('identifiant') }}</label>
-					<input type="text" v-model.lazy="identifiantS">
+					<label for="champ-identifiant-s">{{ $t('identifiant') }}</label>
+					<input id="champ-identifiant-s" type="text" v-model.lazy="identifiantS">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" tabindex="0" @click="modale = 'supprimer-compte'">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleSupprimerCompte" @keydown.enter="afficherModaleSupprimerCompte">{{ $t('valider') }}</span>
 				</div>
 			</div>
 		</div>
 
-		<div id="conteneur-message" class="conteneur-modale" role="dialog" tabindex="-1" v-if="modale !== ''">
-			<div class="modale" role="document">
+		<div id="conteneur-message" class="conteneur-modale" v-if="modale !== ''">
+			<div class="modale" role="dialog">
 				<div class="conteneur">
 					<div class="contenu">
 						<div class="message" v-html="$t('confirmationRattacherMur')" v-if="modale === 'rattacher-mur'" />
@@ -162,11 +161,11 @@
 						<div class="message" v-html="$t('confirmationTransfererCompte')" v-else-if="modale === 'transferer-compte'" />
 						<div class="message" v-html="$t('confirmationSupprimerCompteAdmin')" v-else-if="modale === 'supprimer-compte'" />
 						<div class="actions">
-							<span role="button" tabindex="0" class="bouton" @click="modale = ''">{{ $t('non') }}</span>
-							<span role="button" tabindex="0" class="bouton" @click="rattacherMur" v-if="modale === 'rattacher-mur'">{{ $t('oui') }}</span>
-							<span role="button" tabindex="0" class="bouton" @click="supprimerMur" v-else-if="modale === 'supprimer-mur'">{{ $t('oui') }}</span>
-							<span role="button" tabindex="0" class="bouton" @click="transfererCompte" v-else-if="modale === 'transferer-compte'">{{ $t('oui') }}</span>
-							<span role="button" tabindex="0" class="bouton" @click="supprimerCompte" v-else-if="modale === 'supprimer-compte'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModale" @keydown.enter="fermerModale">{{ $t('non') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="rattacherMur" @keydown.enter="rattacherMur" v-if="modale === 'rattacher-mur'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerMur" @keydown.enter="supprimerMur" v-else-if="modale === 'supprimer-mur'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="transfererCompte" @keydown.enter="transfererCompte" v-else-if="modale === 'transferer-compte'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerCompte" @keydown.enter="supprimerCompte" v-else-if="modale === 'supprimer-compte'">{{ $t('oui') }}</span>
 						</div>
 					</div>
 				</div>
@@ -175,7 +174,7 @@
 
 		<Notification :notification="notification" @fermer="notification = ''" v-if="notification !== ''" />
 
-		<Message :message="message" @fermer="message = ''" v-if="message !== ''" />
+		<Message :message="message" @elementPrecedent="definirElementPrecedent" @fermer="fermerMessage" v-if="message !== ''" />
 
 		<Chargement v-if="chargement" />
 	</div>
@@ -223,6 +222,7 @@ export default {
 			valeur: '',
 			maintenance: false,
 			suppressionFichiers: true,
+			elementPrecedent: null,
 			hote: this.$pageContext.pageProps.hote,
 			langue: this.$pageContext.pageProps.langue
 		}
@@ -244,9 +244,13 @@ export default {
 				if (donnees === 'acces_verifie') {
 					this.acces = true
 					this.admin = motdepasse
+					document.addEventListener('keydown', this.gererClavier, false)
 				}
 			}.bind(this))
 		}
+	},
+	beforeUnmount () {
+		document.removeEventListener('keydown', this.gererClavier, false)
 	},
 	methods: {
 		modifierLangue (langue) {
@@ -264,11 +268,17 @@ export default {
 				}.bind(this))
 			}
 		},
+		activerInput (id) {
+			document.querySelector('#' + id).click()
+		},
+		definirTabIndex () {
+			return this.modale === '' && this.message === '' ? 0 : -1
+		},
 		activerMaintenance () {
-			this.$socket.emit('activermaintenance')
+			this.$socket.emit('activermaintenance', this.admin)
 		},
 		desactiverMaintenance () {
-			this.$socket.emit('desactivermaintenance')
+			this.$socket.emit('desactivermaintenance', this.admin)
 		},
 		modifierMotDePasse () {
 			if (this.motdepasse.trim() !== '' && (this.identifiant !== '' || this.email !== '')) {
@@ -306,6 +316,7 @@ export default {
 			if (this.murId !== '') {
 				this.chargement = true
 				axios.post(this.hote + '/api/recuperer-donnees-mur-admin', {
+					admin: this.admin,
 					murId: this.murId
 				}).then(function (reponse) {
 					this.chargement = false
@@ -314,6 +325,8 @@ export default {
 						this.message = this.$t('erreurActionServeur')
 					} else if (donnees === 'mur_inexistant') {
 						this.message = this.$t('murInexistant')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						this.donneesMur = donnees
 					}
@@ -328,6 +341,7 @@ export default {
 			if (this.murIdM !== '' && this.champ !== '' && this.valeur.trim() !== '') {
 				this.chargement = true
 				axios.post(this.hote + '/api/modifier-donnees-mur-admin', {
+					admin: this.admin,
 					murId: this.murIdM,
 					champ: this.champ,
 					valeur: this.valeur
@@ -338,6 +352,8 @@ export default {
 						this.message = this.$t('erreurActionServeur')
 					} else if (donnees === 'mur_inexistant') {
 						this.message = this.$t('murInexistant')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						this.notification = this.$t('donneesModifiees')
 					}
@@ -365,13 +381,14 @@ export default {
 					identifiant: '',
 					admin: this.admin
 				}).then(function (reponse) {
+					this.chargement = false
 					const donnees = reponse.data
 					if (donnees === 'erreur_export') {
-						this.chargement = false
 						this.message = this.$t('erreurExportMur')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						saveAs('/temp/' + donnees, 'mur-' + this.murIdE + '.zip')
-						this.chargement = false
 						this.murIdE = ''
 					}
 				}.bind(this)).catch(function () {
@@ -381,11 +398,19 @@ export default {
 				}.bind(this))
 			}
 		},
+		afficherModaleRattacher () {
+			this.elementPrecedent = (document.activeElement || document.body)
+			this.modale = 'rattacher-mur'
+			this.$nextTick(function () {
+				document.querySelector('.modale .bouton').focus()
+			})
+		},
 		rattacherMur () {
 			if (this.murIdR !== '' && this.identifiantRa !== '') {
 				this.modale = ''
 				this.chargement = true
 				axios.post(this.hote + '/api/rattacher-mur', {
+					admin: this.admin,
 					murId: this.murIdR,
 					identifiant: this.identifiantRa
 				}).then(function (reponse) {
@@ -399,10 +424,13 @@ export default {
 						this.message = this.$t('murInexistant')
 					} else if (donnees === 'mur_cree_avec_compte') {
 						this.message = this.$t('murCreeAvecCompte')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						this.notification = this.$t('murTransfere')
 						this.murIdR = ''
 						this.identifiantRa = ''
+						this.gererFocus()
 					}
 				}.bind(this)).catch(function () {
 					this.chargement = false
@@ -410,11 +438,19 @@ export default {
 				}.bind(this))
 			}
 		},
+		afficherModaleSupprimerMur () {
+			this.elementPrecedent = (document.activeElement || document.body)
+			this.modale = 'supprimer-mur'
+			this.$nextTick(function () {
+				document.querySelector('.modale .bouton').focus()
+			})
+		},
 		supprimerMur () {
 			if (this.murIdS !== '') {
 				this.modale = ''
 				this.chargement = true
 				axios.post(this.hote + '/api/recuperer-donnees-mur-admin', {
+					admin: this.admin,
 					murId: this.murIdS
 				}).then(function (reponse) {
 					this.chargement = false
@@ -423,6 +459,8 @@ export default {
 						this.message = this.$t('erreurActionServeur')
 					} else if (donnees === 'mur_inexistant') {
 						this.message = this.$t('murInexistant')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						const identifiant = donnees.identifiant
 						axios.post(this.hote + '/api/supprimer-mur', {
@@ -436,10 +474,13 @@ export default {
 							const donnees = reponse.data
 							if (donnees === 'erreur_suppression') {
 								this.message = this.$t('erreurSuppressionMur')
+							} else if (donnees === 'non_autorise') {
+								this.message = this.$t('actionNonAutorisee')
 							} else {
 								this.notification = this.$t('murSupprime')
 								this.murIdS = ''
 								this.suppressionFichiers = true
+								this.gererFocus()
 							}
 						}.bind(this)).catch(function () {
 							this.chargement = false
@@ -460,6 +501,7 @@ export default {
 			if (this.identifiantR !== '') {
 				this.chargement = true
 				axios.post(this.hote + '/api/recuperer-donnees-utilisateur-admin', {
+					admin: this.admin,
 					identifiant: this.identifiantR
 				}).then(function (reponse) {
 					this.chargement = false
@@ -468,6 +510,8 @@ export default {
 						this.message = this.$t('erreurActionServeur')
 					} else if (donnees === 'utilisateur_inexistant') {
 						this.message = this.$t('utilisateurInexistant')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						this.donneesUtilisateur = donnees
 					}
@@ -478,11 +522,19 @@ export default {
 				}.bind(this))
 			}
 		},
+		afficherModaleTransfererCompte () {
+			this.elementPrecedent = (document.activeElement || document.body)
+			this.modale = 'transferer-compte'
+			this.$nextTick(function () {
+				document.querySelector('.modale .bouton').focus()
+			})
+		},
 		transfererCompte () {
 			if (this.identifiantO !== '' && this.identifiantT !== '') {
 				this.modale = ''
 				this.chargement = true
 				axios.post(this.hote + '/api/transferer-compte', {
+					admin: this.admin,
 					identifiant: this.identifiantO,
 					nouvelIdentifiant: this.identifiantT
 				}).then(function (reponse) {
@@ -492,16 +544,26 @@ export default {
 						this.message = this.$t('erreurActionServeur')
 					} else if (donnees === 'utilisateur_inexistant') {
 						this.message = this.$t('utilisateursInexistants')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						this.notification = this.$t('compteTransfere')
 						this.identifiantO = ''
 						this.identifiantT = ''
+						this.gererFocus()
 					}
 				}.bind(this)).catch(function () {
 					this.chargement = false
 					this.message = this.$t('erreurCommunicationServeur')
 				}.bind(this))
 			}
+		},
+		afficherModaleSupprimerCompte () {
+			this.elementPrecedent = (document.activeElement || document.body)
+			this.modale = 'supprimer-compte'
+			this.$nextTick(function () {
+				document.querySelector('.modale .bouton').focus()
+			})
 		},
 		supprimerCompte () {
 			if (this.identifiantS !== '') {
@@ -515,14 +577,41 @@ export default {
 					const donnees = reponse.data
 					if (donnees === 'erreur') {
 						this.message = this.$t('erreurActionServeur')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
 					} else {
 						this.notification = this.$t('compteSupprime')
 						this.identifiantS = ''
+						this.gererFocus()
 					}
 				}.bind(this)).catch(function () {
 					this.chargement = false
 					this.message = this.$t('erreurCommunicationServeur')
 				}.bind(this))
+			}
+		},
+		fermerModale () {
+			this.modale = ''
+			this.gererFocus()
+		},
+		fermerMessage () {
+			this.message = ''
+			this.gererFocus()
+		},
+		definirElementPrecedent (element) {
+			this.elementPrecedent = element
+		},
+		gererFocus () {
+			if (this.elementPrecedent) {
+				this.elementPrecedent.focus()
+				this.elementPrecedent = null
+			}
+		},
+		gererClavier (event) {
+			if (event.key === 'Escape' && this.message !== '') {
+				this.fermerMessage()
+			} else if (event.key === 'Escape' && this.modale !== '') {
+				this.fermerModale()
 			}
 		}
 	}
