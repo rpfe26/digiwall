@@ -284,7 +284,6 @@ async function demarrerServeur () {
 				)
 				// Récupération et vérification des dossiers utilisateur
 				db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
-					console.log(mursFavoris)
 					if (err || !donnees || donnees === null) {
 						const pageContextInit = {
 							urlOriginal: req.originalUrl,
