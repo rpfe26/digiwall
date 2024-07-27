@@ -63,9 +63,6 @@ function createPageApp (pageContext) {
 		case 'it':
 			dateFormattee = dayjs(new Date(date)).locale('it').format('L') + ' alle ' + dayjs(new Date(date)).locale('it').format('LT')
 			break
-		case 'hr':
-			dateFormattee = dayjs(new Date(date)).locale('hr').format('L') + ' u ' + dayjs(new Date(date)).locale('hr').format('LT')
-			break
 		case 'en':
 			dateFormattee = dayjs(new Date(date)).locale('en').format('L') + ' at ' + dayjs(new Date(date)).locale('en').format('LT')
 			break
