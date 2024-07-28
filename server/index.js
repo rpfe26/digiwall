@@ -6079,7 +6079,7 @@ async function demarrerServeur () {
 				mur.admins = JSON.parse(mur.admins)
 				// Vérifier si admin
 				let admin = false
-				if (mur.admins.includes(identifiant) || mur.identifiant === identifiant || (statut === 'auteur' && murs.includes(id))) {
+				if (mur.admins.includes(identifiant) || mur.identifiant === identifiant || (statut === 'auteur' && murs && murs.includes(id))) {
 					admin = true
 				}
 				// Vérifier accès
