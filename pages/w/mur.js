@@ -1296,13 +1296,13 @@ export default {
 				} else {
 					this.modale = ''
 					if (this.mode === 'creation' && this.typeBloc === 'classique') {
-						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					} else if (this.mode === 'edition' && this.typeBloc === 'classique') {
-						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, donnees, this.iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					} else if (this.mode === 'creation' && this.typeBloc === 'image-audio') {
-						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					} else if (this.mode === 'edition' && this.typeBloc === 'image-audio') {
-						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					}
 				}
 				this.progressionEnregistrement = false
@@ -1787,7 +1787,7 @@ export default {
 			this.bloc = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
 			if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'galerie' && this.medias.length > 1 && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
 				this.chargement = true
-				this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+				this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 				this.modale = ''
 			} else if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
 				this.ajouterAudio()
@@ -1796,7 +1796,7 @@ export default {
 		modifierBloc () {
 			if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'galerie' && this.medias.length > 1 && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
 				this.chargement = true
-				this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom, this.admin)
+				this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.texte, this.media, this.iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 				this.modale = ''
 			} else if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
 				this.ajouterAudio()
