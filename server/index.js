@@ -2645,7 +2645,7 @@ async function demarrerServeur () {
 			if (err || !donnees || donnees === null || !donnees.hasOwnProperty('code')) { res.send('erreur'); return false }
 			if (code === donnees.code) {
 				const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
-				if (!req.session.acces) {
+				if (!req.session.hasOwnProperty('acces')) {
 					req.session.acces = []
 				}
 				let murAcces = false
@@ -3415,7 +3415,7 @@ async function demarrerServeur () {
 			}
 		})
 
-		socket.on('ajouterbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom, admin) {
+		socket.on('ajouterbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
@@ -3428,7 +3428,11 @@ async function demarrerServeur () {
 					if (donnees.hasOwnProperty('admins')) {
 						admins = JSON.parse(donnees.admins)
 					}
-					if (donnees.id === mur && donnees.token === token && (donnees.contributions !== 'fermees' || admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					let admin = false
+					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+						admin = true
+					}
+					if (donnees.id === mur && donnees.token === token && (donnees.contributions !== 'fermees' || admin)) {
 						const id = parseInt(donnees.bloc) + 1
 						const date = dayjs().format()
 						const activiteId = parseInt(donnees.activite) + 1
@@ -3494,26 +3498,30 @@ async function demarrerServeur () {
 			}
 		})
 
-		socket.on('modifierbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom, admin) {
+		socket.on('modifierbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
 				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token')) { socket.emit('erreur'); return false }
+					if (donnees.id === mur && donnees.token === token) {
 						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
 							if (err) { socket.emit('erreur'); return false }
 							if (resultat === 1) {
 								db.hgetall('contenu-blocs:' + mur + ':' + bloc, async function (err, objet) {
 									if (err) { socket.emit('erreur'); return false }
-									if (objet.identifiant === identifiant || admin || donnees.contributions === 'modifiables') {
+									const proprietaire = donnees.identifiant
+									let admins = []
+									if (donnees.hasOwnProperty('admins')) {
+										admins = JSON.parse(donnees.admins)
+									}
+									let admin = false
+									if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+										admin = true
+									}
+									if (objet.identifiant === identifiant || admin || donnees.contributions === 'modifiables')  {
 										let visibilite = 'visible'
 										if (objet.hasOwnProperty('visibilite')) {
 											visibilite = objet.visibilite
@@ -3667,6 +3675,8 @@ async function demarrerServeur () {
 											socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 											socket.request.session.save()
 										}
+									} else {
+										socket.emit('nonautorise')
 									}
 								})
 							}
@@ -3991,58 +4001,62 @@ async function demarrerServeur () {
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
 				db.hgetall('murs:' + mur, function (err, donnees) {
 					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					if (donnees.id === mur && donnees.token === token) {
 						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
 							if (err) { socket.emit('erreur'); return false }
 							if (resultat === 1) {
 								db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, objet) {
 									if (err) { socket.emit('erreur'); return false }
-									if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
-										supprimerFichier(mur, objet.media)
+									const proprietaire = donnees.identifiant
+									let admins = []
+									if (donnees.hasOwnProperty('admins')) {
+										admins = JSON.parse(donnees.admins)
 									}
-									if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
-										supprimerFichier(mur, objet.mediaExtra)
-									}
-									if (objet.hasOwnProperty('medias')) {
-										const medias = JSON.parse(objet.medias)
-										for (let i = 0; i < medias.length; i++) {
-											if (medias[i].hasOwnProperty('fichier')) {
-												supprimerFichier(mur, medias[i].fichier)
+									if (objet.identifiant === identifiant || admins.includes(identifiant || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+										if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
+											supprimerFichier(mur, objet.media)
+										}
+										if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
+											supprimerFichier(mur, objet.mediaExtra)
+										}
+										if (objet.hasOwnProperty('medias')) {
+											const medias = JSON.parse(objet.medias)
+											for (let i = 0; i < medias.length; i++) {
+												if (medias[i].hasOwnProperty('fichier')) {
+													supprimerFichier(mur, medias[i].fichier)
+												}
 											}
 										}
-									}
-									if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-										supprimerFichier(mur, path.basename(objet.vignette))
-									}
-									let pad = ''
-									if (objet.hasOwnProperty('iframe') && objet.iframe !== '' && objet.iframe.includes(etherpad)) {
-										pad = objet.iframe
-									}
-									if (objet.hasOwnProperty('media') && objet.media !== '' && objet.media.includes(etherpad) && pad === '') {
-										pad = objet.media
-									}
-									if (objet.hasOwnProperty('bloc') && objet.bloc === bloc) {
-										const date = dayjs().format()
-										const activiteId = parseInt(donnees.activite) + 1
-										const multi = db.multi()
-										multi.del('contenu-blocs:' + mur + ':' + bloc)
-										multi.zrem('blocs:' + mur, bloc)
-										multi.del('commentaires:' + bloc)
-										multi.del('evaluations:' + bloc)
-										multi.hset('dates-murs:' + mur, 'date', date)
-										// Enregistrer entrée du registre d'activité
-										multi.hincrby('murs:' + mur, 'activite', 1)
-										multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-supprime' }))
-										multi.exec(function () {
-											io.in('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId, etherpad: pad })
-											socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-											socket.request.session.save()
-										})
+										if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+											supprimerFichier(mur, path.basename(objet.vignette))
+										}
+										let pad = ''
+										if (objet.hasOwnProperty('iframe') && objet.iframe !== '' && objet.iframe.includes(etherpad)) {
+											pad = objet.iframe
+										}
+										if (objet.hasOwnProperty('media') && objet.media !== '' && objet.media.includes(etherpad) && pad === '') {
+											pad = objet.media
+										}
+										if (objet.hasOwnProperty('bloc') && objet.bloc === bloc) {
+											const date = dayjs().format()
+											const activiteId = parseInt(donnees.activite) + 1
+											const multi = db.multi()
+											multi.del('contenu-blocs:' + mur + ':' + bloc)
+											multi.zrem('blocs:' + mur, bloc)
+											multi.del('commentaires:' + bloc)
+											multi.del('evaluations:' + bloc)
+											multi.hset('dates-murs:' + mur, 'date', date)
+											// Enregistrer entrée du registre d'activité
+											multi.hincrby('murs:' + mur, 'activite', 1)
+											multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-supprime' }))
+											multi.exec(function () {
+												io.in('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId, etherpad: pad })
+												socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+												socket.request.session.save()
+											})
+										}
+									} else {
+										socket.emit('nonautorise')
 									}
 								})
 							}
