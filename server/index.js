@@ -1826,7 +1826,7 @@ async function demarrerServeur () {
 									res.send('mur_supprime')
 								})
 							})
-						} else if (admin !== '' && admin === motdepasseAdmin) {
+						} else {
 							db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
 								if (err) { res.send('erreur_suppression'); return false }
 								const multi = db.multi()
@@ -1873,8 +1873,6 @@ async function demarrerServeur () {
 									}
 								})
 							})
-						} else {
-							res.send('non_autorise')
 						}
 					})
 				} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
@@ -1901,7 +1899,7 @@ async function demarrerServeur () {
 								await fs.remove(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
 								res.send('mur_supprime')
 							})
-						} else if (admin !== '' && admin === motdepasseAdmin) {
+						} else {
 							db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
 								if (err) { res.send('erreur_suppression'); return false }
 								if (donnees.hasOwnProperty('dossiers')) {
@@ -1943,8 +1941,6 @@ async function demarrerServeur () {
 									}
 								})
 							})
-						} else {
-							res.send('non_autorise')
 						}
 					} else {
 						res.send('erreur_suppression')
