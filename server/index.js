@@ -204,7 +204,7 @@ async function demarrerServeur () {
 				urlOriginal: req.originalUrl,
 				params: req.query,
 				hote: hote,
-				langues: ['fr', 'es', 'it', 'en'],
+				langues: ['fr', 'es', 'it', 'de', 'en'],
 				langue: langue
 			}
 			const pageContext = await renderPage(pageContextInit)
@@ -289,7 +289,7 @@ async function demarrerServeur () {
 							urlOriginal: req.originalUrl,
 							params: req.query,
 							hote: hote,
-							langues: ['fr', 'es', 'it', 'en'],
+							langues: ['fr', 'es', 'it', 'de', 'en'],
 							identifiant: req.session.identifiant,
 							nom: req.session.nom,
 							email: req.session.email,
@@ -377,7 +377,7 @@ async function demarrerServeur () {
 									urlOriginal: req.originalUrl,
 									params: req.query,
 									hote: hote,
-									langues: ['fr', 'es', 'it', 'en'],
+									langues: ['fr', 'es', 'it', 'de', 'en'],
 									identifiant: req.session.identifiant,
 									nom: req.session.nom,
 									email: req.session.email,
@@ -453,7 +453,7 @@ async function demarrerServeur () {
 			params: req.query,
 			hote: hote,
 			userAgent: userAgent,
-			langues: ['fr', 'es', 'it', 'en'],
+			langues: ['fr', 'es', 'it', 'de', 'en'],
 			identifiant: req.session.identifiant,
 			nom: req.session.nom,
 			email: req.session.email,
@@ -6785,6 +6785,13 @@ async function demarrerServeur () {
 				dateFormattee = 'Creazione attivata ' + dayjs(new Date(donnees.date)).locale('it').format('L') + ' alle ' + dayjs(new Date(donnees.date)).locale('it').format('LT') + ' di ' + donnees.nom + '. Modifica attivata ' + dayjs(new Date(donnees.modifie)).locale('it').format('L') + ' alle ' + dayjs(new Date(donnees.modifie)).locale('it').format('LT') + '.'
 			} else {
 				dateFormattee = 'Creazione attivata ' + dayjs(new Date(donnees.date)).locale('it').format('L') + ' alle ' + dayjs(new Date(donnees.date)).locale('it').format('LT') + ' di ' + donnees.nom + '.'
+			}
+			break
+		case 'de':
+			if (donnees.hasOwnProperty('modifie')) {
+				dateFormattee = 'Erstellt am ' + dayjs(new Date(donnees.date)).locale('de').format('L') + ' um ' + dayjs(new Date(donnees.date)).locale('de').format('LT') + ' von ' + donnees.nom + '. Geändert am ' + dayjs(new Date(donnees.modifie)).locale('de').format('L') + ' um ' + dayjs(new Date(donnees.modifie)).locale('de').format('LT') + '.'
+			} else {
+				dateFormattee = 'Erstellt am ' + dayjs(new Date(donnees.date)).locale('de').format('L') + ' um ' + dayjs(new Date(donnees.date)).locale('de').format('LT') + ' von ' + donnees.nom + '.'
 			}
 			break
 		case 'en':

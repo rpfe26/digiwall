@@ -69,7 +69,7 @@ Traduction en italien par Paolo Mauri (https://gitlab.com/maupao) et @nilocram (
 
 Traduction en espagnol par Fernando S. Delgado Trujillo (https://gitlab.com/fersdt)
 
-Traduction en croate par Ksenija Lekić (https://gitlab.com/Ksenija66L)
+Traduction en allemand par Kate (https://codeberg.org/kate)
 
 ### Soutien
 Open Collective : https://opencollective.com/ladigitale
