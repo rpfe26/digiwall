@@ -928,7 +928,7 @@ async function demarrerServeur () {
 													db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, infos) {
 														if (err || !infos || infos === null) { resolve({}); return false }
 														const date = dayjs().format()
-														if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && !infos.vignette.includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
+														if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && !String(infos.vignette).includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
 															infos.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(infos.vignette)
 														}
 														if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
@@ -1001,7 +1001,7 @@ async function demarrerServeur () {
 										for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 											const donneesBloc = new Promise(function (resolve) {
 												if (Object.keys(bloc).length > 0) {
-													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
 														bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
 													}
 													if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
@@ -1223,7 +1223,7 @@ async function demarrerServeur () {
 											}
 										}
 										if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('vignette') && bloc.vignette !== '') {
-											if (bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
+											if (String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
 												await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
 											} else if (!verifierURL(bloc.vignette, ['https', 'http'])) {
 												const fichierVignette = path.basename(bloc.vignette)
@@ -1296,7 +1296,7 @@ async function demarrerServeur () {
 									}
 								}
 								if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('vignette') && bloc.vignette !== '') {
-									if (bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
+									if (String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
 										await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
 									} else if (!verifierURL(bloc.vignette, ['https', 'http'])) {
 										const fichierVignette = path.basename(bloc.vignette)
@@ -1374,7 +1374,7 @@ async function demarrerServeur () {
 												if (parametres.evaluations === true) {
 													evaluations = bloc.evaluations
 												}
-												if (bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+												if (bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
 													bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
 												}
 												let motdepasse = ''
@@ -1418,7 +1418,7 @@ async function demarrerServeur () {
 															}
 														}
 													}
-													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 														await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 													}
 													resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1543,7 +1543,7 @@ async function demarrerServeur () {
 												if (parametres.evaluations === true) {
 													evaluations = bloc.evaluations
 												}
-												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
 													bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
 												}
 												let motdepasse = ''
@@ -1587,7 +1587,7 @@ async function demarrerServeur () {
 															}
 														}
 													}
-													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 														await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 													}
 													resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1665,7 +1665,7 @@ async function demarrerServeur () {
 											if (parametres.evaluations === true) {
 												evaluations = bloc.evaluations
 											}
-											if (bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+											if (bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
 												bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
 											}
 											let motdepasse = ''
@@ -1709,7 +1709,7 @@ async function demarrerServeur () {
 														}
 													}
 												}
-												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 													await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 												}
 												resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -2381,7 +2381,7 @@ async function demarrerServeur () {
 																}
 															}
 														}
-														if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && !donnees.vignette.includes('/img/') && !verifierURL(donnees.vignette, ['https', 'http'])) {
+														if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && !String(donnees.vignette).includes('/img/') && !verifierURL(donnees.vignette, ['https', 'http'])) {
 															supprimerFichier(mur, path.basename(donnees.vignette))
 														}
 														const multi = db.multi()
@@ -2480,7 +2480,7 @@ async function demarrerServeur () {
 															}
 														}
 													}
-													if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && !blocs[i].vignette.includes('/img/') && !verifierURL(blocs[i].vignette, ['https', 'http'])) {
+													if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && !String(blocs[i].vignette).includes('/img/') && !verifierURL(blocs[i].vignette, ['https', 'http'])) {
 														supprimerFichier(mur, path.basename(blocs[i].vignette))
 													}
 													const multi = db.multi()
@@ -3391,6 +3391,9 @@ async function demarrerServeur () {
 			const identifiant = donnees.identifiant
 			let code = ''
 			if (donnees.code === '') {
+				if (!socket.request.session.hasOwnProperty('acces')) {
+					socket.request.session.acces = []
+				}
 				socket.request.session.acces.map(function (e) {
 					if (e.hasOwnProperty('mur') && e.mur === mur) {
 						code = e.code 
@@ -3453,7 +3456,7 @@ async function demarrerServeur () {
 						} else {
 							vignetteActivee = 'non'
 						}
-						if (vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+						if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
 							vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
 						}
 						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', edition, 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'epinglee', 'non', 'couleur', couleur)
@@ -3480,7 +3483,7 @@ async function demarrerServeur () {
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
 								}
 							}
-							if (vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+							if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
 								await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 								await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 							}
@@ -3539,7 +3542,7 @@ async function demarrerServeur () {
 										}
 										const edition = objet.edition
 										const date = dayjs().format()
-										if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+										if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
 											vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
 										}
 										if (visibilite === 'visible' || visibilite === 'protegee') {
@@ -3579,11 +3582,11 @@ async function demarrerServeur () {
 														}
 													})
 												}
-												if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+												if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
 													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)))
 													await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 												}
-												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
 													supprimerFichier(mur, path.basename(objet.vignette))
 												}
 												io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
@@ -3623,11 +3626,11 @@ async function demarrerServeur () {
 														}
 													})
 												}
-												if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+												if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
 													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 													await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 												}
-												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
 													supprimerFichier(mur, path.basename(objet.vignette))
 												}
 												io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
@@ -3663,11 +3666,11 @@ async function demarrerServeur () {
 													}
 												})
 											}
-											if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+											if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
 												await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
 												await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
 											}
-											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
 												supprimerFichier(mur, path.basename(objet.vignette))
 											}
 											io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
@@ -3713,7 +3716,7 @@ async function demarrerServeur () {
 							vignetteActivee = 'non'
 						}
 						let vignetteOrigine = ''
-						if (vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+						if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
 							vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
 							vignetteOrigine = '/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + path.basename(vignette)
 						}
@@ -3738,7 +3741,7 @@ async function demarrerServeur () {
 									await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
 								}
 							}
-							if (vignette && vignette !== '' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + vignetteOrigine))) {
+							if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + vignetteOrigine))) {
 								await fs.copy(path.join(__dirname, '..', '/static' + vignetteOrigine), path.join(__dirname, '..', '/static' + vignette))
 							}
 							io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, epinglee: 'non', activiteId: activiteId })
@@ -4026,7 +4029,7 @@ async function demarrerServeur () {
 												}
 											}
 										}
-										if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+										if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
 											supprimerFichier(mur, path.basename(objet.vignette))
 										}
 										let pad = ''
@@ -5262,7 +5265,7 @@ async function demarrerServeur () {
 															}
 														}
 													}
-													if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+													if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
 														supprimerFichier(mur, path.basename(objet.vignette))
 													}
 													if (objet.hasOwnProperty('bloc') && objet.bloc === blocSupprime) {
@@ -7093,9 +7096,9 @@ async function demarrerServeur () {
 							},
 							definirVignette (item) {
 								let vignette
-								if (item.vignette && item.vignette !== '' && this.verifierURL(item.vignette) === false && item.vignette.includes('/img/')) {
+								if (item.vignette && item.vignette !== '' && this.verifierURL(item.vignette) === false && String(item.vignette).includes('/img/')) {
 									vignette = './static/img/' + item.vignette.split('/').pop()
-								} else if (item.vignette && item.vignette !== '' && this.verifierURL(item.vignette) === false && !item.vignette.includes('/img/')) {
+								} else if (item.vignette && item.vignette !== '' && this.verifierURL(item.vignette) === false && !String(item.vignette).includes('/img/')) {
 									vignette = './fichiers/' + item.vignette.split('/').pop()
 								} else if (item.vignette && item.vignette !== '' && this.verifierURL(item.vignette) === true) {
 									vignette = item.vignette
