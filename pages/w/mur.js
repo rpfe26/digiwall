@@ -606,7 +606,7 @@ export default {
 			if (item.hasOwnProperty('vignetteGeneree')) {
 				vignetteGeneree = item.vignetteGeneree
 			}
-			if (item.vignette && item.vignette !== '') {
+			if (item.vignette && item.vignette !== '' && typeof item.vignette === 'string') {
 				vignette = item.vignette
 			} else if (vignetteGeneree === true) {
 				vignette = this.definirLienVignette(this.mur.id, item.fichier.replace(/\.[^/.]+$/, '') + '.jpg')
@@ -844,10 +844,10 @@ export default {
 				this.iframe = item.iframe
 				this.type = item.type
 				this.source = item.source
-				if (item.vignette && item.vignette !== '') {
+				if (item.vignette && item.vignette !== '' && typeof item.vignette === 'string') {
 					this.vignette = item.vignette
 					this.vignetteDefaut = this.vignette
-				} else if (item.type !== 'image' && (!item.vignette || item.vignette === '')) {
+				} else if (item.type !== 'image' && (!item.vignette || item.vignette === '' || typeof item.vignette !== 'string')) {
 					this.vignette = this.definirVignette(item)
 					this.vignetteDefaut = this.vignette
 				}
@@ -1513,7 +1513,7 @@ export default {
 												this.vignette = this.definirVignette(donnees)
 												this.vignetteDefaut = this.definirVignette(donnees)
 											}
-										} else {
+										} else if (reponse.data !== '' && typeof reponse.data === 'string') {
 											const favicon = await this.verifierIcone(reponse.data)
 											if (favicon === true) {
 												this.vignette = reponse.data
@@ -1707,7 +1707,7 @@ export default {
 						champ.value = ''
 						this.progressionVignette = 0
 						this.message = this.$t('erreurEspaceDisque')
-					} else {
+					} else if (typeof donnees === 'string' && donnees.includes('/temp/')) {
 						this.vignette = donnees
 						this.$nextTick(function () {
 							imagesLoaded('#vignette', function () {
