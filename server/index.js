@@ -1088,7 +1088,7 @@ async function demarrerServeur () {
 					db.hgetall('murs:' + id, function (err, d) {
 						if (err || !d || d === null) { res.send('erreur_export'); return false }
 						const proprietaire = d.identifiant
-						if (proprietaire === identifiant) {
+						if (proprietaire === identifiant || (admin !== '' && admin === motdepasseAdmin)) {
 							const donneesMur = new Promise(function (resolveMain) {
 								db.hgetall('murs:' + id, function (err, resultats) {
 									if (err) { resolveMain({}); return false }
@@ -1256,7 +1256,7 @@ async function demarrerServeur () {
 				} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + id + '.json'))) {
 					const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + id + '.json'))
 					if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-						if (donnees.mur.identifiant === identifiant) {
+						if (donnees.mur.identifiant === identifiant || (admin !== '' && admin === motdepasseAdmin)) {
 							const html = genererHTML(donnees[0], donnees[1])
 							const chemin = path.join(__dirname, '..', '/static/temp')
 							await fs.mkdirp(path.normalize(chemin + '/' + id))
@@ -2186,6 +2186,66 @@ async function demarrerServeur () {
 								} else {
 									res.send('mur_cree_avec_compte')
 								}
+							} else {
+								res.send('erreur')
+							}
+						} else {
+							res.send('mur_inexistant')
+						}
+					})
+				} else {
+					res.send('utilisateur_inexistant')
+				}
+			})
+		} else {
+			res.send('non_autorise')
+		}
+	})
+
+	app.post('/api/transferer-mur', function (req, res) {
+		const nouvelIdentifiant = req.body.nouvelIdentifiant
+		const mur = req.body.murId
+		const admin = req.body.admin
+		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
+			db.exists('utilisateurs:' + nouvelIdentifiant, function (err, resultat) {
+				if (err) { res.send('erreur'); return false  }
+				if (resultat === 1) {
+					db.exists('murs:' + mur, async function (err, resultat) {
+						if (err) { res.send('erreur'); return false  }
+						if (resultat === 1) {
+							db.hgetall('murs:' + mur, function (err, donnees) {
+								if (err || !donnees || donnees === null) { res.send('erreur'); return false }
+								const identifiant = donnees.identifiant
+								const multi = db.multi()
+								multi.sadd('murs-crees:' + nouvelIdentifiant, mur)
+								multi.srem('murs-crees:' + identifiant, mur)
+								multi.sadd('utilisateurs-murs:' + mur, nouvelIdentifiant)
+								multi.srem('utilisateurs-murs:' + mur, identifiant)
+								multi.hset('murs:' + mur, 'identifiant', nouvelIdentifiant)
+								multi.srem('murs-admins:' + nouvelIdentifiant, mur)
+								multi.srem('murs-rejoints:' + nouvelIdentifiant, mur)
+								multi.srem('murs-utilisateurs:' + nouvelIdentifiant, mur)
+								multi.exec(function () {
+									res.send('mur_transfere')
+								})
+							})
+						} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
+							const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
+							if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
+								await ajouterMurDansDb(mur, donnees)
+								const identifiant = donnees.mur.identifiant
+								const multi = db.multi()
+								multi.sadd('murs-crees:' + nouvelIdentifiant, mur)
+								multi.srem('murs-crees:' + identifiant, mur)
+								multi.sadd('utilisateurs-murs:' + mur, nouvelIdentifiant)
+								multi.srem('utilisateurs-murs:' + mur, identifiant)
+								multi.hset('murs:' + mur, 'identifiant', nouvelIdentifiant)
+								multi.srem('murs-admins:' + nouvelIdentifiant, mur)
+								multi.srem('murs-rejoints:' + nouvelIdentifiant, mur)
+								multi.srem('murs-utilisateurs:' + nouvelIdentifiant, mur)
+								multi.exec(function () {
+									res.send('mur_transfere')
+								})
 							} else {
 								res.send('erreur')
 							}

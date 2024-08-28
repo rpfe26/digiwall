@@ -422,5 +422,6 @@
     "capsuleProtegee": "Geschützte Kapsel",
     "desepinglerCapsule": "Kapsel ablösen",
     "erreurEspaceDisque": "Es gibt keinen freien Speicherplatz mehr auf der Festplatte des Servers. Der Upload der Datei konnte nicht durchgeführt werden.",
-    "actionNonAutorisee": "Du bist nicht berechtigt, diese Aktion durchzuführen."
+    "actionNonAutorisee": "Du bist nicht berechtigt, diese Aktion durchzuführen.",
+	"transfererMur": "Wand auf ein anderes Konto übertragen"
 }

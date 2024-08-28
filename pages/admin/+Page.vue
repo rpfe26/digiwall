@@ -127,6 +127,20 @@
 					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesUtilisateur" @keydown.enter="recupererDonneesUtilisateur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
+					<span>{{ $t('transfererMur') }}</span>
+				</h1>
+				<div class="conteneur">
+					<label for="champ-numero-mur-n">{{ $t('numeroMur') }}</label>
+					<input id="champ-numero-mur-n" type="number" v-model.lazy="murIdN">
+				</div>
+				<div class="conteneur">
+					<label for="champ-identifiant-n">{{ $t('identifiantDestination') }}</label>
+					<input id="champ-identifiant-n" type="text" v-model.lazy="identifiantN">
+				</div>
+				<div class="conteneur actions">
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererMur" @keydown.enter="afficherModaleTransfererMur">{{ $t('valider') }}</span>
+				</div>
+				<h1>
 					<span>{{ $t('transfererCompte') }}</span>
 				</h1>
 				<div class="conteneur">
@@ -159,12 +173,14 @@
 					<div class="contenu">
 						<div class="message" v-html="$t('confirmationRattacherMur')" v-if="modale === 'rattacher-mur'" />
 						<div class="message" v-html="$t('confirmationSupprimerMur')" v-else-if="modale === 'supprimer-mur'" />
+						<div class="message" v-html="$t('confirmationRattacherMur')" v-else-if="modale === 'transferer-mur'" />
 						<div class="message" v-html="$t('confirmationTransfererCompte')" v-else-if="modale === 'transferer-compte'" />
 						<div class="message" v-html="$t('confirmationSupprimerCompteAdmin')" v-else-if="modale === 'supprimer-compte'" />
 						<div class="actions">
 							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModale" @keydown.enter="fermerModale">{{ $t('non') }}</span>
 							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="rattacherMur" @keydown.enter="rattacherMur" v-if="modale === 'rattacher-mur'">{{ $t('oui') }}</span>
 							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerMur" @keydown.enter="supprimerMur" v-else-if="modale === 'supprimer-mur'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="transfererMur" @keydown.enter="transfererMur" v-else-if="modale === 'transferer-mur'">{{ $t('oui') }}</span>
 							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="transfererCompte" @keydown.enter="transfererCompte" v-else-if="modale === 'transferer-compte'">{{ $t('oui') }}</span>
 							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerCompte" @keydown.enter="supprimerCompte" v-else-if="modale === 'supprimer-compte'">{{ $t('oui') }}</span>
 						</div>
@@ -212,12 +228,14 @@ export default {
 			murIdM: '',
 			murIdE: '',
 			murIdR: '',
+			murIdN: '',
 			donneesMur: '',
 			identifiantS: '',
 			identifiantR: '',
 			identifiantO: '',
 			identifiantT: '',
 			identifiantRa: '',
+			identifiantN: '',
 			donneesUtilisateur: '',
 			champ: '',
 			valeur: '',
@@ -517,6 +535,44 @@ export default {
 						this.donneesUtilisateur = donnees
 					}
 					this.identifiantR = ''
+				}.bind(this)).catch(function () {
+					this.chargement = false
+					this.message = this.$t('erreurCommunicationServeur')
+				}.bind(this))
+			}
+		},
+		afficherModaleTransfererMur () {
+			this.elementPrecedent = (document.activeElement || document.body)
+			this.modale = 'transferer-mur'
+			this.$nextTick(function () {
+				document.querySelector('.modale .bouton').focus()
+			})
+		},
+		transfererMur () {
+			if (this.identifiantN !== '' && this.murIdN !== '') {
+				this.modale = ''
+				this.chargement = true
+				axios.post(this.hote + '/api/transferer-mur', {
+					admin: this.admin,
+					nouvelIdentifiant: this.identifiantN,
+					murId : this.murIdN
+				}).then(function (reponse) {
+					this.chargement = false
+					const donnees = reponse.data
+					if (donnees === 'erreur') {
+						this.message = this.$t('erreurActionServeur')
+					} else if (donnees === 'utilisateur_inexistant') {
+						this.message = this.$t('utilisateurInexistant')
+					} else if (donnees === 'mur_inexistant') {
+						this.message = this.$t('murInexistant')
+					} else if (donnees === 'non_autorise') {
+						this.message = this.$t('actionNonAutorisee')
+					} else {
+						this.notification = this.$t('murTransfere')
+						this.identifiantN = ''
+						this.murIdN = ''
+						this.gererFocus()
+					}
 				}.bind(this)).catch(function () {
 					this.chargement = false
 					this.message = this.$t('erreurCommunicationServeur')

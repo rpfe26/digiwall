@@ -422,5 +422,6 @@
 	"epinglage": "Pinning",
 	"parametreEpinglageModifie": "Capsule pinning setting changed.",
 	"erreurEspaceDisque": "There is no more free space on the server's hard disk. The file could not be uploaded.",
-	"actionNonAutorisee": "You are not authorized to perform this action."
+	"actionNonAutorisee": "You are not authorized to perform this action.",
+	"transfererMur": "Transfer a wall to another account"
 }
