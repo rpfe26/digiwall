@@ -95,6 +95,20 @@
 					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleRattacher" @keydown.enter="afficherModaleRattacher">{{ $t('valider') }}</span>
 				</div>
 				<h1>
+					<span>{{ $t('transfererMur') }}</span>
+				</h1>
+				<div class="conteneur">
+					<label for="champ-numero-mur-n">{{ $t('numeroMur') }}</label>
+					<input id="champ-numero-mur-n" type="number" v-model.lazy="murIdN">
+				</div>
+				<div class="conteneur">
+					<label for="champ-identifiant-n">{{ $t('identifiantDestination') }}</label>
+					<input id="champ-identifiant-n" type="text" v-model.lazy="identifiantN">
+				</div>
+				<div class="conteneur actions">
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererMur" @keydown.enter="afficherModaleTransfererMur">{{ $t('valider') }}</span>
+				</div>
+				<h1>
 					<span>{{ $t('supprimerMur') }}</span>
 				</h1>
 				<div class="conteneur">
@@ -125,20 +139,6 @@
 				</div>
 				<div class="conteneur actions">
 					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesUtilisateur" @keydown.enter="recupererDonneesUtilisateur">{{ $t('valider') }}</span>
-				</div>
-				<h1>
-					<span>{{ $t('transfererMur') }}</span>
-				</h1>
-				<div class="conteneur">
-					<label for="champ-numero-mur-n">{{ $t('numeroMur') }}</label>
-					<input id="champ-numero-mur-n" type="number" v-model.lazy="murIdN">
-				</div>
-				<div class="conteneur">
-					<label for="champ-identifiant-n">{{ $t('identifiantDestination') }}</label>
-					<input id="champ-identifiant-n" type="text" v-model.lazy="identifiantN">
-				</div>
-				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererMur" @keydown.enter="afficherModaleTransfererMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('transfererCompte') }}</span>
