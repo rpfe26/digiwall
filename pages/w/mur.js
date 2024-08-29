@@ -413,6 +413,36 @@ export default {
 					this.chargementPage = false
 				}.bind(this), 300)
 
+				if (this.mobile) {
+					document.querySelector('#mur').addEventListener('touchstart', function (event) {
+						if (((event.target.closest('.titre') !== null && event.target.textContent !== '') || (event.target.closest('.texte') !== null && event.target.textContent !== '')) && this.mur.affichage === 'colonnes') {
+							this.desactiverDefilementHorizontal()
+						}
+					}.bind(this))
+
+					document.querySelector('#mur').addEventListener('touchend', function () {
+						if (this.mur.affichage === 'colonnes') {
+							setTimeout(function () {
+								this.activerDefilementHorizontal()
+							}.bind(this), 200)
+						}
+					}.bind(this))
+				} else {
+					document.querySelector('#mur').addEventListener('mousedown', function (event) {
+						if (((event.target.closest('.titre') !== null && event.target.textContent !== '') || (event.target.closest('.texte') !== null && event.target.textContent !== '')) && this.mur.affichage === 'colonnes') {
+							this.desactiverDefilementHorizontal()
+						}
+					}.bind(this))
+
+					document.querySelector('#mur').addEventListener('mouseup', function () {
+						if (this.mur.affichage === 'colonnes') {
+							setTimeout(function () {
+								this.activerDefilementHorizontal()
+							}.bind(this), 200)
+						}
+					}.bind(this))
+				}
+
 				document.querySelector('#mur').addEventListener('dragover', function (event) {
 					event.preventDefault()
 					event.stopPropagation()
@@ -4732,11 +4762,28 @@ export default {
 				this.chargement = false
 			}.bind(this))
 
-			this.$socket.on('modifieraffichagecolonne', function (affichageColonnes, identifiant) {
+			this.$socket.on('modifieraffichagecolonne', function (affichageColonnes, valeur, colonne, identifiant) {
 				this.mur.affichageColonnes = affichageColonnes
 				if (this.admin && this.identifiant === identifiant) {
 					this.notification = this.$t('affichageColonneModifie')
+					this.chargement = false
+				} else if (valeur === true) {
+					this.$socket.emit('verifierblocscolonnes', { mur: this.mur.id, identifiant: this.identifiant })
+				} else if (valeur === false) {
+					const blocs = JSON.parse(JSON.stringify(this.blocs))
+					blocs.forEach(function (bloc, index) {
+						if (parseInt(bloc.colonne) === parseInt(colonne)) {
+							blocs.splice(index, 1)
+						}
+					})
+					this.blocs = blocs
+					this.chargement = false
 				}
+			}.bind(this))
+
+			this.$socket.on('verifierblocscolonnes', function (blocs) {
+				this.blocs = blocs
+				this.definirColonnes(this.blocs)
 				this.chargement = false
 			}.bind(this))
 
