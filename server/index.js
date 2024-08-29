@@ -20,7 +20,6 @@ import extract from 'extract-zip'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es.js'
 import 'dayjs/locale/fr.js'
-import 'dayjs/locale/hr.js'
 import 'dayjs/locale/it.js'
 import localizedFormat from 'dayjs/plugin/localizedFormat.js'
 import bcrypt from 'bcrypt'
@@ -866,30 +865,22 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const murId = req.body.murId
 			const destination = req.body.destination
-			db.hgetall('murs:' + murId, function (err, resultat) {
-				if (err || !resultat || resultat === null) { res.send('erreur_deplacement'); return false }
-				const proprietaire = resultat.identifiant
-				if (proprietaire === identifiant) {
-					db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
-						if (err) { res.send('erreur_deplacement'); return false }
-						const dossiers = JSON.parse(donnees.dossiers)
-						dossiers.forEach(function (dossier, indexDossier) {
-							if (dossier.murs.includes(murId)) {
-								const indexMur = dossier.murs.indexOf(murId)
-								dossiers[indexDossier].murs.splice(indexMur, 1)
-							}
-							if (dossier.id === destination) {
-								dossiers[indexDossier].murs.push(murId)
-							}
-						})
-						db.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers), function (err) {
-							if (err) { res.send('erreur_deplacement'); return false }
-							res.send('mur_deplace')
-						})
-					})
-				} else {
-					res.send('non_autorise')
-				}
+			db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
+				if (err) { res.send('erreur_deplacement'); return false }
+				const dossiers = JSON.parse(donnees.dossiers)
+				dossiers.forEach(function (dossier, indexDossier) {
+					if (dossier.murs.includes(murId)) {
+						const indexMur = dossier.murs.indexOf(murId)
+						dossiers[indexDossier].murs.splice(indexMur, 1)
+					}
+					if (dossier.id === destination) {
+						dossiers[indexDossier].murs.push(murId)
+					}
+				})
+				db.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers), function (err) {
+					if (err) { res.send('erreur_deplacement'); return false }
+					res.send('mur_deplace')
+				})
 			})
 		} else {
 			res.send('non_connecte')
@@ -5250,7 +5241,7 @@ async function demarrerServeur () {
 						}
 						affichageColonnes[index] = valeur
 						db.hset('murs:' + mur, 'affichageColonnes', JSON.stringify(affichageColonnes), function () {
-							io.in('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes, identifiant)
+							io.in('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes, valeur, index, identifiant)
 							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 							socket.request.session.save()
 						})
@@ -5260,6 +5251,18 @@ async function demarrerServeur () {
 				})
 			} else {
 				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('verifierblocscolonnes', function (donnees) {
+			const mur = donnees.mur
+			const identifiant = donnees.identifiant
+			if (socket.request.session.identifiant === identifiant) {
+				db.hgetall('murs:' + mur, async function (err, resultat) {
+					if (err || !resultat || resultat === null) { socket.emit('erreur'); return false }
+					const donneesMur = await recupererDonneesMurProtege(resultat, mur, identifiant)
+					socket.emit('verifierblocscolonnes', donneesMur.blocs)
+				})
 			}
 		})
 
@@ -6223,6 +6226,11 @@ async function demarrerServeur () {
 												resolve({})
 												return false
 											}
+											// Ne pas ajouter les capsules dans les colonnes masquées
+											if (mur.affichage === 'colonnes' && mur.affichageColonnes[donnees.colonne] === false && mur.identifiant !== identifiant && !admin) {
+												resolve({})
+												return false
+											}
 											db.zcard('commentaires:' + bloc, function (err, commentaires) {
 												if (err) {
 													donnees.commentaires = []
@@ -6451,6 +6459,11 @@ async function demarrerServeur () {
 									}
 									// Ne pas ajouter les capsules en attente de modération ou privées
 									if ((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') {
+										resolve({})
+										return false
+									}
+									// Ne pas ajouter les capsules dans les colonnes masquées
+									if (mur.affichage === 'colonnes' && mur.affichageColonnes[donnees.colonne] === false) {
 										resolve({})
 										return false
 									}
