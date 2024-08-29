@@ -833,8 +833,6 @@ export default {
 						window.location.replace('/')
 					} else if (donnees === 'erreur_deplacement') {
 						this.message = this.$t('erreurDeplacementMur')
-					} else if (donnees === 'non_autorise') {
-						this.message = this.$t('actionNonAutorisee')
 					} else {
 						this.dossiers.forEach(function (dossier, indexDossier) {
 							if (dossier.murs.includes(this.murId)) {
