@@ -207,6 +207,11 @@ async function demarrerServeur () {
 				langue: langue
 			}
 			const pageContext = await renderPage(pageContextInit)
+			if (pageContext.errorWhileRendering) {
+				if (!pageContext.httpResponse) {
+					throw pageContext.errorWhileRendering
+				}
+			}
 			const { httpResponse } = pageContext
 			if (!httpResponse) {
 				return next()
@@ -303,6 +308,11 @@ async function demarrerServeur () {
 							dossiers: []
 						}
 						const pageContext = await renderPage(pageContextInit)
+						if (pageContext.errorWhileRendering) {
+							if (!pageContext.httpResponse) {
+								throw pageContext.errorWhileRendering
+							}
+						}
 						const { httpResponse } = pageContext
 						if (!httpResponse) {
 							return next()
@@ -391,6 +401,11 @@ async function demarrerServeur () {
 									dossiers: dossiers
 								}
 								const pageContext = await renderPage(pageContextInit)
+								if (pageContext.errorWhileRendering) {
+									if (!pageContext.httpResponse) {
+										throw pageContext.errorWhileRendering
+									}
+								}
 								const { httpResponse } = pageContext
 								if (!httpResponse) {
 									return next()
@@ -463,6 +478,11 @@ async function demarrerServeur () {
 			digidrive: req.session.digidrive
 		}
 		const pageContext = await renderPage(pageContextInit)
+		if (pageContext.errorWhileRendering) {
+			if (!pageContext.httpResponse) {
+				throw pageContext.errorWhileRendering
+			}
+		}
 		const { httpResponse } = pageContext
 		if (!httpResponse) {
 			return next()
@@ -491,6 +511,11 @@ async function demarrerServeur () {
 			langue: langue
 		}
 		const pageContext = await renderPage(pageContextInit)
+		if (pageContext.errorWhileRendering) {
+			if (!pageContext.httpResponse) {
+				throw pageContext.errorWhileRendering
+			}
+		}
 		const { httpResponse } = pageContext
 		if (!httpResponse) {
 			return next()
@@ -516,6 +541,11 @@ async function demarrerServeur () {
 			langue: langue
 		}
 		const pageContext = await renderPage(pageContextInit)
+		if (pageContext.errorWhileRendering) {
+			if (!pageContext.httpResponse) {
+				throw pageContext.errorWhileRendering
+			}
+		}
 		const { httpResponse } = pageContext
 		if (!httpResponse) {
 			return next()
@@ -5669,7 +5699,7 @@ async function demarrerServeur () {
 		multi.hset('dates-murs:' + id, 'date', date)
 		multi.exec(async function () {
 			const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-			await fs.mkdirs(chemin)
+			await fs.mkdirp(chemin)
 			res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', epinglage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
 		})
 	}
@@ -5688,7 +5718,7 @@ async function demarrerServeur () {
 		multi.hmset('utilisateurs:' + identifiant, 'id', identifiant, 'date', date, 'nom', nom, 'langue', langue)
 		multi.exec(async function () {
 			const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-			await fs.mkdirs(chemin)
+			await fs.mkdirp(chemin)
 			if (type === 'api') {
 				res.send(id + '/' + token + '/' + slug)
 			} else {
@@ -6177,7 +6207,10 @@ async function demarrerServeur () {
 				}
 				const slug = definirSlug(mur.titre)
 				mur.slug = slug
-				const vues = parseInt(mur.vues) + 1
+				let vues = parseInt(mur.vues)
+				if (!admin) {
+					vues = vues + 1
+				}
 				mur.affichageColonnes = JSON.parse(mur.affichageColonnes)
 				if (!mur.hasOwnProperty('epinglage')) {
 					mur.epinglage = 'desactive'

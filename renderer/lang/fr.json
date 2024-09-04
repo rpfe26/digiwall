@@ -423,5 +423,8 @@
 	"parametreEpinglageModifie": "Paramètre d'épinglage des capsules modifié.",
 	"erreurEspaceDisque": "Il n'y a plus d'espace libre sur le disque dur du serveur. Le téléversement du fichier n'a pas pu être effectué.",
 	"actionNonAutorisee": "Vous n'êtes pas autorisé à effectuer cette action.",
-	"transfererMur": "Transférer un mur vers un autre compte"
+	"transfererMur": "Transférer un mur vers un autre compte",
+	"erreur": "Oups…",
+	"erreurChargementPage": "Erreur lors du chargement de la page",
+	"retourAccueil": "Retour à la page d'accueil"
 }

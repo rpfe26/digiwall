@@ -423,5 +423,8 @@
 	"parametreEpinglageModifie": "Impostazione di puntamento della capsula modificata.",
 	"erreurEspaceDisque": "Non c'è più spazio libero sul disco rigido del server. Non è stato possibile caricare il file.",
 	"actionNonAutorisee": "Non siete autorizzati a eseguire questa azione.",
-	"transfererMur": "Trasferimento di un muro a un altro account"
+	"transfererMur": "Trasferimento di un muro a un altro account",
+	"erreur": "Oops…",
+	"erreurChargementPage": "Errore nel caricamento della pagina",
+	"retourAccueil": "Torna alla pagina iniziale"
 }

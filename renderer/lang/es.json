@@ -423,5 +423,8 @@
 	"parametreEpinglageModifie": "Parámetro de fijación de la cápsula modificado.",
 	"erreurEspaceDisque": "No hay más espacio libre en el disco duro del servidor. No se ha podido cargar el archivo.",
 	"actionNonAutorisee": "No está autorizado a realizar esta acción.",
-	"transfererMur": "Transferir un muro a otra cuenta"
+	"transfererMur": "Transferir un muro a otra cuenta",
+	"erreur": "Ups…",
+	"erreurChargementPage": "Error al cargar la página",
+	"retourAccueil": "Volver a la página de inicio"
 }
