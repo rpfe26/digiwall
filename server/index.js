@@ -6208,7 +6208,7 @@ async function demarrerServeur () {
 				const slug = definirSlug(mur.titre)
 				mur.slug = slug
 				let vues = parseInt(mur.vues)
-				if (!admin) {
+				if (!admin && !accesPrive) {
 					vues = vues + 1
 				}
 				mur.affichageColonnes = JSON.parse(mur.affichageColonnes)
