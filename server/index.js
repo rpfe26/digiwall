@@ -4095,7 +4095,7 @@ async function demarrerServeur () {
 									if (donnees.hasOwnProperty('admins')) {
 										admins = JSON.parse(donnees.admins)
 									}
-									if (objet.identifiant === identifiant || admins.includes(identifiant || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+									if (objet.identifiant === identifiant || admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 										if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
 											supprimerFichier(mur, objet.media)
 										}
