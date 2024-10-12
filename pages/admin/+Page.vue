@@ -406,6 +406,8 @@ export default {
 						this.message = this.$t('erreurExportMur')
 					} else if (donnees === 'non_autorise') {
 						this.message = this.$t('actionNonAutorisee')
+					} else if (donnees === 'mur_inexistant') {
+						this.message = this.$t('murInexistant')
 					} else {
 						saveAs('/temp/' + donnees, 'mur-' + this.murIdE + '.zip')
 						this.murIdE = ''
