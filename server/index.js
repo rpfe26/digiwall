@@ -5,10 +5,12 @@ import onHeaders from 'on-headers'
 import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
+import { createAdapter } from '@socket.io/cluster-adapter'
+// import eiows from 'eiows'
 import compression from 'compression'
 import axios from 'axios'
 import cors from 'cors'
-import redis from 'redis'
+import { createClient } from 'redis'
 import bodyParser from 'body-parser'
 import helmet from 'helmet'
 import v from 'voca'
@@ -30,16 +32,31 @@ import * as cheerio from 'cheerio'
 import libre from 'libreoffice-convert'
 import util from 'util'
 libre.convertAsync = util.promisify(libre.convert)
-import connectRedis from 'connect-redis'
+import RedisStore from 'connect-redis'
 import session from 'express-session'
 import events from 'events'
 import base64 from 'base-64'
 import checkDiskSpace from 'check-disk-space'
+import pg from 'pg'
 import { renderPage } from 'vike/server'
 
 const production = process.env.NODE_ENV === 'production'
+const cluster = parseInt(process.env.NODE_CLUSTER) === 1
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = `${__dirname}/..`
+
+planifierCollecteDechets()
+
+function planifierCollecteDechets () {
+	if (!global.gc) {
+		return false
+	}
+	const prochainAppel = 30 + (Math.random() * 15)
+	setTimeout(function () {
+		global.gc()
+		planifierCollecteDechets()
+	}, prochainAppel * 1000)
+}
 
 demarrerServeur()
 
@@ -47,14 +64,13 @@ async function demarrerServeur () {
 	const app = express()
 	app.use(compression())
 	const httpServer = createServer(app)
-	const RedisStore = connectRedis(session)
+	const { Pool } = pg
 
 	let hote = 'http://localhost:3000'
-	if (process.env.PORT) {
-		hote = 'http://localhost:' + process.env.PORT
-	}
 	if (production) {
 		hote = process.env.DOMAIN
+	} else if (process.env.PORT) {
+		hote = 'http://localhost:' + process.env.PORT
 	}
 	let db
 	let db_port = 6379
@@ -62,9 +78,13 @@ async function demarrerServeur () {
 		db_port = process.env.DB_PORT
 	}
 	if (production) {
-		db = redis.createClient({ host: process.env.DB_HOST, port: db_port, password: process.env.DB_PWD })
+		db = await createClient({ host: process.env.DB_HOST, port: db_port, password: process.env.DB_PWD }).on('error', function (err) {
+			console.log('redis: ', err)
+		}).connect()
 	} else {
-		db = redis.createClient({ port: db_port })
+		db = await createClient({ port: db_port }).on('error', function (err) {
+			console.log('redis: ' + err)
+		}).connect()
 	}
 	let storeOptions, cookie, dureeSession, dateCron, domainesAutorises, minimumEspaceDisque
 	let maintenance = false
@@ -91,9 +111,10 @@ async function demarrerServeur () {
 			secure: false
 		}
 	}
+	const redisStore = new RedisStore(storeOptions)
 	const sessionOptions = {
 		secret: process.env.SESSION_KEY,
-		store: new RedisStore(storeOptions),
+		store: redisStore,
 		name: 'digiwall',
 		resave: false,
 		rolling: true,
@@ -111,6 +132,38 @@ async function demarrerServeur () {
 		domainesAutorises = process.env.AUTHORIZED_DOMAINS.split(',')
 	} else {
 		domainesAutorises = '*'
+	}
+
+	let pgdb = false
+	let pool = null
+	if (production && process.env.PG_DB && parseInt(process.env.PG_DB) === 1) {
+		pgdb = true
+		let maxCon = 240
+		if (cluster === true) {
+			maxCon = 15
+		}
+		pool = new Pool({
+			user: process.env.PG_DB_USER,
+			password: process.env.PG_DB_PWD,
+			host: process.env.PG_DB_HOST,
+			port: process.env.PG_DB_PORT,
+			database: process.env.PG_DB_NAME,
+			max: maxCon,
+			idleTimeoutMillis: 30000,
+			connectionTimeoutMillis: 360000,
+			allowExitOnIdle: true
+		})
+		pool.on('error', function (err) {
+			console.log('pg: ' + err)
+		})
+		const client = await pool.connect()
+		await client.query('CREATE TABLE IF NOT EXISTS murs (id BIGSERIAL PRIMARY KEY, mur INTEGER NOT NULL, donnees TEXT NOT NULL, blocs TEXT NOT NULL, activite TEXT NOT NULL, date TEXT NOT NULL)')
+		client.release()
+	}
+
+	let earlyHints103 = false
+	if (process.env.EARLY_HINTS && parseInt(process.env.EARLY_HINTS) === 1) {
+		earlyHints103 = true
 	}
 
 	const transporter = nodemailer.createTransport({
@@ -144,7 +197,7 @@ async function demarrerServeur () {
 	const etherpadApi = process.env.VITE_ETHERPAD_API_KEY
 
 	// Augmenter nombre de tâches asynchrones par défaut
-	events.EventEmitter.defaultMaxListeners = 50
+	events.EventEmitter.defaultMaxListeners = 100
 
 	app.set('trust proxy', true)
 	app.use(
@@ -165,21 +218,20 @@ async function demarrerServeur () {
 		})
 		next()
 	})
-	app.use(bodyParser.json({ limit: '500mb' }))
+	app.use(bodyParser.json({ limit: '300mb' }))
 	app.use(sessionMiddleware)
 	app.use(cors({ 'origin': domainesAutorises }))
-	app.use('/fichiers', express.static('static/fichiers'))
-	app.use('/pdfjs', express.static('static/pdfjs'))
-	app.use('/temp', express.static('static/temp'))
-	if (process.env.VITE_NFS_FOLDER && process.env.VITE_NFS_FOLDER !== '') {
-		app.use('/' + process.env.VITE_NFS_FOLDER, express.static('static/' + process.env.VITE_NFS_FOLDER))
+	if (parseInt(process.env.REVERSE_PROXY) !== 1 || !production) {
+		app.use('/fichiers', express.static('static/fichiers'))
+		app.use('/pdfjs', express.static('static/pdfjs'))
+		app.use('/temp', express.static('static/temp'))
+		if (process.env.VITE_NFS_FOLDER && process.env.VITE_NFS_FOLDER !== '') {
+			app.use('/' + process.env.VITE_NFS_FOLDER, express.static('static/' + process.env.VITE_NFS_FOLDER))
+		}
 	}
 
-	if (production) {
-		const sirv = (await import('sirv')).default
-		app.use(sirv(`${root}/dist/client`))
-	} else {
-    	const vite = await import('vite')
+	if (!production) {
+		const vite = await import('vite')
     	const viteDevMiddleware = (
       		await vite.createServer({
         		root,
@@ -187,7 +239,10 @@ async function demarrerServeur () {
 			})
     	).middlewares
     	app.use(viteDevMiddleware)
-  	}
+  	} else if (production && parseInt(process.env.REVERSE_PROXY) !== 1) {
+		const sirv = (await import('sirv')).default
+		app.use(sirv(`${root}/dist/client`))
+	}
 	
 	app.get('/', async function (req, res, next) {
 		if (maintenance === true) {
@@ -217,7 +272,7 @@ async function demarrerServeur () {
 				return next()
 			}
 			const { body, statusCode, headers, earlyHints } = httpResponse
-			if (res.writeEarlyHints) {
+			if (earlyHints103 === true && res.writeEarlyHints) {
 				res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
 			}
 			if (headers) {
@@ -227,12 +282,12 @@ async function demarrerServeur () {
 		}
   	})
 	
-	app.get('/u/:utilisateur', async function (req, res, next) {
+	app.get('/u/:utilisateur', function (req, res, next) {
 		const identifiant = req.params.utilisateur
 		if (maintenance === true) {
 			res.redirect('/maintenance')
 		} else if (identifiant === req.session.identifiant && req.session.statut === 'utilisateur') {
-			recupererDonneesUtilisateur(identifiant).then(function (murs) {
+			recupererDonneesUtilisateur(identifiant).then(async function (murs) {
 				let mursCrees = murs[0].filter(function (element) {
 					if (element.hasOwnProperty('id')) {
 						element.id = parseInt(element.id)
@@ -287,8 +342,106 @@ async function demarrerServeur () {
 					))
 				)
 				// Récupération et vérification des dossiers utilisateur
-				db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
-					if (err || !donnees || donnees === null) {
+				let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null) {
+					const pageContextInit = {
+						urlOriginal: req.originalUrl,
+						params: req.query,
+						hote: hote,
+						langues: ['fr', 'es', 'it', 'de', 'en'],
+						identifiant: req.session.identifiant,
+						nom: req.session.nom,
+						email: req.session.email,
+						langue: req.session.langue,
+						statut: req.session.statut,
+						affichage: 'liste',
+						classement: 'date-asc',
+						mursCrees: mursCrees,
+						mursRejoints: mursRejoints,
+						mursAdmins: mursAdmins,
+						mursFavoris: mursFavoris,
+						dossiers: []
+					}
+					const pageContext = await renderPage(pageContextInit)
+					if (pageContext.errorWhileRendering) {
+						if (!pageContext.httpResponse) {
+							throw pageContext.errorWhileRendering
+						}
+					}
+					const { httpResponse } = pageContext
+					if (!httpResponse) {
+						return next()
+					}
+					const { body, statusCode, headers, earlyHints } = httpResponse
+					if (earlyHints103 === true && res.writeEarlyHints) {
+						res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
+					}
+					if (headers) {
+						headers.forEach(([name, value]) => res.setHeader(name, value))
+					}
+					res.status(statusCode).send(body)
+				} else {
+					let dossiers = []
+					if (donnees.hasOwnProperty('dossiers')) {
+						try {
+							dossiers = JSON.parse(donnees.dossiers)
+						} catch (err) {
+							dossiers = []
+						}
+					}
+					const listeMursDossiers = []
+					dossiers.forEach(function (dossier, indexDossier) {
+						dossier.murs.forEach(function (mur, indexMur) {
+							dossiers[indexDossier].murs[indexMur] = parseInt(mur)
+							if (!listeMursDossiers.includes(parseInt(mur))) {
+								listeMursDossiers.push(parseInt(mur))
+							}
+						})
+					})
+					const donneesMursDossiers = []
+					for (const mur of listeMursDossiers) {
+						const donneeMursDossiers = new Promise(async function (resolve) {
+							const resultat = await db.EXISTS('murs:' + mur)
+							if (resultat === null || resultat === 1) {
+								resolve()
+							} else if (resultat !== 1 && pgdb === true) {
+								const client = await pool.connect()
+								if ((await client.query('SELECT id FROM murs WHERE mur = $1', [parseInt(mur)])).rowCount > 0) {
+									resolve()
+								} else {
+									resolve(parseInt(mur))
+								}
+								client.release()
+							} else {
+								resolve(parseInt(mur))
+							}
+						})
+						donneesMursDossiers.push(donneeMursDossiers)
+					}
+					Promise.all(donneesMursDossiers).then(async function (mursSupprimes) {
+						mursSupprimes.forEach(function (murSupprime) {
+							if (murSupprime !== '' || murSupprime !== null) {
+								dossiers.forEach(function (dossier, indexDossier) {
+									if (dossier.murs.includes(murSupprime)) {
+										const indexMur = dossier.murs.indexOf(murSupprime)
+										dossiers[indexDossier].murs.splice(indexMur, 1)
+									}
+								})
+							}
+						})
+						// Supprimer doublons dans dossiers
+						dossiers.forEach(function (dossier, indexDossier) {
+							const murs = []
+							dossier.murs.forEach(function (mur, indexMur) {
+								if (!murs.includes(mur)) {
+									murs.push(mur)
+								} else {
+									dossiers[indexDossier].murs.splice(indexMur, 1)
+								}
+							})
+						})
+						await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
 						const pageContextInit = {
 							urlOriginal: req.originalUrl,
 							params: req.query,
@@ -299,13 +452,13 @@ async function demarrerServeur () {
 							email: req.session.email,
 							langue: req.session.langue,
 							statut: req.session.statut,
-							affichage: 'liste',
-							classement: 'date-asc',
+							affichage: donnees.affichage,
+							classement: donnees.classement,
 							mursCrees: mursCrees,
 							mursRejoints: mursRejoints,
 							mursAdmins: mursAdmins,
 							mursFavoris: mursFavoris,
-							dossiers: []
+							dossiers: dossiers
 						}
 						const pageContext = await renderPage(pageContextInit)
 						if (pageContext.errorWhileRendering) {
@@ -318,110 +471,15 @@ async function demarrerServeur () {
 							return next()
 						}
 						const { body, statusCode, headers, earlyHints } = httpResponse
-						if (res.writeEarlyHints) {
+						if (earlyHints103 === true && res.writeEarlyHints) {
 							res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
 						}
 						if (headers) {
 							headers.forEach(([name, value]) => res.setHeader(name, value))
 						}
 						res.status(statusCode).send(body)
-					} else {
-						let dossiers = []
-						if (donnees.hasOwnProperty('dossiers')) {
-							try {
-								dossiers = JSON.parse(donnees.dossiers)
-							} catch (err) {
-								dossiers = []
-							}
-						}
-						const listeMursDossiers = []
-						dossiers.forEach(function (dossier, indexDossier) {
-							dossier.murs.forEach(function (mur, indexMur) {
-								dossiers[indexDossier].murs[indexMur] = parseInt(mur)
-								if (!listeMursDossiers.includes(parseInt(mur))) {
-									listeMursDossiers.push(parseInt(mur))
-								}
-							})
-						})
-						const donneesMursDossiers = []
-						for (const mur of listeMursDossiers) {
-							const donneeMursDossiers = new Promise(function (resolve) {
-								db.exists('murs:' + mur, async function (err, resultat) {
-									if (err) { resolve(); return false }
-									if (resultat === 1) {
-										resolve()
-									} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-										resolve()
-									} else {
-										resolve(parseInt(mur))
-									}
-								})
-							})
-							donneesMursDossiers.push(donneeMursDossiers)
-						}
-						Promise.all(donneesMursDossiers).then(function (mursSupprimes) {
-							mursSupprimes.forEach(function (murSupprime) {
-								if (murSupprime !== '' || murSupprime !== null) {
-									dossiers.forEach(function (dossier, indexDossier) {
-										if (dossier.murs.includes(murSupprime)) {
-											const indexMur = dossier.murs.indexOf(murSupprime)
-											dossiers[indexDossier].murs.splice(indexMur, 1)
-										}
-									})
-								}
-							})
-							// Supprimer doublons dans dossiers
-							dossiers.forEach(function (dossier, indexDossier) {
-								const murs = []
-								dossier.murs.forEach(function (mur, indexMur) {
-									if (!murs.includes(mur)) {
-										murs.push(mur)
-									} else {
-										dossiers[indexDossier].murs.splice(indexMur, 1)
-									}
-								})
-							})
-							db.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers), async function () {
-								const pageContextInit = {
-									urlOriginal: req.originalUrl,
-									params: req.query,
-									hote: hote,
-									langues: ['fr', 'es', 'it', 'de', 'en'],
-									identifiant: req.session.identifiant,
-									nom: req.session.nom,
-									email: req.session.email,
-									langue: req.session.langue,
-									statut: req.session.statut,
-									affichage: donnees.affichage,
-									classement: donnees.classement,
-									mursCrees: mursCrees,
-									mursRejoints: mursRejoints,
-									mursAdmins: mursAdmins,
-									mursFavoris: mursFavoris,
-									dossiers: dossiers
-								}
-								const pageContext = await renderPage(pageContextInit)
-								if (pageContext.errorWhileRendering) {
-									if (!pageContext.httpResponse) {
-										throw pageContext.errorWhileRendering
-									}
-								}
-								const { httpResponse } = pageContext
-								if (!httpResponse) {
-									return next()
-								}
-								const { body, statusCode, headers, earlyHints } = httpResponse
-								if (res.writeEarlyHints) {
-									res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
-								}
-								if (headers) {
-									headers.forEach(([name, value]) => res.setHeader(name, value))
-								}
-								res.status(statusCode).send(body)
-							})
-						})
-					}
-				})
+					})
+				}
 			})
 		} else {
 			res.redirect('/')
@@ -488,7 +546,7 @@ async function demarrerServeur () {
 			return next()
 		}
 		const { body, statusCode, headers, earlyHints } = httpResponse
-		if (res.writeEarlyHints) {
+		if (earlyHints103 === true && res.writeEarlyHints) {
 			res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
 		}
 		if (headers) {
@@ -521,7 +579,7 @@ async function demarrerServeur () {
 			return next()
 		}
 		const { body, statusCode, headers, earlyHints } = httpResponse
-		if (res.writeEarlyHints) {
+		if (earlyHints103 === true && res.writeEarlyHints) {
 			res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
 		}
 		if (headers) {
@@ -551,7 +609,7 @@ async function demarrerServeur () {
 			return next()
 		}
 		const { body, statusCode, headers, earlyHints } = httpResponse
-		if (res.writeEarlyHints) {
+		if (earlyHints103 === true && res.writeEarlyHints) {
 			res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
 		}
 		if (headers) {
@@ -560,113 +618,112 @@ async function demarrerServeur () {
 		res.status(statusCode).send(body)
   	})
 
-	app.post('/api/inscription', function (req, res) {
+	app.post('/api/inscription', async function (req, res) {
 		const identifiant = req.body.identifiant
 		const motdepasse = req.body.motdepasse
 		const email = req.body.email
-		db.exists('utilisateurs:' + identifiant, async function (err, reponse) {
-			if (err) { res.send('erreur'); return false  }
-			if (reponse === 0) {
-				const hash = await bcrypt.hash(motdepasse, 10)
-				const date = dayjs().format()
-				let langue = 'fr'
-				if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
-					langue = req.session.langue
-				}
-				const multi = db.multi()
-				multi.hmset('utilisateurs:' + identifiant, 'id', identifiant, 'motdepasse', hash, 'date', date, 'nom', '', 'email', email, 'langue', langue, 'affichage', 'liste', 'classement', 'date-asc', 'dossiers', JSON.stringify([]))
-				multi.sadd('emails:' + email, identifiant)
-				multi.exec(function () {
-					req.session.identifiant = identifiant
-					req.session.nom = ''
-					req.session.email = email
-					req.session.langue = langue
-					req.session.statut = 'utilisateur'
-					req.session.cookie.expires = new Date(Date.now() + dureeSession)
-					res.json({ identifiant: identifiant })
-				})
-			} else {
-				res.send('utilisateur_existe_deja')
+		const reponse = await db.EXISTS('utilisateurs:' + identifiant)
+		if (reponse === null) {
+			res.send('erreur'); return false
+		} else if (reponse === 0) {
+			const hash = await bcrypt.hash(motdepasse, 10)
+			const date = dayjs().format()
+			let langue = 'fr'
+			if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
+				langue = req.session.langue
 			}
-		})
+			await db
+			.multi()
+			.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'motdepasse', hash, 'date', date, 'nom', '', 'email', email, 'langue', langue, 'affichage', 'liste', 'classement', 'date-asc', 'dossiers', JSON.stringify([])])
+			.SADD('emails:' + email, identifiant)
+			.exec()
+			req.session.identifiant = identifiant
+			req.session.nom = ''
+			req.session.email = email
+			req.session.langue = langue
+			req.session.statut = 'utilisateur'
+			req.session.cookie.expires = new Date(Date.now() + dureeSession)
+			res.json({ identifiant: identifiant })
+		} else {
+			res.send('utilisateur_existe_deja')
+		}
 	})
 
-	app.post('/api/connexion', function (req, res) {
+	app.post('/api/connexion', async function (req, res) {
 		const identifiant = req.body.identifiant
 		const motdepasse = req.body.motdepasse
-		db.exists('utilisateurs:' + identifiant, function (err, reponse) {
-			if (err) { res.send('erreur_connexion'); return false }
-			if (reponse === 1) {
-				db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
-					if (err) { res.send('erreur_connexion'); return false }
-					let comparaison = false
-					if (motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '') {
-						comparaison = await bcrypt.compare(motdepasse, donnees.motdepasse)
-					}
-					let comparaisonTemp = false
-					if (donnees.hasOwnProperty('motdepassetemp') && donnees.motdepassetemp.trim() !== '' && motdepasse.trim() !== '') {
-						comparaisonTemp = await bcrypt.compare(motdepasse, donnees.motdepassetemp)
-					}
-					if (comparaison === true || comparaisonTemp === true) {
-						if (comparaisonTemp === true) {
-							const hash = await bcrypt.hash(motdepasse, 10)
-							db.hset('utilisateurs:' + identifiant, 'motdepasse', hash)
-							db.hdel('utilisateurs:' + identifiant, 'motdepassetemp')
-						}
-						const nom = donnees.nom
-						const langue = donnees.langue
-						const email = donnees.email
-						req.session.identifiant = identifiant
-						req.session.nom = nom
-						req.session.email = email
-						req.session.langue = langue
-						req.session.statut = 'utilisateur'
-						req.session.cookie.expires = new Date(Date.now() + dureeSession)
-						res.json({ identifiant: identifiant })
-					} else {
-						res.send('erreur_connexion')
-					}
-				})
+		const reponse = await db.EXISTS('utilisateurs:' + identifiant)
+		if (reponse === null) { 
+			res.send('erreur_connexion')
+		} else if (reponse === 1) {
+			let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.send('erreur_connexion'); return false }
+			let comparaison = false
+			if (motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '') {
+				comparaison = await bcrypt.compare(motdepasse, donnees.motdepasse)
+			}
+			let comparaisonTemp = false
+			if (donnees.hasOwnProperty('motdepassetemp') && donnees.motdepassetemp.trim() !== '' && motdepasse.trim() !== '') {
+				comparaisonTemp = await bcrypt.compare(motdepasse, donnees.motdepassetemp)
+			}
+			if (comparaison === true || comparaisonTemp === true) {
+				if (comparaisonTemp === true) {
+					const hash = await bcrypt.hash(motdepasse, 10)
+					await db.HSET('utilisateurs:' + identifiant, 'motdepasse', hash)
+					await db.HDEL('utilisateurs:' + identifiant, 'motdepassetemp')
+				}
+				const nom = donnees.nom
+				const langue = donnees.langue
+				const email = donnees.email
+				req.session.identifiant = identifiant
+				req.session.nom = nom
+				req.session.email = email
+				req.session.langue = langue
+				req.session.statut = 'utilisateur'
+				req.session.cookie.expires = new Date(Date.now() + dureeSession)
+				res.json({ identifiant: identifiant })
 			} else {
 				res.send('erreur_connexion')
 			}
-		})
+		} else {
+			res.send('erreur_connexion')
+		}
 	})
 
-	app.post('/api/mot-de-passe-oublie', function (req, res) {
+	app.post('/api/mot-de-passe-oublie', async function (req, res) {
 		const email = req.body.email.trim()
-		db.smembers('emails:' + email, function (err, identifiants) {
-			if (err) { res.send('erreur'); return false }
-			if (identifiants.length > 0) {
-				const emails = []
-				for (const identifiant of identifiants) {
-					const emailEnvoye = new Promise(function (resolve) {
-						const motdepasse = genererMotDePasse(7)
-						const message = {
-							from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
-							to: '"Moi" <' + email + '>',
-							subject: 'Mot de passe Digiwall',
-							html: '<p>Votre nouveau mot de passe : ' + motdepasse + '</p><p>Identifiant : ' + identifiant + '</p>'
+		const identifiants = await db.SMEMBERS('emails:' + email)
+		if (identifiants === null) { res.send('erreur'); return false }
+		if (identifiants.length > 0) {
+			const emails = []
+			for (const identifiant of identifiants) {
+				const emailEnvoye = new Promise(function (resolve) {
+					const motdepasse = genererMotDePasse(7)
+					const message = {
+						from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
+						to: '"Moi" <' + email + '>',
+						subject: 'Mot de passe Digiwall',
+						html: '<p>Votre nouveau mot de passe : ' + motdepasse + '</p><p>Identifiant : ' + identifiant + '</p>'
+					}
+					transporter.sendMail(message, async function (err) {
+						if (err) {
+							resolve()
+						} else {
+							const hash = await bcrypt.hash(motdepasse, 10)
+							await db.HSET('utilisateurs:' + identifiant, 'motdepassetemp', hash)
+							resolve()
 						}
-						transporter.sendMail(message, async function (err) {
-							if (err) {
-								resolve()
-							} else {
-								const hash = await bcrypt.hash(motdepasse, 10)
-								db.hset('utilisateurs:' + identifiant, 'motdepassetemp', hash)
-								resolve()
-							}
-						})
 					})
-					emails.push(emailEnvoye)
-				}
-				Promise.all(emails).then(function () {
-					res.send('message_envoye')
 				})
-			} else {
-				res.send('email_invalide')
+				emails.push(emailEnvoye)
 			}
-		})
+			Promise.all(emails).then(function () {
+				res.send('message_envoye')
+			})
+		} else {
+			res.send('email_invalide')
+		}
 	})
 
 	app.post('/api/deconnexion', function (req, res) {
@@ -679,77 +736,78 @@ async function demarrerServeur () {
 		res.send('deconnecte')
 	})
 
-	app.post('/api/recuperer-donnees-auteur', function (req, res) {
+	app.post('/api/recuperer-donnees-auteur', async function (req, res) {
 		const identifiant = req.body.identifiant
 		const mur = req.body.mur
-		db.hgetall('murs:' + mur, function (err, donnees) {
-			if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { res.send('erreur'); return false }
-			const proprietaire = donnees.identifiant
-			let admins = []
-			if (donnees.hasOwnProperty('admins')) {
-				admins = JSON.parse(donnees.admins)
-			}
-			if ((admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) && req.session.identifiant === identifiant) {
-				recupererDonneesAuteur(identifiant).then(function (murs) {
-					let mursCrees = murs[0].filter(function (element) {
-						if (element.hasOwnProperty('id')) {
-							element.id = parseInt(element.id)
-						}
-						return element !== '' && Object.keys(element).length > 0
-					})
-					let mursAdmins = murs[1].filter(function (element) {
-						if (element.hasOwnProperty('id')) {
-							element.id = parseInt(element.id)
-						}
-						return element !== '' && Object.keys(element).length > 0
-					})
-					// Supprimer doublons
-					mursCrees = mursCrees.filter((valeur, index, self) =>
-						index === self.findIndex((t) => (
-							t.id === valeur.id && t.token === valeur.token
-						))
-					)
-					mursAdmins = mursAdmins.filter((valeur, index, self) =>
-						index === self.findIndex((t) => (
-							t.id === valeur.id && t.token === valeur.token
-						))
-					)
-					res.json({ mursCrees: mursCrees, mursAdmins: mursAdmins })
+		let donnees = await db.HGETALL('murs:' + mur)
+		donnees = Object.assign({}, donnees)
+		if (donnees === null || !donnees.hasOwnProperty('identifiant')) { res.send('erreur'); return false }
+		const proprietaire = donnees.identifiant
+		let admins = []
+		if (donnees.hasOwnProperty('admins')) {
+			admins = JSON.parse(donnees.admins)
+		}
+		if ((admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) && req.session.identifiant === identifiant) {
+			recupererDonneesAuteur(identifiant).then(function (murs) {
+				let mursCrees = murs[0].filter(function (element) {
+					if (element.hasOwnProperty('id')) {
+						element.id = parseInt(element.id)
+					}
+					return element !== '' && Object.keys(element).length > 0
 				})
-			} else {
-				res.send('non_autorise')
-			}
-		})
+				let mursAdmins = murs[1].filter(function (element) {
+					if (element.hasOwnProperty('id')) {
+						element.id = parseInt(element.id)
+					}
+					return element !== '' && Object.keys(element).length > 0
+				})
+				// Supprimer doublons
+				mursCrees = mursCrees.filter((valeur, index, self) =>
+					index === self.findIndex((t) => (
+						t.id === valeur.id && t.token === valeur.token
+					))
+				)
+				mursAdmins = mursAdmins.filter((valeur, index, self) =>
+					index === self.findIndex((t) => (
+						t.id === valeur.id && t.token === valeur.token
+					))
+				)
+				res.json({ mursCrees: mursCrees, mursAdmins: mursAdmins })
+			})
+		} else {
+			res.send('non_autorise')
+		}
 	})
 
-	app.post('/api/recuperer-donnees-mur', function (req, res) {
+	app.post('/api/recuperer-donnees-mur', async function (req, res) {
 		const id = req.body.id
 		const token = req.body.token
 		const identifiant = req.body.identifiant
 		const statut = req.body.statut
 		const murs = req.body.murs
-		db.exists('murs:' + id, function (err, resultat) {
-			if (err) { res.send('erreur'); return false }
-			db.hgetall('murs:' + id, async function (err, mur) {
-				if (err) { res.send('erreur'); return false }
-				if (resultat === 1 && mur !== null) {
-					recupererDonneesMur(id, token, identifiant, statut, murs, res)
-				} else if ((resultat !== 1 || mur === null) && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + id + '.json'))) {
-					const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + id + '.json'))
-					if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-						await ajouterMurDansDb(id, donnees)
-						recupererDonneesMur(id, token, identifiant, statut, murs, res)
-					} else {
-						res.send('erreur')
-					}
-				} else {
-					res.send('erreur')
-				}
-			})
-		})
+		const resultat = await db.EXISTS('murs:' + id)
+		if (resultat === null) { res.send('erreur'); return false }
+		let mur = await db.HGETALL('murs:' + id)
+		mur = Object.assign({}, mur)
+		if (resultat === 1 && mur !== null) {
+			recupererDonneesMur(id, token, identifiant, statut, murs, res)
+		} else if ((resultat !== 1 || mur === null) && pgdb === true) {
+			const client = await pool.connect()
+			const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(id)])
+			client.release()
+			if (Object.keys(donneesQ.rows[0]).length === 3) {
+				const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+				await ajouterMurDansDb(id, donnees)
+				recupererDonneesMur(id, token, identifiant, statut, murs, res)
+			} else {
+				res.send('erreur')
+			}
+		} else {
+			res.send('erreur')
+		}
 	})
 
-	app.post('/api/creer-mur', function (req, res) {
+	app.post('/api/creer-mur', async function (req, res) {
 		if (maintenance === true) {
 			res.redirect('/maintenance')
 			return false
@@ -760,18 +818,16 @@ async function demarrerServeur () {
 			const token = Math.random().toString(16).slice(10)
 			const slug = definirSlug(titre)
 			const date = dayjs().format()
-			db.exists('mur', function (err, resultat) {
-				if (err) { res.send('erreur_creation'); return false }
-				if (resultat === 1) {
-					db.get('mur', function (err, resultat) {
-						if (err) { res.send('erreur_creation'); return false }
-						const id = parseInt(resultat) + 1
-						creerMur(res, id, token, slug, titre, date, identifiant)
-					})
-				} else {
-					creerMur(res, 1, token, slug, titre, date, identifiant)
-				}
-			})
+			const resultat = await db.EXISTS('mur')
+			if (resultat === null) { res.send('erreur_creation'); return false }
+			if (resultat === 1) {
+				const reponse = await db.GET('mur')
+				if (reponse === null) { res.send('erreur_creation'); return false }
+				const id = parseInt(reponse) + 1
+				creerMur(res, id, token, slug, titre, date, identifiant)
+			} else {
+				creerMur(res, 1, token, slug, titre, date, identifiant)
+			}
 		} else {
 			res.send('non_connecte')
 		}
@@ -814,18 +870,16 @@ async function demarrerServeur () {
 		if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 			langue = req.session.langue
 		}
-		db.exists('mur', function (err, resultat) {
-			if (err) { res.send('erreur_creation'); return false }
-			if (resultat === 1) {
-				db.get('mur', function (err, resultat) {
-					if (err) { res.send('erreur_creation'); return false }
-					const id = parseInt(resultat) + 1
-					creerMurSansCompte(req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, '')
-				})
-			} else {
-				creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, '')
-			}
-		})
+		const resultat = await db.EXISTS('mur')
+		if (resultat === null) { res.send('erreur_creation'); return false }
+		if (resultat === 1) {
+			const reponse = await db.GET('mur')
+			if (reponse === null) { res.send('erreur_creation'); return false }
+			const id = parseInt(resultat) + 1
+			creerMurSansCompte(req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, '')
+		} else {
+			creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, '')
+		}
 	})
 
 	app.post('/api/deconnecter-mur', function (req, res) {
@@ -839,7 +893,7 @@ async function demarrerServeur () {
 		}
 	})
 
-	app.post('/api/modifier-mot-de-passe-mur', function (req, res) {
+	app.post('/api/modifier-mot-de-passe-mur', async function (req, res) {
 		if (maintenance === true) {
 			res.redirect('/maintenance')
 			return false
@@ -847,77 +901,71 @@ async function demarrerServeur () {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant) {
 			const mur = req.body.mur
-			db.hgetall('murs:' + mur, async function (err, donnees) {
-				if (err) { res.send('erreur'); return false }
-				const motdepasse = req.body.motdepasse
-				const nouveaumotdepasse = req.body.nouveaumotdepasse
-				if (motdepasse.trim() !== '' && nouveaumotdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
-					const hash = await bcrypt.hash(nouveaumotdepasse, 10)
-					db.hset('murs:' + mur, 'motdepasse', hash)
-					res.send('motdepasse_modifie')
-				} else {
-					res.send('motdepasse_incorrect')
-				}
-			})
+			let donnees = await db.HGETALL('murs:' + mur)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.send('erreur'); return false }
+			const motdepasse = req.body.motdepasse
+			const nouveaumotdepasse = req.body.nouveaumotdepasse
+			if (motdepasse.trim() !== '' && nouveaumotdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
+				const hash = await bcrypt.hash(nouveaumotdepasse, 10)
+				await db.HSET('murs:' + mur, 'motdepasse', hash)
+				res.send('motdepasse_modifie')
+			} else {
+				res.send('motdepasse_incorrect')
+			}
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/ajouter-mur-favoris', function (req, res) {
+	app.post('/api/ajouter-mur-favoris', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const mur = req.body.murId
-			db.sadd('murs-favoris:' + identifiant, mur, function (err) {
-				if (err) { res.send('erreur_ajout_favori'); return false }
-				res.send('mur_ajoute_favoris')
-			})
+			await db.SADD('murs-favoris:' + identifiant, mur.toString())
+			res.send('mur_ajoute_favoris')
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/supprimer-mur-favoris', function (req, res) {
+	app.post('/api/supprimer-mur-favoris', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const mur = req.body.murId
-			db.srem('murs-favoris:' + identifiant, mur, function (err) {
-				if (err) { res.send('erreur_suppression_favori'); return false }
-				res.send('mur_supprime_favoris')
-			})
+			await db.SREM('murs-favoris:' + identifiant, mur.toString())
+			res.send('mur_supprime_favoris')
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/deplacer-mur', function (req, res) {
+	app.post('/api/deplacer-mur', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const murId = req.body.murId
 			const destination = req.body.destination
-			db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
-				if (err) { res.send('erreur_deplacement'); return false }
-				const dossiers = JSON.parse(donnees.dossiers)
-				dossiers.forEach(function (dossier, indexDossier) {
-					if (dossier.murs.includes(murId)) {
-						const indexMur = dossier.murs.indexOf(murId)
-						dossiers[indexDossier].murs.splice(indexMur, 1)
-					}
-					if (dossier.id === destination) {
-						dossiers[indexDossier].murs.push(murId)
-					}
-				})
-				db.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers), function (err) {
-					if (err) { res.send('erreur_deplacement'); return false }
-					res.send('mur_deplace')
-				})
+			let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.send('erreur_deplacement'); return false }
+			const dossiers = JSON.parse(donnees.dossiers)
+			dossiers.forEach(function (dossier, indexDossier) {
+				if (dossier.murs.includes(murId)) {
+					const indexMur = dossier.murs.indexOf(murId)
+					dossiers[indexDossier].murs.splice(indexMur, 1)
+				}
+				if (dossier.id === destination) {
+					dossiers[indexDossier].murs.push(murId)
+				}
 			})
+			await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
+			res.send('mur_deplace')
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/dupliquer-mur', function (req, res) {
+	app.post('/api/dupliquer-mur', async function (req, res) {
 		if (maintenance === true) {
 			res.redirect('/maintenance')
 			return false
@@ -925,365 +973,302 @@ async function demarrerServeur () {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const mur = req.body.murId
-			db.get('mur', function (err, num) {
-				if (err) { res.send('erreur_duplication'); return false }
-				const id = parseInt(num) + 1
-				const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
-				checkDiskSpace(dossier).then(async function (diskSpace) {
-					const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
-					if (espace < minimumEspaceDisque) {
-						res.send('erreur_espace_disque')
-					} else {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { res.send('erreur_duplication'); return false }
-							if (resultat === 1) {
-								db.hgetall('murs:' + mur, function (err, donnees) {
-									if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { res.send('erreur_duplication'); return false }
-									const proprietaire = donnees.identifiant
-									if (proprietaire === identifiant) {
-										const donneesBlocs = []
-										db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-											if (err) { res.send('erreur_duplication'); return false }
-											for (const [indexBloc, bloc] of blocs.entries()) {
-												const donneesBloc = new Promise(function (resolve) {
-													db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, infos) {
-														if (err || !infos || infos === null) { resolve({}); return false }
-														const date = dayjs().format()
-														if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && !String(infos.vignette).includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
-															infos.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(infos.vignette)
-														}
-														if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
-															const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
-															const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
-															const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
-															axios.get(url)
-															infos.iframe = etherpad + '/p/' + destinationId
-															infos.media = etherpad + '/p/' + destinationId
-														}
-														let motdepasse = ''
-														if (infos.hasOwnProperty('motdepasse')) {
-															motdepasse = infos.motdepasse
-														}
-														let epinglee = 'non'
-														if (infos.hasOwnProperty('epinglee')) {
-															epinglee = infos.epinglee
-														}
-														const multi = db.multi()
-														const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-														multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', infos.couleur)
-														multi.zadd('blocs:' + id, indexBloc, blocId)
-														multi.exec(function () {
-															resolve(blocId)
-														})
-													})
-												})
-												donneesBlocs.push(donneesBloc)
-											}
-											Promise.all(donneesBlocs).then(function () {
-												const token = Math.random().toString(16).slice(10)
-												const slug = definirSlug(donnees.titre)
-												const date = dayjs().format()
-												const code = Math.floor(100000 + Math.random() * 900000)
-												if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
-													donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
-												}
-												let epinglage = 'desactive'
-												if (donnees.hasOwnProperty('epinglage')) {
-													epinglage = donnees.epinglage
-												}
-												const multi = db.multi()
-												multi.incr('mur')
-												if (donnees.hasOwnProperty('code')) {
-													multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
-												} else {
-													multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
-												}
-												multi.sadd('murs-crees:' + identifiant, id)
-												multi.sadd('utilisateurs-murs:' + id, identifiant)
-												multi.exec(async function () {
-													if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
-														await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
-													}
-													res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
-												})
-											})
-										})
-									} else {
-										res.send('non_autorise')
+			const num = await db.GET('mur')
+			if (num === null) { res.send('erreur_duplication'); return false }
+			const id = parseInt(num) + 1
+			const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
+			checkDiskSpace(dossier).then(async function (diskSpace) {
+				const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
+				if (espace < minimumEspaceDisque) {
+					res.send('erreur_espace_disque')
+				} else {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { res.send('erreur_duplication'); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null || !donnees.hasOwnProperty('identifiant')) { res.send('erreur_duplication'); return false }
+						const proprietaire = donnees.identifiant
+						if (proprietaire === identifiant) {
+							const donneesBlocs = []
+							const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+							if (blocs === null) { res.send('erreur_duplication'); return false }
+							for (const [indexBloc, bloc] of blocs.entries()) {
+								const donneesBloc = new Promise(async function (resolve) {
+									let infos = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+									infos = Object.assign({}, infos)
+									if (infos === null) { resolve({}); return false }
+									const date = dayjs().format()
+									if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && !String(infos.vignette).includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
+										infos.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(infos.vignette)
 									}
+									if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
+										const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
+										const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
+										const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
+										axios.get(url)
+										infos.iframe = etherpad + '/p/' + destinationId
+										infos.media = etherpad + '/p/' + destinationId
+									}
+									let motdepasse = ''
+									if (infos.hasOwnProperty('motdepasse')) {
+										motdepasse = infos.motdepasse
+									}
+									let epinglee = 'non'
+									if (infos.hasOwnProperty('epinglee')) {
+										epinglee = infos.epinglee
+									}
+									const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+									await db
+									.multi()
+									.HSET('contenu-blocs:' + id + ':' + blocId, ['id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', infos.couleur])
+									.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
+									.exec()
+									resolve(blocId)
 								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-									const proprietaire = donnees.identifiant
-									if (proprietaire === identifiant) {
-										const date = dayjs().format()
-										const donneesBlocs = []
-										for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-											const donneesBloc = new Promise(function (resolve) {
-												if (Object.keys(bloc).length > 0) {
-													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-														bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
-													}
-													if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
-														const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
-														const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
-														const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
-														axios.get(url)
-														bloc.iframe = etherpad + '/p/' + destinationId
-														bloc.media = etherpad + '/p/' + destinationId
-													}
-													let motdepasse = ''
-													if (bloc.hasOwnProperty('motdepasse')) {
-														motdepasse = bloc.motdepasse
-													}
-													let epinglee = 'non'
-													if (bloc.hasOwnProperty('epinglee')) {
-														epinglee = bloc.epinglee
-													}
-													const multi = db.multi()
-													const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-													multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
-													multi.zadd('blocs:' + id, indexBloc, blocId)
-													multi.exec(function () {
-														resolve(blocId)
-													})
-												} else {
-													resolve({})
-												}
-											})
-											donneesBlocs.push(donneesBloc)
-										}
-										Promise.all(donneesBlocs).then(function () {
-											const token = Math.random().toString(16).slice(10)
-											const slug = definirSlug(donnees.mur.titre)
-											const code = Math.floor(100000 + Math.random() * 900000)
-											if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
-												donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
-											}
-											let epinglage = 'desactive'
-											if (donnees.mur.hasOwnProperty('epinglage')) {
-												epinglage = donnees.mur.epinglage
-											}
-											const multi = db.multi()
-											multi.incr('mur')
-											if (donnees.mur.hasOwnProperty('code')) {
-												multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
-											} else {
-												multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
-											}
-											multi.sadd('murs-crees:' + identifiant, id)
-											multi.sadd('utilisateurs-murs:' + id, identifiant)
-											multi.exec(async function () {
-												if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
-													await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
-												}
-												res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
-											})
-										})
-									} else {
-										res.send('non_autorise')
-									}
-								} else {
-									res.send('erreur_duplication')
-								}
+								donneesBlocs.push(donneesBloc)
 							}
-						})
+							Promise.all(donneesBlocs).then(async function () {
+								const token = Math.random().toString(16).slice(10)
+								const slug = definirSlug(donnees.titre)
+								const date = dayjs().format()
+								const code = Math.floor(100000 + Math.random() * 900000)
+								if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
+									donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
+								}
+								let epinglage = 'desactive'
+								if (donnees.hasOwnProperty('epinglage')) {
+									epinglage = donnees.epinglage
+								}
+								if (donnees.hasOwnProperty('code')) {
+									await db
+									.multi()
+									.INCR('mur')
+									.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0])
+									.SADD('murs-crees:' + identifiant, id.toString())
+									.SADD('utilisateurs-murs:' + id, identifiant)
+									.exec()
+								} else {
+									await db
+									.multi()
+									.INCR('mur')
+									.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0])
+									.SADD('murs-crees:' + identifiant, id.toString())
+									.SADD('utilisateurs-murs:' + id, identifiant)
+									.exec()
+								}
+								if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
+									await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
+								}
+								res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
+							})
+						} else {
+							res.send('non_autorise')
+						}
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 3) {
+							const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+							const proprietaire = donnees.identifiant
+							if (proprietaire === identifiant) {
+								const date = dayjs().format()
+								const donneesBlocs = []
+								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+									const donneesBloc = new Promise(async function (resolve) {
+										if (Object.keys(bloc).length > 0) {
+											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+												bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
+											}
+											if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
+												const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
+												const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
+												const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
+												axios.get(url)
+												bloc.iframe = etherpad + '/p/' + destinationId
+												bloc.media = etherpad + '/p/' + destinationId
+											}
+											let motdepasse = ''
+											if (bloc.hasOwnProperty('motdepasse')) {
+												motdepasse = bloc.motdepasse
+											}
+											let epinglee = 'non'
+											if (bloc.hasOwnProperty('epinglee')) {
+												epinglee = bloc.epinglee
+											}
+											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+											await db
+											.multi()
+											.HSET('contenu-blocs:' + id + ':' + blocId, ['id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur])
+											.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
+											.exec()
+											resolve(blocId)
+										} else {
+											resolve({})
+										}
+									})
+									donneesBlocs.push(donneesBloc)
+								}
+								Promise.all(donneesBlocs).then(async function () {
+									const token = Math.random().toString(16).slice(10)
+									const slug = definirSlug(donnees.mur.titre)
+									const code = Math.floor(100000 + Math.random() * 900000)
+									if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
+										donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
+									}
+									let epinglage = 'desactive'
+									if (donnees.mur.hasOwnProperty('epinglage')) {
+										epinglage = donnees.mur.epinglage
+									}
+									if (donnees.mur.hasOwnProperty('code')) {
+										await db
+										.multi()
+										.INCR('mur')
+										.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0])
+										.SADD('murs-crees:' + identifiant, id.toString())
+										.SADD('utilisateurs-murs:' + id, identifiant)
+										.exec()
+									} else {
+										await db
+										.multi()
+										.INCR('mur')
+										.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0])
+										.SADD('murs-crees:' + identifiant, id.toString())
+										.SADD('utilisateurs-murs:' + id, identifiant)
+										.exec()
+									}
+									if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
+										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
+									}
+									res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
+								})
+							} else {
+								res.send('non_autorise')
+							}
+						} else {
+							res.send('erreur_duplication')
+						}
 					}
-				})
+				}
 			})
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/exporter-mur', function (req, res) {
+	app.post('/api/exporter-mur', async function (req, res) {
 		const identifiant = req.body.identifiant
 		const admin = req.body.admin
 		const motdepasseAdmin = process.env.VITE_ADMIN_PASSWORD
 		if ((req.session.identifiant && req.session.identifiant === identifiant) || (admin !== '' && admin === motdepasseAdmin)) {
 			const id = req.body.murId
-			db.exists('murs:' + id, async function (err, resultat) {
-				if (err) { res.send('erreur_export'); return false }
-				if (resultat === 1) {
-					db.hgetall('murs:' + id, function (err, d) {
-						if (err || !d || d === null) { res.send('erreur_export'); return false }
-						const proprietaire = d.identifiant
-						if (proprietaire === identifiant || (admin !== '' && admin === motdepasseAdmin)) {
-							const donneesMur = new Promise(function (resolveMain) {
-								db.hgetall('murs:' + id, function (err, resultats) {
-									if (err) { resolveMain({}); return false }
-									resolveMain(resultats)
+			const resultat = await db.EXISTS('murs:' + id)
+			if (resultat === null) { res.send('erreur_export'); return false }
+			if (resultat === 1) {
+				let d = await db.HGETALL('murs:' + id)
+				d = Object.assign({}, d)
+				if (d === null) { res.send('erreur_export'); return false }
+				const proprietaire = d.identifiant
+				if (proprietaire === identifiant || (admin !== '' && admin === motdepasseAdmin)) {
+					const donneesMur = new Promise(async function (resolveMain) {
+						let resultats = await db.HGETALL('murs:' + id)
+						resultats = Object.assign({}, resultats)
+						if (resultats === null) { resolveMain({}); return false }
+						resolveMain(resultats)
+					})
+					const blocsMur = new Promise(async function (resolveMain) {
+						const donneesBlocs = []
+						const blocs = await db.ZRANGE('blocs:' + id, 0, -1)
+						if (blocs === null) { resolveMain(donneesBlocs); return false }
+						for (const bloc of blocs) {
+							const donneesBloc = new Promise(async function (resolve) {
+								let donnees = await db.HGETALL('contenu-blocs:' + id + ':' + bloc)
+								donnees = Object.assign({}, donnees)
+								if (donnees === null) { resolve({}); return false }
+								const donneesCommentaires = []
+								const commentaires = await db.ZRANGE('commentaires:' + bloc, 0, -1)
+								if (commentaires === null) { resolve(donnees); return false }
+								for (let commentaire of commentaires) {
+									donneesCommentaires.push(JSON.parse(commentaire))
+								}
+								donnees.commentaires = donneesCommentaires.length
+								donnees.listeCommentaires = donneesCommentaires
+								const evaluations = await db.ZRANGE('evaluations:' + bloc, 0, -1)
+								if (evaluations === null) { resolve(donnees); return false }
+								const donneesEvaluations = []
+								evaluations.forEach(function (evaluation) {
+									donneesEvaluations.push(JSON.parse(evaluation))
 								})
-							})
-							const blocsMur = new Promise(function (resolveMain) {
-								const donneesBlocs = []
-								db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
-									if (err) { resolveMain(donneesBlocs); return false }
-									for (const bloc of blocs) {
-										const donneesBloc = new Promise(function (resolve) {
-											db.hgetall('contenu-blocs:' + id + ':' + bloc, function (err, donnees) {
-												if (err || !donnees || donnees === null) { resolve({}); return false }
-												const donneesCommentaires = []
-												db.zrange('commentaires:' + bloc, 0, -1, function (err, commentaires) {
-													if (err || !commentaires || commentaires === null) { resolve(donnees); return false }
-													for (let commentaire of commentaires) {
-														donneesCommentaires.push(JSON.parse(commentaire))
-													}
-													donnees.commentaires = donneesCommentaires.length
-													donnees.listeCommentaires = donneesCommentaires
-													db.zrange('evaluations:' + bloc, 0, -1, function (err, evaluations) {
-														if (err || !evaluations || evaluations === null) { resolve(donnees); return false }
-														const donneesEvaluations = []
-														evaluations.forEach(function (evaluation) {
-															donneesEvaluations.push(JSON.parse(evaluation))
-														})
-														donnees.evaluations = donneesEvaluations.length
-														donnees.listeEvaluations = donneesEvaluations
-														db.exists('noms:' + donnees.identifiant, function (err, resultat) {
-															if (err) { resolve(donnees); return false }
-															if (resultat === 1) {
-																db.hget('noms:' + donnees.identifiant, 'nom', function (err, nom) {
-																	if (err) { resolve(donnees); return false }
-																	donnees.nom = nom
-																	donnees.info = formaterDate(donnees, req.session.langue)
-																	resolve(donnees)
-																})
-															} else {
-																if (donnees.identifiant.length === 13 && donnees.identifiant.substring(0, 1) === 'u') {
-																	donnees.nom = donnees.identifiant.slice(0, 8).toUpperCase()
-																} else {
-																	donnees.nom = donnees.identifiant.toUpperCase()
-																}
-																donnees.info = formaterDate(donnees, req.session.langue)
-																resolve(donnees)
-															}
-														})
-													})
-												})
-											})
-										})
-										donneesBlocs.push(donneesBloc)
-									}
-									Promise.all(donneesBlocs).then(function (resultat) {
-										resultat = resultat.filter(function (element) {
-											return Object.keys(element).length > 0
-										})
-										resolveMain(resultat)
-									})
-								})
-							})
-							const activiteMur = new Promise(function (resolveMain) {
-								const donneesEntrees = []
-								db.zrange('activite:' + id, 0, -1, function (err, entrees) {
-									if (err || !entrees || entrees === null) { resolveMain(donneesEntrees) }
-									for (let entree of entrees) {
-										entree = JSON.parse(entree)
-										const donneesEntree = new Promise(function (resolve) {
-											db.exists('utilisateurs:' + entree.identifiant, function (err) {
-												if (err) { resolve({}); return false }
-												resolve(entree)
-											})
-										})
-										donneesEntrees.push(donneesEntree)
-									}
-									Promise.all(donneesEntrees).then(function (resultat) {
-										resultat = resultat.filter(function (element) {
-											return Object.keys(element).length > 0
-										})
-										resolveMain(resultat)
-									})
-								})
-							})
-							Promise.all([donneesMur, blocsMur, activiteMur]).then(async function (donnees) {
-								if (donnees.length > 0 && donnees[0].hasOwnProperty('id')) {
-									const parametres = {}
-									parametres.mur = donnees[0]
-									parametres.blocs = donnees[1]
-									parametres.activite = donnees[2]
-									const blocs = JSON.parse(JSON.stringify(donnees[1]))
-									blocs.forEach(function (bloc, index) {
-										blocs[index].medias = JSON.parse(bloc.medias)
-									})
-									const html = genererHTML(donnees[0], blocs)
-									const chemin = path.join(__dirname, '..', '/static/temp')
-									await fs.mkdirp(path.normalize(chemin + '/' + id))
-									await fs.mkdirp(path.normalize(chemin + '/' + id + '/fichiers'))
-									await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
-									await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(parametres, '', 4), 'utf8')
-									await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
-									if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
-										await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
-									} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
-										await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
-									}
-									if (await fs.pathExists(path.join(__dirname, '..', '/static/export/css'))) {
-										await fs.copy(path.join(__dirname, '..', '/static/export/css'), path.normalize(chemin + '/' + id + '/static/css'))
-									}
-									if (await fs.pathExists(path.join(__dirname, '..', '/static/export/js'))) {
-										await fs.copy(path.join(__dirname, '..', '/static/export/js'), path.normalize(chemin + '/' + id + '/static/js'))
-									}
-									await fs.copy(path.join(__dirname, '..', '/public/fonts/MaterialIcons-Regular.woff'), path.normalize(chemin + '/' + id + '/static/fonts/MaterialIcons-Regular.woff'))
-									await fs.copy(path.join(__dirname, '..', '/public/fonts/MaterialIcons-Regular.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/MaterialIcons-Regular.woff2'))
-									await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff'))
-									await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
-									await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
-									for (const bloc of parametres.blocs) {
-										if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media))) {
-											await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
-										}
-										if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra))) {
-											await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
-										}
-										if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('medias')) {
-											const medias = JSON.parse(bloc.medias)
-											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier))) {
-													await fs.copyFile(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
-												}
-											}
-										}
-										if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('vignette') && bloc.vignette !== '') {
-											if (String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
-												await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
-											} else if (!verifierURL(bloc.vignette, ['https', 'http'])) {
-												const fichierVignette = path.basename(bloc.vignette)
-												if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette))) {
-													await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
-												}
-											}
-										}
-									}
-									const archiveId = Math.floor((Math.random() * 100000) + 1)
-									const sortie = fs.createWriteStream(path.normalize(chemin + '/mur-' + id + '_' + archiveId + '.zip'))
-									const archive = archiver('zip', {
-										zlib: { level: 9 }
-									})
-									sortie.on('finish', async function () {
-										await fs.remove(path.normalize(chemin + '/' + id))
-										res.send('mur-' + id + '_' + archiveId + '.zip')
-									})
-									archive.pipe(sortie)
-									archive.directory(path.normalize(chemin + '/' + id), false)
-									archive.finalize()
+								donnees.evaluations = donneesEvaluations.length
+								donnees.listeEvaluations = donneesEvaluations
+								const reponse = await db.EXISTS('noms:' + donnees.identifiant)
+								if (reponse === null) { resolve(donnees); return false }
+								if (reponse === 1) {
+									const nom = await db.HGET('noms:' + donnees.identifiant, 'nom')
+									if (nom === null) { resolve(donnees); return false }
+									donnees.nom = nom
+									donnees.info = formaterDate(donnees, req.session.langue)
+									resolve(donnees)
 								} else {
-									res.send('erreur_export')
+									if (donnees.identifiant.length === 13 && donnees.identifiant.substring(0, 1) === 'u') {
+										donnees.nom = donnees.identifiant.slice(0, 8).toUpperCase()
+									} else {
+										donnees.nom = donnees.identifiant.toUpperCase()
+									}
+									donnees.info = formaterDate(donnees, req.session.langue)
+									resolve(donnees)
 								}
 							})
-						} else {
-							res.send('non_autorise')
+							donneesBlocs.push(donneesBloc)
 						}
+						Promise.all(donneesBlocs).then(function (resultat) {
+							resultat = resultat.filter(function (element) {
+								return Object.keys(element).length > 0
+							})
+							resolveMain(resultat)
+						})
 					})
-				} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + id + '.json'))) {
-					const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + id + '.json'))
-					if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-						if (donnees.mur.identifiant === identifiant || (admin !== '' && admin === motdepasseAdmin)) {
-							const html = genererHTML(donnees[0], donnees[1])
+					const activiteMur = new Promise(async function (resolveMain) {
+						const donneesEntrees = []
+						const entrees = await db.ZRANGE('activite:' + id, 0, -1)
+						if (entrees === null) { resolveMain(donneesEntrees) }
+						for (let entree of entrees) {
+							entree = JSON.parse(entree)
+							const donneesEntree = new Promise(async function (resolve) {
+								const resultat = await db.EXISTS('utilisateurs:' + entree.identifiant)
+								if (resultat === null) { resolve({}) }
+								if (resultat === 1) {
+									resolve(entree)
+								} else {
+									resolve({})
+								}
+							})
+							donneesEntrees.push(donneesEntree)
+						}
+						Promise.all(donneesEntrees).then(function (resultat) {
+							resultat = resultat.filter(function (element) {
+								return Object.keys(element).length > 0
+							})
+							resolveMain(resultat)
+						})
+					})
+					Promise.all([donneesMur, blocsMur, activiteMur]).then(async function (donnees) {
+						if (donnees.length > 0 && donnees[0].hasOwnProperty('id')) {
+							const parametres = {}
+							parametres.mur = donnees[0]
+							parametres.blocs = donnees[1]
+							parametres.activite = donnees[2]
+							const blocs = JSON.parse(JSON.stringify(donnees[1]))
+							blocs.forEach(function (bloc, index) {
+								blocs[index].medias = JSON.parse(bloc.medias)
+							})
+							const html = genererHTML(donnees[0], blocs)
 							const chemin = path.join(__dirname, '..', '/static/temp')
 							await fs.mkdirp(path.normalize(chemin + '/' + id))
 							await fs.mkdirp(path.normalize(chemin + '/' + id + '/fichiers'))
 							await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
-							await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(donnees, '', 4), 'utf8')
+							await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(parametres, '', 4), 'utf8')
 							await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
 							if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
 								await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
@@ -1301,7 +1286,7 @@ async function demarrerServeur () {
 							await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff'))
 							await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
 							await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
-							for (const bloc of donnees.blocs) {
+							for (const bloc of parametres.blocs) {
 								if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media))) {
 									await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
 								}
@@ -1312,7 +1297,7 @@ async function demarrerServeur () {
 									const medias = JSON.parse(bloc.medias)
 									for (let i = 0; i < medias.length; i++) {
 										if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier))) {
-											await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
+											await fs.copyFile(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
 										}
 									}
 								}
@@ -1340,13 +1325,89 @@ async function demarrerServeur () {
 							archive.directory(path.normalize(chemin + '/' + id), false)
 							archive.finalize()
 						} else {
-							res.send('non_autorise')
+							res.send('erreur_export')
 						}
-					} else {
-						res.send('erreur_export')
-					}
+					})
+				} else {
+					res.send('non_autorise')
 				}
-			})
+			} else if (resultat !== 1 && pgdb === true) {
+				const client = await pool.connect()
+				const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(id)])
+				client.release()
+				if (Object.keys(donneesQ.rows[0]).length === 3) {
+					const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+					if (donnees.mur.identifiant === identifiant || (admin !== '' && admin === motdepasseAdmin)) {
+						const html = genererHTML(donnees[0], donnees[1])
+						const chemin = path.join(__dirname, '..', '/static/temp')
+						await fs.mkdirp(path.normalize(chemin + '/' + id))
+						await fs.mkdirp(path.normalize(chemin + '/' + id + '/fichiers'))
+						await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
+						await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(donnees, '', 4), 'utf8')
+						await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
+						if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
+							await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
+						} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
+							await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
+						}
+						if (await fs.pathExists(path.join(__dirname, '..', '/static/export/css'))) {
+							await fs.copy(path.join(__dirname, '..', '/static/export/css'), path.normalize(chemin + '/' + id + '/static/css'))
+						}
+						if (await fs.pathExists(path.join(__dirname, '..', '/static/export/js'))) {
+							await fs.copy(path.join(__dirname, '..', '/static/export/js'), path.normalize(chemin + '/' + id + '/static/js'))
+						}
+						await fs.copy(path.join(__dirname, '..', '/public/fonts/MaterialIcons-Regular.woff'), path.normalize(chemin + '/' + id + '/static/fonts/MaterialIcons-Regular.woff'))
+						await fs.copy(path.join(__dirname, '..', '/public/fonts/MaterialIcons-Regular.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/MaterialIcons-Regular.woff2'))
+						await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff'))
+						await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
+						await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
+						for (const bloc of donnees.blocs) {
+							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media))) {
+								await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
+							}
+							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra))) {
+								await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
+							}
+							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('medias')) {
+								const medias = JSON.parse(bloc.medias)
+								for (let i = 0; i < medias.length; i++) {
+									if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier))) {
+										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
+									}
+								}
+							}
+							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('vignette') && bloc.vignette !== '') {
+								if (String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
+									await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
+								} else if (!verifierURL(bloc.vignette, ['https', 'http'])) {
+									const fichierVignette = path.basename(bloc.vignette)
+									if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette))) {
+										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
+									}
+								}
+							}
+						}
+						const archiveId = Math.floor((Math.random() * 100000) + 1)
+						const sortie = fs.createWriteStream(path.normalize(chemin + '/mur-' + id + '_' + archiveId + '.zip'))
+						const archive = archiver('zip', {
+							zlib: { level: 9 }
+						})
+						sortie.on('finish', async function () {
+							await fs.remove(path.normalize(chemin + '/' + id))
+							res.send('mur-' + id + '_' + archiveId + '.zip')
+						})
+						archive.pipe(sortie)
+						archive.directory(path.normalize(chemin + '/' + id), false)
+						archive.finalize()
+					} else {
+						res.send('non_autorise')
+					}
+				} else {
+					res.send('mur_inexistant')
+				}
+			} else {
+				res.send('mur_inexistant')
+			}
 		} else {
 			res.send('non_connecte')
 		}
@@ -1371,136 +1432,135 @@ async function demarrerServeur () {
 					const parametres = JSON.parse(req.body.parametres)
 					// Vérification des clés des données
 					if (donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite') && donnees.mur.hasOwnProperty('id') && donnees.mur.hasOwnProperty('token') && donnees.mur.hasOwnProperty('titre') && donnees.mur.hasOwnProperty('identifiant') && donnees.mur.hasOwnProperty('fond') && donnees.mur.hasOwnProperty('acces') && donnees.mur.hasOwnProperty('motdepasseAdmin') && donnees.mur.hasOwnProperty('contributions') && donnees.mur.hasOwnProperty('affichage') && donnees.mur.hasOwnProperty('registreActivite') && donnees.mur.hasOwnProperty('conversation') && donnees.mur.hasOwnProperty('listeUtilisateurs') && donnees.mur.hasOwnProperty('editionNom') && donnees.mur.hasOwnProperty('enregistrements') && donnees.mur.hasOwnProperty('ordre') && donnees.mur.hasOwnProperty('largeur') && donnees.mur.hasOwnProperty('affichageColonnes') && donnees.mur.hasOwnProperty('vues') && donnees.mur.hasOwnProperty('fichiers') && donnees.mur.hasOwnProperty('liens') && donnees.mur.hasOwnProperty('documents') && donnees.mur.hasOwnProperty('commentaires') && donnees.mur.hasOwnProperty('evaluations') && donnees.mur.hasOwnProperty('verrouillage') && donnees.mur.hasOwnProperty('copieBloc') && donnees.mur.hasOwnProperty('date') && donnees.mur.hasOwnProperty('colonnes') && donnees.mur.hasOwnProperty('bloc') && donnees.mur.hasOwnProperty('activite')) {
-						db.get('mur', async function (err, resultat) {
-							if (err) { res.send('erreur_import'); return false }
-							const id = parseInt(resultat) + 1
-							const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
-							checkDiskSpace(dossier).then(async function (diskSpace) {
-								const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
-								if (espace < minimumEspaceDisque) {
-									res.send('erreur_espace_disque')
-								} else {
-									const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-									const donneesBlocs = []
-									await fs.mkdirp(chemin)
-									for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-										const donneesBloc = new Promise(function (resolve) {
-											if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
-												const date = dayjs().format()
-												let commentaires = 0
-												let evaluations = 0
-												if (parametres.commentaires === true) {
-													commentaires = bloc.commentaires
-												}
-												if (parametres.evaluations === true) {
-													evaluations = bloc.evaluations
-												}
-												if (bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-													bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
-												}
-												let motdepasse = ''
-												if (bloc.hasOwnProperty('motdepasse')) {
-													motdepasse = bloc.motdepasse
-												}
-												let epinglee = 'non'
-												if (bloc.hasOwnProperty('epinglee')) {
-													epinglee = bloc.epinglee
-												}
-												const multi = db.multi()
-												const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-												multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
-												multi.zadd('blocs:' + id, indexBloc, blocId)
-												if (parametres.commentaires === true) {
-													for (const commentaire of bloc.listeCommentaires) {
-														if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
-															multi.zadd('commentaires:' + blocId, commentaire.id, JSON.stringify(commentaire))
-														}
-													}
-												}
-												if (parametres.evaluations === true) {
-													for (const evaluation of bloc.listeEvaluations) {
-														if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
-															multi.zadd('evaluations:' + blocId, evaluation.id, JSON.stringify(evaluation))
-														}
-													}
-												}
-												multi.exec(async function () {
-													if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
-													}
-													if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
-													}
-													if (bloc.hasOwnProperty('medias')) {
-														const medias = JSON.parse(bloc.medias)
-														for (let i = 0; i < medias.length; i++) {
-															if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
-																await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
-															}
-														}
-													}
-													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
-													}
-													resolve({ bloc: bloc.bloc, blocId: blocId })
-												})
-											} else {
-												resolve({ bloc: 0, blocId: 0 })
+						const resultat = await db.GET('mur')
+						if (resultat === null) { res.send('erreur_import'); return false }
+						const id = parseInt(resultat) + 1
+						const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
+						checkDiskSpace(dossier).then(async function (diskSpace) {
+							const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
+							if (espace < minimumEspaceDisque) {
+								res.send('erreur_espace_disque')
+							} else {
+								const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+								const donneesBlocs = []
+								await fs.mkdirp(chemin)
+								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+									const donneesBloc = new Promise(async function (resolve) {
+										if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
+											const date = dayjs().format()
+											let commentaires = 0
+											let evaluations = 0
+											if (parametres.commentaires === true) {
+												commentaires = bloc.commentaires
 											}
-										})
-										donneesBlocs.push(donneesBloc)
-									}
-									Promise.all(donneesBlocs).then(async function (blocs) {
-										const token = Math.random().toString(16).slice(10)
-										const slug = definirSlug(donnees.mur.titre)
-										const date = dayjs().format()
-										const code = Math.floor(100000 + Math.random() * 900000)
-										let activiteId = 0
-										if (parametres.activite === true) {
-											activiteId = donnees.mur.activite
-										}
-										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
-											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
-										}
-										let epinglage = 'desactive'
-										if (donnees.mur.hasOwnProperty('epinglage')) {
-											epinglage = donnees.mur.epinglage
-										}
-										const multi = db.multi()
-										multi.incr('mur')
-										multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId, 'admins', JSON.stringify([]), 'vues', 0)
-										multi.sadd('murs-crees:' + identifiant, id)
-										multi.sadd('utilisateurs-murs:' + id, identifiant)
-										if (parametres.activite === true) {
-											if (parametres.commentaires === false) {
-												donnees.activite = donnees.activite.filter(function (element) {
-													return element.type !== 'bloc-commente'
-												})
+											if (parametres.evaluations === true) {
+												evaluations = bloc.evaluations
 											}
-											if (parametres.evaluations === false) {
-												donnees.activite = donnees.activite.filter(function (element) {
-													return element.type !== 'bloc-evalue'
-												})
+											if (bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+												bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
 											}
-											for (const activite of donnees.activite) {
-												if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
-													blocs.forEach(function (item) {
-														if (activite.bloc === item.bloc) {
-															activite.bloc = item.blocId
-														}
-													})
-													multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
+											let motdepasse = ''
+											if (bloc.hasOwnProperty('motdepasse')) {
+												motdepasse = bloc.motdepasse
+											}
+											let epinglee = 'non'
+											if (bloc.hasOwnProperty('epinglee')) {
+												epinglee = bloc.epinglee
+											}
+											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+											await db
+											.multi()
+											.HSET('contenu-blocs:' + id + ':' + blocId, ['id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur])
+											.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
+											.exec()
+											if (parametres.commentaires === true) {
+												for (const commentaire of bloc.listeCommentaires) {
+													if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
+														await db.ZADD('commentaires:' + blocId, [{ score: commentaire.id, value: JSON.stringify(commentaire) }])
+													}
 												}
 											}
+											if (parametres.evaluations === true) {
+												for (const evaluation of bloc.listeEvaluations) {
+													if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
+														await db.ZADD('evaluations:' + blocId, [{ score: evaluation.id, value: JSON.stringify(evaluation) }])
+													}
+												}
+											}
+											if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+											}
+											if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+											}
+											if (bloc.hasOwnProperty('medias')) {
+												const medias = JSON.parse(bloc.medias)
+												for (let i = 0; i < medias.length; i++) {
+													if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+														await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+													}
+												}
+											}
+											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+												await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+											}
+											resolve({ bloc: bloc.bloc, blocId: blocId })
+										} else {
+											resolve({ bloc: 0, blocId: 0 })
 										}
-										multi.exec(async function () {
-											await fs.remove(source)
-											await fs.remove(cible)
-											res.json({ id: id, token: token, slug: slug, titre: donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: activiteId, admins: [], vues: 0 })
-										})
 									})
+									donneesBlocs.push(donneesBloc)
 								}
-							})
+								Promise.all(donneesBlocs).then(async function (blocs) {
+									const token = Math.random().toString(16).slice(10)
+									const slug = definirSlug(donnees.mur.titre)
+									const date = dayjs().format()
+									const code = Math.floor(100000 + Math.random() * 900000)
+									let activiteId = 0
+									if (parametres.activite === true) {
+										activiteId = donnees.mur.activite
+									}
+									if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+										await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
+									}
+									let epinglage = 'desactive'
+									if (donnees.mur.hasOwnProperty('epinglage')) {
+										epinglage = donnees.mur.epinglage
+									}
+									await db
+									.multi()
+									.INCR('mur')
+									.HSET('murs:' + id, ['id', id, 'token', token, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId, 'admins', JSON.stringify([]), 'vues', 0])
+									.SADD('murs-crees:' + identifiant, id.toString())
+									.SADD('utilisateurs-murs:' + id, identifiant)
+									.exec()
+									if (parametres.activite === true) {
+										if (parametres.commentaires === false) {
+											donnees.activite = donnees.activite.filter(function (element) {
+												return element.type !== 'bloc-commente'
+											})
+										}
+										if (parametres.evaluations === false) {
+											donnees.activite = donnees.activite.filter(function (element) {
+												return element.type !== 'bloc-evalue'
+											})
+										}
+										for (const activite of donnees.activite) {
+											if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
+												blocs.forEach(function (item) {
+													if (activite.bloc === item.bloc) {
+														activite.bloc = item.blocId
+													}
+												})
+												await db.ZADD('activite:' + id, [{ score: activite.id, value: JSON.stringify(activite) }])
+											}
+										}
+									}
+									await fs.remove(source)
+									await fs.remove(cible)
+									res.json({ id: id, token: token, slug: slug, titre: donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: activiteId, admins: [], vues: 0 })
+								})
+							}
 						})
 					} else {
 						await fs.remove(source)
@@ -1536,253 +1596,249 @@ async function demarrerServeur () {
 					if (donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite') && donnees.mur.hasOwnProperty('id') && donnees.mur.hasOwnProperty('token') && donnees.mur.hasOwnProperty('titre') && donnees.mur.hasOwnProperty('identifiant') && donnees.mur.hasOwnProperty('fond') && donnees.mur.hasOwnProperty('acces') && donnees.mur.hasOwnProperty('motdepasseAdmin') && donnees.mur.hasOwnProperty('contributions') && donnees.mur.hasOwnProperty('affichage') && donnees.mur.hasOwnProperty('registreActivite') && donnees.mur.hasOwnProperty('conversation') && donnees.mur.hasOwnProperty('listeUtilisateurs') && donnees.mur.hasOwnProperty('editionNom') && donnees.mur.hasOwnProperty('enregistrements') && donnees.mur.hasOwnProperty('ordre') && donnees.mur.hasOwnProperty('largeur') && donnees.mur.hasOwnProperty('affichageColonnes') && donnees.mur.hasOwnProperty('vues') && donnees.mur.hasOwnProperty('fichiers') && donnees.mur.hasOwnProperty('liens') && donnees.mur.hasOwnProperty('documents') && donnees.mur.hasOwnProperty('commentaires') && donnees.mur.hasOwnProperty('evaluations') && donnees.mur.hasOwnProperty('verrouillage') && donnees.mur.hasOwnProperty('copieBloc') && donnees.mur.hasOwnProperty('date') && donnees.mur.hasOwnProperty('colonnes') && donnees.mur.hasOwnProperty('bloc') && donnees.mur.hasOwnProperty('activite')) {
 						const id = req.body.mur
 						if (parametres.contenu === 'remplacer') {
-							db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
-								if (err) { res.send('erreur_import'); return false }
-								// Supprimer données actuelles du mur
-								const multi = db.multi()
-								for (let i = 0; i < blocs.length; i++) {
-									multi.del('commentaires:' + blocs[i])
-									multi.del('evaluations:' + blocs[i])
-									multi.del('contenu-blocs:' + id + ':' + blocs[i])
-								}
-								multi.del('blocs:' + id)
-								multi.del('activite:' + id)
-								multi.del('dates-murs:' + id)
-								multi.exec(async function () {
-									const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-									await fs.emptyDir(chemin)
-									const donneesBlocs = []
-									for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-										const donneesBloc = new Promise(function (resolve) {
-											if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
-												const date = dayjs().format()
-												let commentaires = 0
-												let evaluations = 0
-												if (parametres.commentaires === true) {
-													commentaires = bloc.commentaires
-												}
-												if (parametres.evaluations === true) {
-													evaluations = bloc.evaluations
-												}
-												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-													bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
-												}
-												let motdepasse = ''
-												if (bloc.hasOwnProperty('motdepasse')) {
-													motdepasse = bloc.motdepasse
-												}
-												let epinglee = 'non'
-												if (bloc.hasOwnProperty('epinglee')) {
-													epinglee = bloc.epinglee
-												}
-												const multi = db.multi()
-												const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-												multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
-												multi.zadd('blocs:' + id, indexBloc, blocId)
-												if (parametres.commentaires === true) {
-													for (const commentaire of bloc.listeCommentaires) {
-														if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
-															multi.zadd('commentaires:' + blocId, commentaire.id, JSON.stringify(commentaire))
-														}
-													}
-												}
-												if (parametres.evaluations === true) {
-													for (const evaluation of bloc.listeEvaluations) {
-														if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
-															multi.zadd('evaluations:' + blocId, evaluation.id, JSON.stringify(evaluation))
-														}
-													}
-												}
-												multi.exec(async function () {
-													if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
-													}
-													if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
-													}
-													if (bloc.hasOwnProperty('medias')) {
-														const medias = JSON.parse(bloc.medias)
-														for (let i = 0; i < medias.length; i++) {
-															if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
-																await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
-															}
-														}
-													}
-													if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
-														await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
-													}
-													resolve({ bloc: bloc.bloc, blocId: blocId })
-												})
-											} else {
-												resolve({ bloc: 0, blocId: 0 })
-											}
-										})
-										donneesBlocs.push(donneesBloc)
-									}
-									Promise.all(donneesBlocs).then(async function (blocsCrees) {
-										const slug = definirSlug(donnees.mur.titre)
+							const blocs = await db.ZRANGE('blocs:' + id, 0, -1)
+							if (blocs === null) { res.send('erreur_import'); return false }
+							// Supprimer données actuelles du mur
+							for (let i = 0; i < blocs.length; i++) {
+								await db
+								.multi()
+								.DEL('commentaires:' + blocs[i])
+								.DEL('evaluations:' + blocs[i])
+								.DEL('contenu-blocs:' + id + ':' + blocs[i])
+								.exec()
+							}
+							await db
+							.multi()
+							.DEL('blocs:' + id)
+							.DEL('activite:' + id)
+							.DEL('dates-murs:' + id)
+							.exec()
+							const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+							await fs.emptyDir(chemin)
+							const donneesBlocs = []
+							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+								const donneesBloc = new Promise(async function (resolve) {
+									if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
 										const date = dayjs().format()
-										const code = Math.floor(100000 + Math.random() * 900000)
-										let activiteId = 0
-										if (parametres.activite === true) {
-											activiteId = donnees.mur.activite
+										let commentaires = 0
+										let evaluations = 0
+										if (parametres.commentaires === true) {
+											commentaires = bloc.commentaires
 										}
-										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
-											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
+										if (parametres.evaluations === true) {
+											evaluations = bloc.evaluations
 										}
-										let epinglage = 'desactive'
-										if (donnees.mur.hasOwnProperty('epinglage')) {
-											epinglage = donnees.mur.epinglage
+										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+											bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
 										}
-										const multi = db.multi()
-										multi.hmset('murs:' + id, 'titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId)
-										if (parametres.activite === true) {
-											if (parametres.commentaires === false) {
-												donnees.activite = donnees.activite.filter(function (element) {
-													return element.type !== 'bloc-commente'
-												})
-											}
-											if (parametres.evaluations === false) {
-												donnees.activite = donnees.activite.filter(function (element) {
-													return element.type !== 'bloc-evalue'
-												})
-											}
-											for (const activite of donnees.activite) {
-												if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
-													blocsCrees.forEach(function (item) {
-														if (activite.bloc === item.bloc) {
-															activite.bloc = item.blocId
-														}
-													})
-													multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
+										let motdepasse = ''
+										if (bloc.hasOwnProperty('motdepasse')) {
+											motdepasse = bloc.motdepasse
+										}
+										let epinglee = 'non'
+										if (bloc.hasOwnProperty('epinglee')) {
+											epinglee = bloc.epinglee
+										}
+										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+										await db
+										.multi()
+										.HSET('contenu-blocs:' + id + ':' + blocId, ['id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur])
+										.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
+										.exec()
+										if (parametres.commentaires === true) {
+											for (const commentaire of bloc.listeCommentaires) {
+												if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
+													await db.ZADD('commentaires:' + blocId, [{ score: commentaire.id, value: JSON.stringify(commentaire) }])
 												}
 											}
 										}
-										multi.exec(async function () {
-											await fs.remove(source)
-											await fs.remove(cible)
-											res.send(slug)
-										})
-									})
+										if (parametres.evaluations === true) {
+											for (const evaluation of bloc.listeEvaluations) {
+												if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
+													await db.ZADD('evaluations:' + blocId, [{ score: evaluation.id, value: JSON.stringify(evaluation) }])
+												}
+											}
+										}
+										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+										}
+										if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+										}
+										if (bloc.hasOwnProperty('medias')) {
+											const medias = JSON.parse(bloc.medias)
+											for (let i = 0; i < medias.length; i++) {
+												if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+													await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+												}
+											}
+										}
+										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+										}
+										resolve({ bloc: bloc.bloc, blocId: blocId })
+									} else {
+										resolve({ bloc: 0, blocId: 0 })
+									}
 								})
+								donneesBlocs.push(donneesBloc)
+							}
+							Promise.all(donneesBlocs).then(async function (blocsCrees) {
+								const slug = definirSlug(donnees.mur.titre)
+								const date = dayjs().format()
+								const code = Math.floor(100000 + Math.random() * 900000)
+								let activiteId = 0
+								if (parametres.activite === true) {
+									activiteId = donnees.mur.activite
+								}
+								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+									await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
+								}
+								let epinglage = 'desactive'
+								if (donnees.mur.hasOwnProperty('epinglage')) {
+									epinglage = donnees.mur.epinglage
+								}
+								await db.HSET('murs:' + id, ['titre', donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', '', 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', activiteId])
+								if (parametres.activite === true) {
+									if (parametres.commentaires === false) {
+										donnees.activite = donnees.activite.filter(function (element) {
+											return element.type !== 'bloc-commente'
+										})
+									}
+									if (parametres.evaluations === false) {
+										donnees.activite = donnees.activite.filter(function (element) {
+											return element.type !== 'bloc-evalue'
+										})
+									}
+									for (const activite of donnees.activite) {
+										if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
+											blocsCrees.forEach(function (item) {
+												if (activite.bloc === item.bloc) {
+													activite.bloc = item.blocId
+												}
+											})
+											await db.ZADD('activite:' + id, [{ score: activite.id, value: JSON.stringify(activite) }])
+										}
+									}
+								}
+								await fs.remove(source)
+								await fs.remove(cible)
+								res.send(slug)
 							})
 						} else {
-							db.hgetall('murs:' + id, async function (err, donneesMur) {
-								if (err) { res.send('erreur_import'); return false }
-								const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-								await fs.emptyDir(chemin)
-								const donneesBlocs = []
-								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-									const donneesBloc = new Promise(function (resolve) {
-										if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
-											const deltaColonne = JSON.parse(donneesMur.colonnes).length
-											const colonne = (parseInt(bloc.colonne)) + deltaColonne
-											const date = dayjs().format()
-											let commentaires = 0
-											let evaluations = 0
-											if (parametres.commentaires === true) {
-												commentaires = bloc.commentaires
-											}
-											if (parametres.evaluations === true) {
-												evaluations = bloc.evaluations
-											}
-											if (bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-												bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
-											}
-											let motdepasse = ''
-											if (bloc.hasOwnProperty('motdepasse')) {
-												motdepasse = bloc.motdepasse
-											}
-											let epinglee = 'non'
-											if (bloc.hasOwnProperty('epinglee')) {
-												epinglee = bloc.epinglee
-											}
-											const multi = db.multi()
-											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-											multi.hmset('contenu-blocs:' + id + ':' + blocId, 'id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur)
-											multi.zadd('blocs:' + id, indexBloc, blocId)
-											if (parametres.commentaires === true) {
-												for (const commentaire of bloc.listeCommentaires) {
-													if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
-														multi.zadd('commentaires:' + blocId, commentaire.id, JSON.stringify(commentaire))
-													}
-												}
-											}
-											if (parametres.evaluations === true) {
-												for (const evaluation of bloc.listeEvaluations) {
-													if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
-														multi.zadd('evaluations:' + blocId, evaluation.id, JSON.stringify(evaluation))
-													}
-												}
-											}
-											multi.exec(async function () {
-												if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
-													await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
-												}
-												if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
-													await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
-												}
-												if (bloc.hasOwnProperty('medias')) {
-													const medias = JSON.parse(bloc.medias)
-													for (let i = 0; i < medias.length; i++) {
-														if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
-															await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
-														}
-													}
-												}
-												if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
-													await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
-												}
-												resolve({ bloc: bloc.bloc, blocId: blocId })
-											})
-										} else {
-											resolve({ bloc: 0, blocId: 0 })
+							let donneesMur = await db.HGETALL('murs:' + id)
+							donneesMur = Object.assign({}, donneesMur)
+							if (donneesMur === null) { res.send('erreur_import'); return false }
+							const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+							await fs.emptyDir(chemin)
+							const donneesBlocs = []
+							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
+								const donneesBloc = new Promise(async function (resolve) {
+									if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
+										const deltaColonne = JSON.parse(donneesMur.colonnes).length
+										const colonne = (parseInt(bloc.colonne)) + deltaColonne
+										const date = dayjs().format()
+										let commentaires = 0
+										let evaluations = 0
+										if (parametres.commentaires === true) {
+											commentaires = bloc.commentaires
 										}
-									})
-									donneesBlocs.push(donneesBloc)
-								}
-								Promise.all(donneesBlocs).then(function (blocsCrees) {
-									const slug = definirSlug(donneesMur.titre)
-									let activiteId = parseInt(donneesMur.activite)
-									if (parametres.activite === true) {
-										activiteId = activiteId + donnees.mur.activite
+										if (parametres.evaluations === true) {
+											evaluations = bloc.evaluations
+										}
+										if (bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
+											bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
+										}
+										let motdepasse = ''
+										if (bloc.hasOwnProperty('motdepasse')) {
+											motdepasse = bloc.motdepasse
+										}
+										let epinglee = 'non'
+										if (bloc.hasOwnProperty('epinglee')) {
+											epinglee = bloc.epinglee
+										}
+										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+										await db
+										.multi()
+										.HSET('contenu-blocs:' + id + ':' + blocId, ['id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', commentaires, 'evaluations', evaluations, 'colonne', colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur])
+										.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
+										.exec()
+										if (parametres.commentaires === true) {
+											for (const commentaire of bloc.listeCommentaires) {
+												if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
+													await db.ZADD('commentaires:' + blocId, [{ score: commentaire.id, value: JSON.stringify(commentaire) }])
+												}
+											}
+										}
+										if (parametres.evaluations === true) {
+											for (const evaluation of bloc.listeEvaluations) {
+												if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
+													await db.ZADD('evaluations:' + blocId, [{ score: evaluation.id, value: JSON.stringify(evaluation) }])
+												}
+											}
+										}
+										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+										}
+										if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+										}
+										if (bloc.hasOwnProperty('medias')) {
+											const medias = JSON.parse(bloc.medias)
+											for (let i = 0; i < medias.length; i++) {
+												if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+													await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+												}
+											}
+										}
+										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && !String(bloc.vignette).includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+										}
+										resolve({ bloc: bloc.bloc, blocId: blocId })
+									} else {
+										resolve({ bloc: 0, blocId: 0 })
 									}
-									let blocNum = parseInt(donneesMur.bloc)
-									blocNum  = blocNum  + donnees.mur.bloc
-									let colonnes = JSON.parse(donneesMur.colonnes)
-									colonnes = colonnes.concat(JSON.parse(donnees.mur.colonnes))
-									let affichageColonnes = JSON.parse(donneesMur.affichageColonnes)
-									affichageColonnes = affichageColonnes.concat(JSON.parse(donnees.mur.affichageColonnes))
-									const multi = db.multi()
-									multi.hmset('murs:' + id, 'identifiant', identifiant, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes), 'bloc', blocNum, 'activite', activiteId)
-									if (parametres.activite === true) {
-										if (parametres.commentaires === false) {
-											donnees.activite = donnees.activite.filter(function (element) {
-												return element.type !== 'bloc-commente'
-											})
-										}
-										if (parametres.evaluations === false) {
-											donnees.activite = donnees.activite.filter(function (element) {
-												return element.type !== 'bloc-evalue'
-											})
-										}
-										for (const activite of donnees.activite) {
-											if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
-												blocsCrees.forEach(function (item) {
-													if (activite.bloc === item.bloc) {
-														activite.bloc = item.blocId
-													}
-												})
-												multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
-											}
-										}
-									}
-									multi.exec(async function () {
-										await fs.remove(source)
-										await fs.remove(cible)
-										res.send(slug)
-									})
 								})
+								donneesBlocs.push(donneesBloc)
+							}
+							Promise.all(donneesBlocs).then(async function (blocsCrees) {
+								const slug = definirSlug(donneesMur.titre)
+								let activiteId = parseInt(donneesMur.activite)
+								if (parametres.activite === true) {
+									activiteId = activiteId + donnees.mur.activite
+								}
+								let blocNum = parseInt(donneesMur.bloc)
+								blocNum  = blocNum  + donnees.mur.bloc
+								let colonnes = JSON.parse(donneesMur.colonnes)
+								colonnes = colonnes.concat(JSON.parse(donnees.mur.colonnes))
+								let affichageColonnes = JSON.parse(donneesMur.affichageColonnes)
+								affichageColonnes = affichageColonnes.concat(JSON.parse(donnees.mur.affichageColonnes))
+								await db.HSET('murs:' + id, ['identifiant', identifiant, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes), 'bloc', blocNum, 'activite', activiteId])
+								if (parametres.activite === true) {
+									if (parametres.commentaires === false) {
+										donnees.activite = donnees.activite.filter(function (element) {
+											return element.type !== 'bloc-commente'
+										})
+									}
+									if (parametres.evaluations === false) {
+										donnees.activite = donnees.activite.filter(function (element) {
+											return element.type !== 'bloc-evalue'
+										})
+									}
+									for (const activite of donnees.activite) {
+										if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
+											blocsCrees.forEach(function (item) {
+												if (activite.bloc === item.bloc) {
+													activite.bloc = item.blocId
+												}
+											})
+											await db.ZADD('activite:' + id, [{ score: activite.id, value: JSON.stringify(activite) }])
+										}
+									}
+								}
+								await fs.remove(source)
+								await fs.remove(cible)
+								res.send(slug)
 							})
 						}
 					} else {
@@ -1798,7 +1854,7 @@ async function demarrerServeur () {
 		}
 	})
 
-	app.post('/api/supprimer-mur', function (req, res) {
+	app.post('/api/supprimer-mur', async function (req, res) {
 		if (maintenance === true) {
 			res.redirect('/maintenance')
 			return false
@@ -1813,175 +1869,178 @@ async function demarrerServeur () {
 			if (req.body.hasOwnProperty('suppressionFichiers')) {
 				suppressionFichiers = req.body.suppressionFichiers
 			}
-			db.exists('murs:' + mur, async function (err, resultat) {
-				if (err) { res.send('erreur_suppression'); return false }
-				if (resultat === 1) {
-					db.hgetall('murs:' + mur, function (err, donneesMur) {
-						if (err || !donneesMur || donneesMur === null) { res.send('erreur_suppression'); return false }
-						if (donneesMur.identifiant === identifiant) {
-							db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-								if (err) { res.send('erreur_suppression'); return false }
-								const multi = db.multi()
-								for (let i = 0; i < blocs.length; i++) {
-									multi.del('commentaires:' + blocs[i])
-									multi.del('evaluations:' + blocs[i])
-									multi.del('contenu-blocs:' + mur + ':' + blocs[i])
-								}
-								multi.del('blocs:' + mur)
-								multi.del('murs:' + mur)
-								multi.del('activite:' + mur)
-								multi.del('dates-murs:' + mur)
-								multi.srem('murs-crees:' + identifiant, mur)
-								multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-									if (err) { res.send('erreur_suppression'); return false }
-									for (let j = 0; j < utilisateurs.length; j++) {
-										db.srem('murs-rejoints:' + utilisateurs[j], mur)
-										db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-										db.srem('murs-admins:' + utilisateurs[j], mur)
-										db.srem('murs-favoris:' + utilisateurs[j], mur)
-									}
-								})
-								multi.del('utilisateurs-murs:' + mur)
-								multi.exec(async function () {
-									const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
-									if (suppressionFichiers === true) {
-										await fs.remove(chemin)
-									}
-									res.send('mur_supprime')
-								})
-							})
+			const resultat = await db.EXISTS('murs:' + mur)
+			if (resultat === null) { res.send('erreur_suppression'); return false }
+			if (resultat === 1) {
+				let donneesMur = await db.HGETALL('murs:' + mur)
+				donneesMur = Object.assign({}, donneesMur)
+				if (donneesMur === null) { res.send('erreur_suppression'); return false }
+				if (donneesMur.identifiant === identifiant) {
+					const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+					if (blocs === null) { res.send('erreur_suppression'); return false }
+					for (let i = 0; i < blocs.length; i++) {
+						await db
+						.multi()
+						.DEL('commentaires:' + blocs[i])
+						.DEL('evaluations:' + blocs[i])
+						.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+						.exec()
+					}
+					await db
+					.multi()
+					.DEL('blocs:' + mur)
+					.DEL('murs:' + mur)
+					.DEL('activite:' + mur)
+					.DEL('dates-murs:' + mur)
+					.SREM('murs-crees:' + identifiant, mur.toString())
+					.exec()
+					const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+					if (utilisateurs === null) { res.send('erreur_suppression'); return false }
+					for (let j = 0; j < utilisateurs.length; j++) {
+						await db
+						.multi()
+						.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+						.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+						.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+						.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+						.exec()
+					}
+					await db.DEL('utilisateurs-murs:' + mur)
+					const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+					if (suppressionFichiers === true) {
+						await fs.remove(chemin)
+					}
+					res.send('mur_supprime')
+				} else {
+					let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+					donnees = Object.assign({}, donnees)
+					if (donnees === null) { res.send('erreur_suppression'); return false }
+					if (donnees.hasOwnProperty('dossiers')) {
+						const dossiers = JSON.parse(donnees.dossiers)
+						dossiers.forEach(function (dossier, indexDossier) {
+							if (dossier.murs.includes(mur)) {
+								const indexMur = dossier.murs.indexOf(mur)
+								dossiers[indexDossier].murs.splice(indexMur, 1)
+							}
+						})
+						await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
+					}
+					if (type === 'mur-rejoint') {
+						await db.SREM('murs-rejoints:' + identifiant, mur.toString())
+					}
+					if (type === 'mur-admin') {
+						await db.SREM('murs-rejoints:' + identifiant, mur.toString())
+						await db.SREM('murs-admins:' + identifiant, mur.toString())
+					}
+					await db.SREM('murs-favoris:' + identifiant, mur.toString())
+					// Suppression de l'utilisateur dans la liste des admins du mur
+					if (type === 'murs-admin') {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) {
+							res.send('mur_supprime')
 						} else {
-							db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
-								if (err) { res.send('erreur_suppression'); return false }
-								const multi = db.multi()
-								if (donnees.hasOwnProperty('dossiers')) {
-									const dossiers = JSON.parse(donnees.dossiers)
-									dossiers.forEach(function (dossier, indexDossier) {
-										if (dossier.murs.includes(mur)) {
-											const indexMur = dossier.murs.indexOf(mur)
-											dossiers[indexDossier].murs.splice(indexMur, 1)
-										}
-									})
-									multi.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
-								}
-								if (type === 'mur-rejoint') {
-									multi.srem('murs-rejoints:' + identifiant, mur)
-								}
-								if (type === 'mur-admin') {
-									multi.srem('murs-rejoints:' + identifiant, mur)
-									multi.srem('murs-admins:' + identifiant, mur)
-								}
-								multi.srem('murs-favoris:' + identifiant, mur)
-								multi.exec(function () {
-									// Suppression de l'utilisateur dans la liste des admins du mur
-									if (type === 'murs-admin') {
-										db.hgetall('murs:' + mur, function (err, donnees) {
-											if (!err && donnees) {
-												let listeAdmins = []
-												if (donnees.hasOwnProperty('admins')) {
-													listeAdmins = JSON.parse(donnees.admins)
-												}
-												if (listeAdmins.includes(identifiant)) {
-													const index = listeAdmins.indexOf(identifiant)
-													listeAdmins.splice(index, 1)
-												}
-												db.hset('murs:' + mur, 'admins', JSON.stringify(listeAdmins), function () {
-													res.send('mur_supprime')
-												})
-											} else {
-												res.send('mur_supprime')
-											}
-										})
-									} else {
-										res.send('mur_supprime')
-									}
-								})
-							})
-						}
-					})
-				} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-					const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-					if (typeof donneesMur === 'object' && donneesMur !== null) {
-						const multi = db.multi()
-						if (donneesMur.identifiant === identifiant) {
-							multi.srem('murs-crees:' + identifiant, mur)
-							multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-								if (err) { res.send('erreur_suppression'); return false }
-								for (let j = 0; j < utilisateurs.length; j++) {
-									db.srem('murs-rejoints:' + utilisateurs[j], mur)
-									db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-									db.srem('murs-admins:' + utilisateurs[j], mur)
-									db.srem('murs-favoris:' + utilisateurs[j], mur)
-								}
-							})
-							multi.del('utilisateurs-murs:' + mur)
-							multi.exec(async function () {
-								if (suppressionFichiers === true) {
-									await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
-								}
-								await fs.remove(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-								await fs.remove(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-								res.send('mur_supprime')
-							})
-						} else {
-							db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
-								if (err) { res.send('erreur_suppression'); return false }
-								if (donnees.hasOwnProperty('dossiers')) {
-									const dossiers = JSON.parse(donnees.dossiers)
-									dossiers.forEach(function (dossier, indexDossier) {
-										if (dossier.murs.includes(mur)) {
-											const indexMur = dossier.murs.indexOf(mur)
-											dossiers[indexDossier].murs.splice(indexMur, 1)
-										}
-									})
-									multi.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
-								}
-								if (type === 'mur-rejoint') {
-									multi.srem('murs-rejoints:' + identifiant, mur)
-								}
-								if (type === 'mur-admin') {
-									multi.srem('murs-rejoints:' + identifiant, mur)
-									multi.srem('murs-admins:' + identifiant, mur)
-								}
-								multi.srem('murs-favoris:' + identifiant, mur)
-								multi.exec(function () {
-									// Suppression de l'utilisateur dans la liste des admins du mur
-									if (type === 'mur-admin') {
-										db.hgetall('murs:' + mur, function (err, donnees) {
-											let listeAdmins = []
-											if (donnees.hasOwnProperty('admins')) {
-												listeAdmins = JSON.parse(donnees.admins)
-											}
-											if (listeAdmins.includes(identifiant)) {
-												const index = listeAdmins.indexOf(identifiant)
-												listeAdmins.splice(index, 1)
-											}
-											db.hset('murs:' + mur, 'admins', JSON.stringify(listeAdmins), function () {
-												res.send('mur_supprime')
-											})
-										})
-									} else {
-										res.send('mur_supprime')
-									}
-								})
-							})
+							let listeAdmins = []
+							if (donnees.hasOwnProperty('admins')) {
+								listeAdmins = JSON.parse(donnees.admins)
+							}
+							if (listeAdmins.includes(identifiant)) {
+								const index = listeAdmins.indexOf(identifiant)
+								listeAdmins.splice(index, 1)
+							}
+							await db.HSET('murs:' + mur, 'admins', JSON.stringify(listeAdmins))
+							res.send('mur_supprime')
 						}
 					} else {
-						res.send('erreur_suppression')
+						res.send('mur_supprime')
 					}
 				}
-			})
+			} else if (resultat !== 1 && pgdb === true) {
+				const client = await pool.connect()
+				const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+				client.release()
+				if (Object.keys(donneesQ.rows[0]).length === 1) {
+					const donneesMur = JSON.parse(donneesQ.rows[0].donnees)
+					if (donneesMur.identifiant === identifiant) {
+						await db.SREM('murs-crees:' + identifiant, mur.toString())
+						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+						if (utilisateurs === null) { res.send('erreur_suppression'); return false }
+						for (let j = 0; j < utilisateurs.length; j++) {
+							await db
+							.multi()
+							.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+							.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+							.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+							.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+							.exec()
+						}
+						await db.DEL('utilisateurs-murs:' + mur)
+						if (suppressionFichiers === true) {
+							await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
+						}
+						const client = await pool.connect()
+						await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						res.send('mur_supprime')
+					} else {
+						let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { res.send('erreur_suppression'); return false }
+						if (donnees.hasOwnProperty('dossiers')) {
+							const dossiers = JSON.parse(donnees.dossiers)
+							dossiers.forEach(function (dossier, indexDossier) {
+								if (dossier.murs.includes(mur)) {
+									const indexMur = dossier.murs.indexOf(mur)
+									dossiers[indexDossier].murs.splice(indexMur, 1)
+								}
+							})
+							await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
+						}
+						if (type === 'mur-rejoint') {
+							await db.SREM('murs-rejoints:' + identifiant, mur.toString())
+						}
+						if (type === 'mur-admin') {
+							await db.SREM('murs-rejoints:' + identifiant, mur.toString())
+							await db.SREM('murs-admins:' + identifiant, mur.toString())
+						}
+						await db.SREM('murs-favoris:' + identifiant, mur.toString())
+						// Suppression de l'utilisateur dans la liste des admins du mur
+						if (type === 'mur-admin') {
+							let donnees = await db.HGETALL('murs:' + mur)
+							donnees = Object.assign({}, donnees)
+							if (donnees !== null) {
+								let listeAdmins = []
+								if (donnees.hasOwnProperty('admins')) {
+									listeAdmins = JSON.parse(donnees.admins)
+								}
+								if (listeAdmins.includes(identifiant)) {
+									const index = listeAdmins.indexOf(identifiant)
+									listeAdmins.splice(index, 1)
+								}
+								await db.HSET('murs:' + mur, 'admins', JSON.stringify(listeAdmins))
+								res.send('mur_supprime')
+							} else {
+								res.send('mur_supprime')
+							}
+						} else {
+							res.send('mur_supprime')
+						}
+					}
+				} else {
+					res.send('erreur_suppression')
+				}
+			}
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/modifier-informations', function (req, res) {
+	app.post('/api/modifier-informations', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const nom = req.body.nom
 			const email = req.body.email
-			db.hmset('utilisateurs:' + identifiant, 'nom', nom, 'email', email)
+			await db.HSET('utilisateurs:' + identifiant, ['nom', nom, 'email', email])
 			req.session.nom = nom
 			req.session.email = email
 			res.send('utilisateur_modifie')
@@ -1990,21 +2049,21 @@ async function demarrerServeur () {
 		}
 	})
 
-	app.post('/api/modifier-mot-de-passe', function (req, res) {
+	app.post('/api/modifier-mot-de-passe', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant) {
-			db.hgetall('utilisateurs:' + identifiant, async function (err, donnees) {
-				if (err) { res.send('erreur'); return false }
-				const motdepasse = req.body.motdepasse
-				const nouveaumotdepasse = req.body.nouveaumotdepasse
-				if (motdepasse.trim() !== '' && nouveaumotdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
-					const hash = await bcrypt.hash(nouveaumotdepasse, 10)
-					db.hset('utilisateurs:' + identifiant, 'motdepasse', hash)
-					res.send('motdepasse_modifie')
-				} else {
-					res.send('motdepasse_incorrect')
-				}
-			})
+			let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.send('erreur'); return false }
+			const motdepasse = req.body.motdepasse
+			const nouveaumotdepasse = req.body.nouveaumotdepasse
+			if (motdepasse.trim() !== '' && nouveaumotdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
+				const hash = await bcrypt.hash(nouveaumotdepasse, 10)
+				await db.HSET('utilisateurs:' + identifiant, 'motdepasse', hash)
+				res.send('motdepasse_modifie')
+			} else {
+				res.send('motdepasse_incorrect')
+			}
 		} else {
 			res.send('non_connecte')
 		}
@@ -2019,345 +2078,349 @@ async function demarrerServeur () {
 		}
 	})
 
-	app.post('/api/modifier-mot-de-passe-admin', function (req, res) {
+	app.post('/api/modifier-mot-de-passe-admin', async function (req, res) {
 		const admin = req.body.admin
 		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
 			const identifiant = req.body.identifiant
 			const email = req.body.email
 			if (identifiant !== '') {
-				db.exists('utilisateurs:' + identifiant, async function (err, resultat) {
-					if (err) { res.send('erreur'); return false }
-					if (resultat === 1) {
-						const hash = await bcrypt.hash(req.body.motdepasse, 10)
-						db.hset('utilisateurs:' + identifiant, 'motdepasse', hash)
-						res.send('motdepasse_modifie')
-					} else {
-						res.send('identifiant_non_valide')
-					}
-				})
+				const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+				if (resultat === null) { res.send('erreur'); return false }
+				if (resultat === 1) {
+					const hash = await bcrypt.hash(req.body.motdepasse, 10)
+					await db.HSET('utilisateurs:' + identifiant, 'motdepasse', hash)
+					res.send('motdepasse_modifie')
+				} else {
+					res.send('identifiant_non_valide')
+				}
 			} else if (email !== '') {
-				db.keys('utilisateurs:*', function (err, utilisateurs) {
-					if (utilisateurs !== null) {
-						const donneesUtilisateurs = []
-						utilisateurs.forEach(function (utilisateur) {
-							const donneesUtilisateur = new Promise(function (resolve) {
-								db.hgetall('utilisateurs:' + utilisateur.substring(13), function (err, donnees) {
-									if (err || !donnees || donnees === null) { resolve({}); return false }
-									if (donnees.hasOwnProperty('email')) {
-										resolve({ identifiant: utilisateur.substring(13), email: donnees.email })
-									} else {
-										resolve({})
-									}
-								})
-							})
-							donneesUtilisateurs.push(donneesUtilisateur)
-						})
-						Promise.all(donneesUtilisateurs).then(async function (donnees) {
-							let utilisateurId = ''
-							donnees.forEach(function (utilisateur) {
-								if (utilisateur.hasOwnProperty('email') && utilisateur.email.toLowerCase() === email.toLowerCase()) {
-									utilisateurId = utilisateur.identifiant
-								}
-							})
-							if (utilisateurId !== '') {
-								const hash = await bcrypt.hash(req.body.motdepasse, 10)
-								db.hset('utilisateurs:' + utilisateurId, 'motdepasse', hash)
-								res.send(utilisateurId)
+				const utilisateurs = await db.KEYS('utilisateurs:*')
+				if (utilisateurs !== null) {
+					const donneesUtilisateurs = []
+					utilisateurs.forEach(function (utilisateur) {
+						const donneesUtilisateur = new Promise(async function (resolve) {
+							let donnees = await db.HGETALL('utilisateurs:' + utilisateur.substring(13))
+							donnees = Object.assign({}, donnees)
+							if (donnees === null) { resolve({}); return false }
+							if (donnees.hasOwnProperty('email')) {
+								resolve({ identifiant: utilisateur.substring(13), email: donnees.email })
 							} else {
-								res.send('email_non_valide')
+								resolve({})
 							}
 						})
-					}
-				})
+						donneesUtilisateurs.push(donneesUtilisateur)
+					})
+					Promise.all(donneesUtilisateurs).then(async function (donnees) {
+						let utilisateurId = ''
+						donnees.forEach(function (utilisateur) {
+							if (utilisateur.hasOwnProperty('email') && utilisateur.email.toLowerCase() === email.toLowerCase()) {
+								utilisateurId = utilisateur.identifiant
+							}
+						})
+						if (utilisateurId !== '') {
+							const hash = await bcrypt.hash(req.body.motdepasse, 10)
+							await db.HSET('utilisateurs:' + utilisateurId, 'motdepasse', hash)
+							res.send(utilisateurId)
+						} else {
+							res.send('email_non_valide')
+						}
+					})
+				} else {
+					res.send('email_non_valide')
+				}
 			}
 		} else {
 			res.send('non_autorise')
 		}
 	})
 
-	app.post('/api/recuperer-donnees-mur-admin', function (req, res) {
+	app.post('/api/recuperer-donnees-mur-admin', async function (req, res) {
 		const mur = req.body.murId
 		const admin = req.body.admin
 		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
-			db.exists('murs:' + mur, async function (err, resultat) {
-				if (err) { res.send('erreur'); return false }
-				if (resultat === 1) {
-					db.hgetall('murs:' + mur, function (err, donneesMur) {
-						if (err) { res.send('erreur'); return false }
-						res.json(donneesMur)
-					})
-				} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-					const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-					if (typeof donnees === 'object' && donnees !== null) {
-						res.json(donnees)
-					} else {
-						res.send('erreur')
-					}
+			const resultat = await db.EXISTS('murs:' + mur)
+			if (resultat === null) { res.send('erreur'); return false }
+			if (resultat === 1) {
+				let donneesMur = await db.HGETALL('murs:' + mur)
+				donneesMur = Object.assign({}, donneesMur)
+				if (donneesMur === null) { res.send('erreur'); return false }
+				res.json(donneesMur)
+			} else if (resultat !== 1 && pgdb === true) {
+				const client = await pool.connect()
+				const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+				client.release()
+				if (Object.keys(donneesQ.rows[0]).length === 1) {
+					const donnees = JSON.parse(donneesQ.rows[0].donnees)
+					res.json(donnees)
 				} else {
 					res.send('mur_inexistant')
 				}
-			})
+			} else {
+				res.send('mur_inexistant')
+			}
 		} else {
 			res.send('non_autorise')
 		}
 	})
 
-	app.post('/api/recuperer-donnees-utilisateur-admin', function (req, res) {
+	app.post('/api/recuperer-donnees-utilisateur-admin', async function (req, res) {
 		const admin = req.body.admin
 		const identifiant = req.body.identifiant
 		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
-			db.exists('utilisateurs:' + identifiant, function (err, resultat) {
-				if (err) { res.send('erreur'); return false }
-				if (resultat === 1) {
-					db.hgetall('utilisateurs:' + identifiant, function (err, donneesUtilisateur) {
-						if (err) { res.send('erreur'); return false }
-						res.json(donneesUtilisateur)
-					})
-				} else {
-					res.send('utilisateur_inexistant')
-				}
-			})
+			const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+			if (resultat === null) { res.send('erreur'); return false }
+			if (resultat === 1) {
+				let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+				donneesUtilisateur = Object.assign({}, donneesUtilisateur)
+				if (donneesUtilisateur === null) { res.send('erreur'); return false }
+				res.json(donneesUtilisateur)
+			} else {
+				res.send('utilisateur_inexistant')
+			}
 		} else {
 			res.send('non_autorise')
 		}
 	})
 
-	app.post('/api/modifier-donnees-mur-admin', function (req, res) {
+	app.post('/api/modifier-donnees-mur-admin', async function (req, res) {
 		const mur = req.body.murId
 		const champ = req.body.champ
 		const valeur = req.body.valeur
 		const admin = req.body.admin
 		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
-			db.exists('murs:' + mur, async function (err, resultat) {
-				if (err) { res.send('erreur'); return false }
-				if (resultat === 1) {
+			const resultat = await db.EXISTS('murs:' + mur)
+			if (resultat === null) { res.send('erreur'); return false }
+			if (resultat === 1) {
+				if (champ === 'motdepasse') {
+					const hash = await bcrypt.hash(valeur, 10)
+					await db.HSET('murs:' + mur, champ, hash)
+				} else {
+					await db.HSET('murs:' + mur, champ, valeur)
+				}
+				res.send('donnees_modifiees')
+			} else if (resultat !== 1 && pgdb === true) {
+				const client = await pool.connect()
+				const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
+				client.release()
+				if (Object.keys(donneesQ.rows[0]).length === 3) {
+					const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+					await ajouterMurDansDb(mur, donnees)
 					if (champ === 'motdepasse') {
 						const hash = await bcrypt.hash(valeur, 10)
-						db.hset('murs:' + mur, champ, hash)
+						await db.HSET('murs:' + mur, champ, hash)
 					} else {
-						db.hset('murs:' + mur, champ, valeur)
+						await db.HSET('murs:' + mur, champ, valeur)
 					}
 					res.send('donnees_modifiees')
-				} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-					const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-					if (typeof donnees === 'object' && donnees !== null) {
-						await ajouterMurDansDb(mur, donnees)
-						if (champ === 'motdepasse') {
-							const hash = await bcrypt.hash(valeur, 10)
-							db.hset('murs:' + mur, champ, hash)
+				} else {
+					res.send('erreur')
+				}
+			} else {
+				res.send('mur_inexistant')
+			}
+		} else {
+			res.send('non_autorise')
+		}
+	})
+
+	app.post('/api/rattacher-mur', async function (req, res) {
+		const mur = req.body.murId
+		const identifiant = req.body.identifiant
+		const admin = req.body.admin
+		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
+			const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+			if (resultat === null) { res.send('erreur'); return false  }
+			if (resultat === 1) {
+				const reponse = await db.EXISTS('murs:' + mur)
+				if (reponse === null) { res.send('erreur'); return false  }
+				if (reponse === 1) {
+					let donnees = await db.HGETALL('murs:' + mur)
+					donnees = Object.assign({}, donnees)
+					if (donnees === null) { res.send('erreur'); return false }
+					if (donnees.hasOwnProperty('motdepasse')) {
+						await db
+						.multi()
+						.SADD('murs-crees:' + identifiant, mur.toString())
+						.SADD('utilisateurs-murs:' + mur, identifiant)
+						.HSET('murs:' + mur, 'identifiant', identifiant)
+						.HDEL('murs:' + mur, 'motdepasse')
+						.SREM('murs-rejoints:' + identifiant, mur.toString())
+						.SREM('murs-utilisateurs:' + identifiant, mur.toString())
+						.exec()
+						res.send('mur_transfere')
+					} else {
+						res.send('mur_cree_avec_compte')
+					}
+				} else if (reponse !== 1 && pgdb === true) {
+					const client = await pool.connect()
+					const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
+					client.release()
+					if (Object.keys(donneesQ.rows[0]).length === 3) {
+						const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+						if (donnees.mur.hasOwnProperty('motdepasse')) {
+							await ajouterMurDansDb(mur, donnees)
+							await db
+							.multi()
+							.SADD('murs-crees:' + identifiant, mur.toString())
+							.SADD('utilisateurs-murs:' + mur, identifiant)
+							.HSET('murs:' + mur, 'identifiant', identifiant)
+							.HDEL('murs:' + mur, 'motdepasse')
+							.SREM('murs-rejoints:' + identifiant, mur.toString())
+							.SREM('murs-utilisateurs:' + identifiant, mur.toString())
+							.exec()
+							res.send('mur_transfere')
 						} else {
-							db.hset('murs:' + mur, champ, valeur)
+							res.send('mur_cree_avec_compte')
 						}
-						res.send('donnees_modifiees')
 					} else {
 						res.send('erreur')
 					}
 				} else {
 					res.send('mur_inexistant')
 				}
-			})
+			} else {
+				res.send('utilisateur_inexistant')
+			}
 		} else {
 			res.send('non_autorise')
 		}
 	})
 
-	app.post('/api/rattacher-mur', function (req, res) {
-		const mur = req.body.murId
-		const identifiant = req.body.identifiant
-		const admin = req.body.admin
-		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
-			db.exists('utilisateurs:' + identifiant, function (err, reponse) {
-				if (err) { res.send('erreur'); return false  }
-				if (reponse === 1) {
-					db.exists('murs:' + mur, async function (err, resultat) {
-						if (err) { res.send('erreur'); return false  }
-						if (resultat === 1) {
-							db.hgetall('murs:' + mur, function (err, donnees) {
-								if (err || !donnees || donnees === null) { res.send('erreur'); return false }
-								if (donnees.hasOwnProperty('motdepasse')) {
-									const multi = db.multi()
-									multi.sadd('murs-crees:' + identifiant, mur)
-									multi.sadd('utilisateurs-murs:' + mur, identifiant)
-									multi.hset('murs:' + mur, 'identifiant', identifiant)
-									multi.hdel('murs:' + mur, 'motdepasse')
-									multi.srem('murs-rejoints:' + identifiant, mur)
-									multi.srem('murs-utilisateurs:' + identifiant, mur)
-									multi.exec(function () {
-										res.send('mur_transfere')
-									})
-								} else {
-									res.send('mur_cree_avec_compte')
-								}
-							})
-						} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-							const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-							if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-								if (donnees.mur.hasOwnProperty('motdepasse')) {
-									await ajouterMurDansDb(mur, donnees)
-									const multi = db.multi()
-									multi.sadd('murs-crees:' + identifiant, mur)
-									multi.sadd('utilisateurs-murs:' + mur, identifiant)
-									multi.hset('murs:' + mur, 'identifiant', identifiant)
-									multi.hdel('murs:' + mur, 'motdepasse')
-									multi.srem('murs-rejoints:' + identifiant, mur)
-									multi.srem('murs-utilisateurs:' + identifiant, mur)
-									multi.exec(function () {
-										res.send('mur_transfere')
-									})
-								} else {
-									res.send('mur_cree_avec_compte')
-								}
-							} else {
-								res.send('erreur')
-							}
-						} else {
-							res.send('mur_inexistant')
-						}
-					})
-				} else {
-					res.send('utilisateur_inexistant')
-				}
-			})
-		} else {
-			res.send('non_autorise')
-		}
-	})
-
-	app.post('/api/transferer-mur', function (req, res) {
+	app.post('/api/transferer-mur', async function (req, res) {
 		const nouvelIdentifiant = req.body.nouvelIdentifiant
 		const mur = req.body.murId
 		const admin = req.body.admin
 		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
-			db.exists('utilisateurs:' + nouvelIdentifiant, function (err, resultat) {
-				if (err) { res.send('erreur'); return false  }
+			const resultat = await db.EXISTS('utilisateurs:' + nouvelIdentifiant)
+			if (resultat === null) { res.send('erreur'); return false  }
+			if (resultat === 1) {
+				const reponse = await db.EXISTS('murs:' + mur)
+				if (reponse === null) { res.send('erreur'); return false  }
+				if (reponse === 1) {
+					let donnees = await db.HGETALL('murs:' + mur)
+					donnees = Object.assign({}, donnees)
+					if (donnees === null) { res.send('erreur'); return false }
+					const identifiant = donnees.identifiant
+					await db
+					.multi()
+					.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
+					.SREM('murs-crees:' + identifiant, mur.toString())
+					.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
+					.SREM('utilisateurs-murs:' + mur, identifiant)
+					.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
+					.SREM('murs-admins:' + nouvelIdentifiant, mur.toString())
+					.SREM('murs-rejoints:' + nouvelIdentifiant, mur.toString())
+					.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
+					.exec()
+					res.send('mur_transfere')
+				} else if (reponse !== 1 && pgdb === true) {
+					const client = await pool.connect()
+					const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
+					client.release()
+					if (Object.keys(donneesQ.rows[0]).length === 3) {
+						const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+						await ajouterMurDansDb(mur, donnees)
+						const identifiant = donnees.mur.identifiant
+						await db
+						.multi()
+						.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
+						.SREM('murs-crees:' + identifiant, mur.toString())
+						.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
+						.SREM('utilisateurs-murs:' + mur, identifiant)
+						.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
+						.SREM('murs-admins:' + nouvelIdentifiant, mur.toString())
+						.SREM('murs-rejoints:' + nouvelIdentifiant, mur.toString())
+						.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
+						.exec()
+						res.send('mur_transfere')
+					} else {
+						res.send('erreur')
+					}
+				} else {
+					res.send('mur_inexistant')
+				}
+			} else {
+				res.send('utilisateur_inexistant')
+			}
+		} else {
+			res.send('non_autorise')
+		}
+	})
+
+	app.post('/api/transferer-compte', async function (req, res) {
+		const identifiant = req.body.identifiant
+		const nouvelIdentifiant = req.body.nouvelIdentifiant
+		const admin = req.body.admin
+		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
+			const reponse = await db.EXISTS('utilisateurs:' + identifiant)
+			if (reponse === null) { res.send('erreur'); return false  }
+			if (reponse === 1) {
+				const resultat = await db.EXISTS('utilisateurs:' + nouvelIdentifiant)
+				if (resultat === null) { res.send('erreur'); return false  }
 				if (resultat === 1) {
-					db.exists('murs:' + mur, async function (err, resultat) {
-						if (err) { res.send('erreur'); return false  }
-						if (resultat === 1) {
-							db.hgetall('murs:' + mur, function (err, donnees) {
-								if (err || !donnees || donnees === null) { res.send('erreur'); return false }
-								const identifiant = donnees.identifiant
-								const multi = db.multi()
-								multi.sadd('murs-crees:' + nouvelIdentifiant, mur)
-								multi.srem('murs-crees:' + identifiant, mur)
-								multi.sadd('utilisateurs-murs:' + mur, nouvelIdentifiant)
-								multi.srem('utilisateurs-murs:' + mur, identifiant)
-								multi.hset('murs:' + mur, 'identifiant', nouvelIdentifiant)
-								multi.srem('murs-admins:' + nouvelIdentifiant, mur)
-								multi.srem('murs-rejoints:' + nouvelIdentifiant, mur)
-								multi.srem('murs-utilisateurs:' + nouvelIdentifiant, mur)
-								multi.exec(function () {
-									res.send('mur_transfere')
-								})
-							})
-						} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-							const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-							if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-								await ajouterMurDansDb(mur, donnees)
-								const identifiant = donnees.mur.identifiant
-								const multi = db.multi()
-								multi.sadd('murs-crees:' + nouvelIdentifiant, mur)
-								multi.srem('murs-crees:' + identifiant, mur)
-								multi.sadd('utilisateurs-murs:' + mur, nouvelIdentifiant)
-								multi.srem('utilisateurs-murs:' + mur, identifiant)
-								multi.hset('murs:' + mur, 'identifiant', nouvelIdentifiant)
-								multi.srem('murs-admins:' + nouvelIdentifiant, mur)
-								multi.srem('murs-rejoints:' + nouvelIdentifiant, mur)
-								multi.srem('murs-utilisateurs:' + nouvelIdentifiant, mur)
-								multi.exec(function () {
-									res.send('mur_transfere')
-								})
-							} else {
-								res.send('erreur')
-							}
-						} else {
-							res.send('mur_inexistant')
-						}
-					})
-				} else {
-					res.send('utilisateur_inexistant')
-				}
-			})
-		} else {
-			res.send('non_autorise')
-		}
-	})
-
-	app.post('/api/transferer-compte', function (req, res) {
-		const identifiant = req.body.identifiant
-		const nouvelIdentifiant = req.body.nouvelIdentifiant
-		const admin = req.body.admin
-		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
-			db.exists('utilisateurs:' + identifiant, function (err, reponse) {
-				if (err) { res.send('erreur'); return false  }
-				if (reponse === 1) {
-					db.exists('utilisateurs:' + nouvelIdentifiant, function (err, resultat) {
-						if (err) { res.send('erreur'); return false  }
-						if (resultat === 1) {
-							db.smembers('murs-crees:' + identifiant, function (err, murs) {
-								if (err) { res.send('erreur'); return false }
-								const donneesMurs = []
-								for (const mur of murs) {
-									const donneesMur = new Promise(function (resolve) {
-										db.exists('murs:' + mur, async function (err, resultat) {
-											if (err) { resolve('erreur'); return false  }
-											if (resultat === 1) {
-												const multi = db.multi()
-												multi.sadd('murs-crees:' + nouvelIdentifiant, mur)
-												multi.srem('murs-crees:' + identifiant, mur)
-												multi.sadd('utilisateurs-murs:' + mur, nouvelIdentifiant)
-												multi.srem('utilisateurs-murs:' + mur, identifiant)
-												multi.hset('murs:' + mur, 'identifiant', nouvelIdentifiant)
-												multi.srem('murs-admins:' + nouvelIdentifiant, mur)
-												multi.srem('murs-rejoints:' + nouvelIdentifiant, mur)
-												multi.srem('murs-utilisateurs:' + nouvelIdentifiant, mur)
-												multi.exec(function () {
-													resolve('mur_transfere')
-												})
-											} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-												const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-												if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-													await ajouterMurDansDb(mur, donnees)
-													const multi = db.multi()
-													multi.sadd('murs-crees:' + nouvelIdentifiant, mur)
-													multi.srem('murs-crees:' + identifiant, mur)
-													multi.sadd('utilisateurs-murs:' + mur, nouvelIdentifiant)
-													multi.srem('utilisateurs-murs:' + mur, identifiant)
-													multi.hset('murs:' + mur, 'identifiant', nouvelIdentifiant)
-													multi.srem('murs-admins:' + nouvelIdentifiant, mur)
-													multi.srem('murs-rejoints:' + nouvelIdentifiant, mur)
-													multi.srem('murs-utilisateurs:' + nouvelIdentifiant, mur)
-													multi.exec(function () {
-														resolve('mur_transfere')
-													})
-												} else {
-													resolve('erreur')
-												}
-											} else {
-												resolve('mur_inexistant')
-											}
-										})
-									})
-									donneesMurs.push(donneesMur)
+					const murs = await db.SMEMBERS('murs-crees:' + identifiant)
+					if (murs === null) { res.send('erreur'); return false }
+					const donneesMurs = []
+					for (const mur of murs) {
+						const donneesMur = new Promise(async function (resolve) {
+							const r = await db.EXISTS('murs:' + mur)
+							if (r === null) { resolve('erreur'); return false  }
+							if (r === 1) {
+								await db
+								.multi()
+								.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
+								.SREM('murs-crees:' + identifiant, mur.toString())
+								.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
+								.SREM('utilisateurs-murs:' + mur, identifiant)
+								.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
+								.SREM('murs-admins:' + nouvelIdentifiant, mur.toString())
+								.SREM('murs-rejoints:' + nouvelIdentifiant, mur.toString())
+								.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
+								.exec()
+								resolve('mur_transfere')
+							} else if (r !== 1 && pgdb === true) {
+								const client = await pool.connect()
+								const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
+								client.release()
+								if (Object.keys(donneesQ.rows[0]).length === 3) {
+									const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+									await ajouterMurDansDb(mur, donnees)
+									await db
+									.multi()
+									.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
+									.SREM('murs-crees:' + identifiant, mur.toString())
+									.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
+									.SREM('utilisateurs-murs:' + mur, identifiant)
+									.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
+									.SREM('murs-admins:' + nouvelIdentifiant, mur.toString())
+									.SREM('murs-rejoints:' + nouvelIdentifiant, mur.toString())
+									.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
+									.exec()
+									resolve('mur_transfere')
+								} else {
+									resolve('erreur')
 								}
-								Promise.all(donneesMurs).then(function () {
-									res.send('compte_transfere')
-								})
-							})
-						} else {
-							res.send('utilisateur_inexistant')
-						}
+							} else {
+								resolve('mur_inexistant')
+							}
+						})
+						donneesMurs.push(donneesMur)
+					}
+					Promise.all(donneesMurs).then(function () {
+						res.send('compte_transfere')
 					})
 				} else {
 					res.send('utilisateur_inexistant')
 				}
-			})
+			} else {
+				res.send('utilisateur_inexistant')
+			}
 		} else {
 			res.send('non_autorise')
 		}
 	})
 
-	app.post('/api/supprimer-compte', function (req, res) {
+	app.post('/api/supprimer-compte', async function (req, res) {
 		if (maintenance === true) {
 			res.redirect('/maintenance')
 			return false
@@ -2370,320 +2433,314 @@ async function demarrerServeur () {
 			if (admin === motdepasseAdmin) {
 				type === 'admin'
 			}
-			db.smembers('murs-crees:' + identifiant, function (err, murs) {
-				if (err) { res.send('erreur'); return false }
-				const donneesMurs = []
+			const murs = await db.SMEMBERS('murs-crees:' + identifiant)
+			if (murs === null) { res.send('erreur'); return false }
+			const donneesMurs = []
+			for (const mur of murs) {
+				const donneesMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve(); return false }
+					if (resultat === 1) {
+						const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+						if (blocs === null) { resolve(); return false }
+						for (let i = 0; i < blocs.length; i++) {
+							await db
+							.multi()
+							.DEL('commentaires:' + blocs[i])
+							.DEL('evaluations:' + blocs[i])
+							.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+							.exec()
+						}
+						await db
+						.multi()
+						.DEL('blocs:' + mur)
+						.DEL('murs:' + mur)
+						.DEL('activite:' + mur)
+						.DEL('dates-murs:' + mur)
+						.exec()
+						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+						if (utilisateurs === null) { resolve(); return false }
+						for (let j = 0; j < utilisateurs.length; j++) {
+							await db
+							.multi()
+							.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+							.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+							.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+							.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+							.exec()
+						}
+						await db.DEL('utilisateurs-murs:' + mur)
+						const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+						await fs.remove(chemin)
+						resolve(mur)
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						if ((await client.query('SELECT id FROM murs WHERE mur = $1', [parseInt(mur)])).rowCount > 0) {
+							const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+							if (utilisateurs === null) { resolve(); return false }
+							for (let j = 0; j < utilisateurs.length; j++) {
+								await db
+								.multi()
+								.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+								.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+								.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+								.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+								.exec()
+							}
+							await db.DEL('utilisateurs-murs:' + mur)
+							await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
+							await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(pad)])
+							client.release()
+							resolve(mur)
+						} else {
+							client.release()
+							resolve()
+						}
+					} else {
+						resolve()
+					}
+				})
+				donneesMurs.push(donneesMur)
+			}
+			Promise.all(donneesMurs).then(async function () {
+				const murs = await db.SMEMBERS('murs-utilisateurs:' + identifiant)
+				if (murs === null) { res.send('erreur'); return false }
+				const donneesBlocs = []
+				const donneesActivites = []
+				const donneesCommentaires = []
+				const donneesEvaluations = []
 				for (const mur of murs) {
-					const donneesMur = new Promise(function (resolve) {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { resolve(); return false }
-							if (resultat === 1) {
-								db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-									if (err) { resolve(); return false }
-									const multi = db.multi()
-									for (let i = 0; i < blocs.length; i++) {
-										multi.del('commentaires:' + blocs[i])
-										multi.del('evaluations:' + blocs[i])
-										multi.del('contenu-blocs:' + mur + ':' + blocs[i])
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === 1) {
+						const donneesBloc = new Promise(async function (resolve) {
+							const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+							if (blocs === null) { resolve(); return false }
+							for (let i = 0; i < blocs.length; i++) {
+								let donnees = await db.HGETALL('contenu-blocs:' + mur + ':' + blocs[i])
+								donnees = Object.assign({}, donnees)
+								if (donnees === null) { resolve(); return false }
+								if (donnees.identifiant === identifiant) {
+									if (donnees.hasOwnProperty('media') && donnees.media !== '' && donnees.type !== 'embed') {
+										supprimerFichier(mur, donnees.media)
 									}
-									multi.del('blocs:' + mur)
-									multi.del('murs:' + mur)
-									multi.del('activite:' + mur)
-									multi.del('dates-murs:' + mur)
-									multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-										if (err) { resolve(); return false }
-										for (let j = 0; j < utilisateurs.length; j++) {
-											db.srem('murs-rejoints:' + utilisateurs[j], mur)
-											db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-											db.srem('murs-admins:' + utilisateurs[j], mur)
-											db.srem('murs-favoris:' + utilisateurs[j], mur)
+									if (donnees.hasOwnProperty('mediaExtra') && donnees.mediaExtra !== '') {
+										supprimerFichier(mur, donnees.mediaExtra)
+									}
+									if (donnees.hasOwnProperty('medias')) {
+										const medias = JSON.parse(donnees.medias)
+										for (let i = 0; i < medias.length; i++) {
+											if (medias[i].hasOwnProperty('fichier')) {
+												supprimerFichier(mur, medias[i].fichier)
+											}
 										}
-									})
-									multi.del('utilisateurs-murs:' + mur)
-									multi.exec(async function () {
-										const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
-										await fs.remove(chemin)
-										resolve(mur)
-									})
-								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-								const multi = db.multi()
-								multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-									if (err) { resolve(); return false }
-									for (let j = 0; j < utilisateurs.length; j++) {
-										db.srem('murs-rejoints:' + utilisateurs[j], mur)
-										db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-										db.srem('murs-admins:' + utilisateurs[j], mur)
-										db.srem('murs-favoris:' + utilisateurs[j], mur)
 									}
-								})
-								multi.del('utilisateurs-murs:' + mur)
-								multi.exec(async function () {
-									await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
-									await fs.remove(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-									await fs.remove(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-									resolve(mur)
-								})
-							} else {
-								resolve()
+									if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && !String(donnees.vignette).includes('/img/') && !verifierURL(donnees.vignette, ['https', 'http'])) {
+										supprimerFichier(mur, path.basename(donnees.vignette))
+									}
+									await db
+									.multi()
+									.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+									.ZREM('blocs:' + mur, blocs[i])
+									.DEL('commentaires:' + blocs[i])
+									.DEL('evaluations:' + blocs[i])
+									.exec()
+									resolve(blocs[i])
+								} else {
+									resolve(blocs[i])
+								}
 							}
 						})
-					})
-					donneesMurs.push(donneesMur)
-				}
-				Promise.all(donneesMurs).then(function () {
-					db.smembers('murs-utilisateurs:' + identifiant, function (err, murs) {
-						if (err) { res.send('erreur'); return false }
-						const donneesBlocs = []
-						const donneesActivites = []
-						const donneesCommentaires = []
-						const donneesEvaluations = []
-						for (const mur of murs) {
-							db.exists('murs:' + mur, async function (err, resultat) {
-								if (resultat === 1) {
-									const donneesBloc = new Promise(function (resolve) {
-										db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-											if (err) { resolve(); return false }
-											for (let i = 0; i < blocs.length; i++) {
-												db.hgetall('contenu-blocs:' + mur + ':' + blocs[i], function (err, donnees) {
-													if (err) { resolve(); return false }
-													if (donnees.identifiant === identifiant) {
-														if (donnees.hasOwnProperty('media') && donnees.media !== '' && donnees.type !== 'embed') {
-															supprimerFichier(mur, donnees.media)
-														}
-														if (donnees.hasOwnProperty('mediaExtra') && donnees.mediaExtra !== '') {
-															supprimerFichier(mur, donnees.mediaExtra)
-														}
-														if (donnees.hasOwnProperty('medias')) {
-															const medias = JSON.parse(donnees.medias)
-															for (let i = 0; i < medias.length; i++) {
-																if (medias[i].hasOwnProperty('fichier')) {
-																	supprimerFichier(mur, medias[i].fichier)
-																}
-															}
-														}
-														if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && !String(donnees.vignette).includes('/img/') && !verifierURL(donnees.vignette, ['https', 'http'])) {
-															supprimerFichier(mur, path.basename(donnees.vignette))
-														}
-														const multi = db.multi()
-														multi.del('contenu-blocs:' + mur + ':' + blocs[i])
-														multi.zrem('blocs:' + mur, blocs[i])
-														multi.del('commentaires:' + blocs[i])
-														multi.del('evaluations:' + blocs[i])
-														multi.exec(function () {
-															resolve(blocs[i])
-														})
-													} else {
-														resolve(blocs[i])
-													}
-												})
-											}
-										})
-									})
-									donneesBlocs.push(donneesBloc)
-									const donneesActivite = new Promise(function (resolve) {
-										db.zrange('activite:' + mur, 0, -1, function (err, entrees) {
-											if (err) { resolve(); return false }
-											for (let i = 0; i < entrees.length; i++) {
-												const entree = JSON.parse(entrees[i])
-												if (entree.identifiant === identifiant) {
-													db.zremrangebyscore('activite:' + mur, entree.id, entree.id, function () {
-														resolve(entree.id)
-													})
-												} else {
-													resolve(entree.id)
+						donneesBlocs.push(donneesBloc)
+						const donneesActivite = new Promise(async function (resolve) {
+							const entrees = await db.ZRANGE('activite:' + mur, 0, -1)
+							if (entrees === null) { resolve(); return false }
+							for (let i = 0; i < entrees.length; i++) {
+								const entree = JSON.parse(entrees[i])
+								if (entree.identifiant === identifiant) {
+									await db.ZREMRANGEBYSCORE('activite:' + mur, entree.id, entree.id)
+									resolve(entree.id)
+								} else {
+									resolve(entree.id)
+								}
+							}
+						})
+						donneesActivites.push(donneesActivite)
+						const donneesCommentaire = new Promise(async function (resolve) {
+							const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+							if (blocs === null) { resolve(); return false }
+							for (let i = 0; i < blocs.length; i++) {
+								const commentaires = await db.ZRANGE('commentaires:' + blocs[i], 0, -1)
+								if (commentaires === null) { resolve(); return false }
+								for (let j = 0; j < commentaires.length; j++) {
+									const commentaire = JSON.parse(commentaires[j])
+									if (commentaire.identifiant === identifiant) {
+										await db.ZREMRANGEBYSCORE('commentaires:' + blocs[i], commentaire.id, commentaire.id)
+										resolve(commentaire.id)
+									} else {
+										resolve(commentaire.id)
+									}
+								}
+							}
+						})
+						donneesCommentaires.push(donneesCommentaire)
+						const donneesEvaluation = new Promise(async function (resolve) {
+							const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+							if (blocs === null) { resolve(); return false }
+							for (let i = 0; i < blocs.length; i++) {
+								const evaluations = await db.ZRANGE('evaluations:' + blocs[i], 0, -1)
+								if (evaluations === null) { resolve(); return false }
+								for (let j = 0; j < evaluations.length; j++) {
+									const evaluation = JSON.parse(evaluations[j])
+									if (evaluation.identifiant === identifiant) {
+										await db.ZREMRANGEBYSCORE('evaluations:' + blocs[i], evaluation.id, evaluation.id)
+										resolve(evaluation.id)
+									} else {
+										resolve(evaluation.id)
+									}
+								}
+							}
+						})
+						donneesEvaluations.push(donneesEvaluation)
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 3) {
+							const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
+							const blocs = donnees.blocs
+							const entrees = donnees.activite
+							const donneesBloc = new Promise(async function (resolve) {
+								for (let i = 0; i < blocs.length; i++) {
+									if (blocs[i].hasOwnProperty('identifiant') && blocs[i].identifiant === identifiant) {
+										if (blocs[i].hasOwnProperty('media') && blocs[i].media !== '' && blocs[i].type !== 'embed') {
+											supprimerFichier(mur, blocs[i].media)
+										}
+										if (blocs[i].hasOwnProperty('mediaExtra') && blocs[i].mediaExtra !== '') {
+											supprimerFichier(mur, blocs[i].mediaExtra)
+										}
+										if (blocs[i].hasOwnProperty('medias')) {
+											const medias = JSON.parse(blocs[i].medias)
+											for (let i = 0; i < medias.length; i++) {
+												if (medias[i].hasOwnProperty('fichier')) {
+													supprimerFichier(mur, medias[i].fichier)
 												}
 											}
-										})
-									})
-									donneesActivites.push(donneesActivite)
-									const donneesCommentaire = new Promise(function (resolve) {
-										db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-											if (err) { resolve(); return false }
-											for (let i = 0; i < blocs.length; i++) {
-												db.zrange('commentaires:' + blocs[i], 0, -1, function (err, commentaires) {
-													if (err) { resolve(); return false }
-													for (let j = 0; j < commentaires.length; j++) {
-														const commentaire = JSON.parse(commentaires[j])
-														if (commentaire.identifiant === identifiant) {
-															db.zremrangebyscore('commentaires:' + blocs[i], commentaire.id, commentaire.id, function () {
-																resolve(commentaire.id)
-															})
-														} else {
-															resolve(commentaire.id)
-														}
-													}
-												})
-											}
-										})
-									})
-									donneesCommentaires.push(donneesCommentaire)
-									const donneesEvaluation = new Promise(function (resolve) {
-										db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-											if (err) { resolve(); return false }
-											for (let i = 0; i < blocs.length; i++) {
-												db.zrange('evaluations:' + blocs[i], 0, -1, function (err, evaluations) {
-													if (err) { resolve(); return false }
-													for (let j = 0; j < evaluations.length; j++) {
-														const evaluation = JSON.parse(evaluations[j])
-														if (evaluation.identifiant === identifiant) {
-															db.zremrangebyscore('evaluations:' + blocs[i], evaluation.id, evaluation.id, function () {
-																resolve(evaluation.id)
-															})
-														} else {
-															resolve(evaluation.id)
-														}
-													}
-												})
-											}
-										})
-									})
-									donneesEvaluations.push(donneesEvaluation)
-								} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))) {
-									const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-									if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('mur') && donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite')) {
-										const blocs = donnees.blocs
-										const entrees = donnees.activite
-										const donneesBloc = new Promise(function (resolve) {
-											for (let i = 0; i < blocs.length; i++) {
-												if (blocs[i].hasOwnProperty('identifiant') && blocs[i].identifiant === identifiant) {
-													if (blocs[i].hasOwnProperty('media') && blocs[i].media !== '' && blocs[i].type !== 'embed') {
-														supprimerFichier(mur, blocs[i].media)
-													}
-													if (blocs[i].hasOwnProperty('mediaExtra') && blocs[i].mediaExtra !== '') {
-														supprimerFichier(mur, blocs[i].mediaExtra)
-													}
-													if (blocs[i].hasOwnProperty('medias')) {
-														const medias = JSON.parse(blocs[i].medias)
-														for (let i = 0; i < medias.length; i++) {
-															if (medias[i].hasOwnProperty('fichier')) {
-																supprimerFichier(mur, medias[i].fichier)
-															}
-														}
-													}
-													if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && !String(blocs[i].vignette).includes('/img/') && !verifierURL(blocs[i].vignette, ['https', 'http'])) {
-														supprimerFichier(mur, path.basename(blocs[i].vignette))
-													}
-													const multi = db.multi()
-													multi.del('contenu-blocs:' + mur + ':' + blocs[i].bloc)
-													multi.zrem('blocs:' + mur, blocs[i].bloc)
-													multi.del('commentaires:' + blocs[i].bloc)
-													multi.del('evaluations:' + blocs[i].bloc)
-													multi.exec(function () {
-														resolve(blocs[i].bloc)
-													})
-												} else {
-													resolve(blocs[i].bloc)
-												}
-											}
-										})
-										donneesBlocs.push(donneesBloc)
-										const donneesActivite = new Promise(function (resolve) {
-											for (let i = 0; i < entrees.length; i++) {
-												if (entrees[i].identifiant === identifiant) {
-													db.zremrangebyscore('activite:' + mur, entrees[i].id, entrees[i].id, function () {
-														resolve(entrees[i].id)
-													})
-												} else {
-													resolve(entrees[i].id)
-												}
-											}
-										})
-										donneesActivites.push(donneesActivite)
-										const donneesCommentaire = new Promise(function (resolve) {
-											for (let i = 0; i < blocs.length; i++) {
-												db.zrange('commentaires:' + blocs[i].bloc, 0, -1, function (err, commentaires) {
-													if (err) { resolve(); return false }
-													for (let j = 0; j < commentaires.length; j++) {
-														const commentaire = JSON.parse(commentaires[j])
-														if (commentaire.identifiant === identifiant) {
-															db.zremrangebyscore('commentaires:' + blocs[i].bloc, commentaire.id, commentaire.id, function () {
-																resolve(commentaire.id)
-															})
-														} else {
-															resolve(commentaire.id)
-														}
-													}
-												})
-											}
-										})
-										donneesCommentaires.push(donneesCommentaire)
-										const donneesEvaluation = new Promise(function (resolve) {
-											for (let i = 0; i < blocs.length; i++) {
-												db.zrange('evaluations:' + blocs[i].bloc, 0, -1, function (err, evaluations) {
-													if (err) { resolve(); return false }
-													for (let j = 0; j < evaluations.length; j++) {
-														const evaluation = JSON.parse(evaluations[j])
-														if (evaluation.identifiant === identifiant) {
-															db.zremrangebyscore('evaluations:' + blocs[i].bloc, evaluation.id, evaluation.id, function () {
-																resolve(evaluation.id)
-															})
-														} else {
-															resolve(evaluation.id)
-														}
-													}
-												})
-											}
-										})
-										donneesEvaluations.push(donneesEvaluation)
+										}
+										if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && !String(blocs[i].vignette).includes('/img/') && !verifierURL(blocs[i].vignette, ['https', 'http'])) {
+											supprimerFichier(mur, path.basename(blocs[i].vignette))
+										}
+										await db
+										.multi()
+										.DEL('contenu-blocs:' + mur + ':' + blocs[i].bloc)
+										.ZREM('blocs:' + mur, blocs[i].bloc)
+										.DEL('commentaires:' + blocs[i].bloc)
+										.DEL('evaluations:' + blocs[i].bloc)
+										.exec()
+										resolve(blocs[i].bloc)
+									} else {
+										resolve(blocs[i].bloc)
 									}
 								}
 							})
-						}
-						Promise.all([donneesBlocs, donneesActivites, donneesCommentaires, donneesEvaluations]).then(function () {
-							const multi = db.multi()
-							multi.del('murs-crees:' + identifiant)
-							multi.del('murs-rejoints:' + identifiant)
-							multi.del('murs-favoris:' + identifiant)
-							multi.del('murs-admins:' + identifiant)
-							multi.del('murs-utilisateurs:' + identifiant)
-							multi.del('utilisateurs:' + identifiant)
-							multi.del('noms:' + identifiant)
-							multi.exec(function () {
-								if (type === 'utilisateur') {
-									req.session.identifiant = ''
-									req.session.nom = ''
-									req.session.email = ''
-									req.session.langue = ''
-									req.session.statut = ''
-									req.session.destroy()
-									res.send('compte_supprime')
-								} else {
-									db.keys('sessions:*', function (err, sessions) {
-										if (sessions !== null) {
-											const donneesSessions = []
-											sessions.forEach(function (session) {
-												const donneesSession = new Promise(function (resolve) {
-													db.get('sessions:' + session.substring(9), function (err, donnees) {
-														if (err || !donnees || donnees === null) { resolve({}); return false }
-														donnees = JSON.parse(donnees)
-														if (donnees.hasOwnProperty('identifiant')) {
-															resolve({ session: session.substring(9), identifiant: donnees.identifiant })
-														} else {
-															resolve({})
-														}
-													})
-												})
-												donneesSessions.push(donneesSession)
-											})
-											Promise.all(donneesSessions).then(function (donnees) {
-												let sessionId = ''
-												donnees.forEach(function (item) {
-													if (item.hasOwnProperty('identifiant') && item.identifiant === identifiant) {
-														sessionId = item.session
-													}
-												})
-												if (sessionId !== '') {
-													db.del('sessions:' + sessionId)
-												}
-												res.send('compte_supprime')
-											})
-										}
-									})
+							donneesBlocs.push(donneesBloc)
+							const donneesActivite = new Promise(async function (resolve) {
+								for (let i = 0; i < entrees.length; i++) {
+									if (entrees[i].identifiant === identifiant) {
+										await db.ZREMRANGEBYSCORE('activite:' + mur, entrees[i].id, entrees[i].id)
+										resolve(entrees[i].id)
+									} else {
+										resolve(entrees[i].id)
+									}
 								}
 							})
-						})
-					})
+							donneesActivites.push(donneesActivite)
+							const donneesCommentaire = new Promise(async function (resolve) {
+								for (let i = 0; i < blocs.length; i++) {
+									const commentaires = await db.ZRANGE('commentaires:' + blocs[i].bloc, 0, -1)
+									if (commentaires === null) { resolve(); return false }
+									for (let j = 0; j < commentaires.length; j++) {
+										const commentaire = JSON.parse(commentaires[j])
+										if (commentaire.identifiant === identifiant) {
+											await db.ZREMRANGEBYSCORE('commentaires:' + blocs[i].bloc, commentaire.id, commentaire.id)
+											resolve(commentaire.id)
+										} else {
+											resolve(commentaire.id)
+										}
+									}
+								}
+							})
+							donneesCommentaires.push(donneesCommentaire)
+							const donneesEvaluation = new Promise(async function (resolve) {
+								for (let i = 0; i < blocs.length; i++) {
+									const evaluations = await db.ZRANGE('evaluations:' + blocs[i].bloc, 0, -1)
+									if (evaluations === null) { resolve(); return false }
+									for (let j = 0; j < evaluations.length; j++) {
+										const evaluation = JSON.parse(evaluations[j])
+										if (evaluation.identifiant === identifiant) {
+											await db.ZREMRANGEBYSCORE('evaluations:' + blocs[i].bloc, evaluation.id, evaluation.id)
+											resolve(evaluation.id)
+										} else {
+											resolve(evaluation.id)
+										}
+									}
+								}
+							})
+							donneesEvaluations.push(donneesEvaluation)
+						}
+					}
+				}
+				Promise.all([donneesBlocs, donneesActivites, donneesCommentaires, donneesEvaluations]).then(async function () {
+					await db
+					.multi()
+					.DEL('murs-crees:' + identifiant)
+					.DEL('murs-rejoints:' + identifiant)
+					.DEL('murs-favoris:' + identifiant)
+					.DEL('murs-admins:' + identifiant)
+					.DEL('murs-utilisateurs:' + identifiant)
+					.DEL('utilisateurs:' + identifiant)
+					.DEL('noms:' + identifiant)
+					.exec()
+					if (type === 'utilisateur') {
+						req.session.identifiant = ''
+						req.session.nom = ''
+						req.session.email = ''
+						req.session.langue = ''
+						req.session.statut = ''
+						req.session.destroy()
+						res.send('compte_supprime')
+					} else {
+						const sessions = await db.KEYS('sessions:*')
+						if (sessions !== null) {
+							const donneesSessions = []
+							sessions.forEach(function (session) {
+								const donneesSession = new Promise(async function (resolve) {
+									const donnees = await db.GET('sessions:' + session.substring(9))
+									if (donnees === null) { resolve({}); return false }
+									donnees = JSON.parse(donnees)
+									if (donnees.hasOwnProperty('identifiant')) {
+										resolve({ session: session.substring(9), identifiant: donnees.identifiant })
+									} else {
+										resolve({})
+									}
+								})
+								donneesSessions.push(donneesSession)
+							})
+							Promise.all(donneesSessions).then(async function (donnees) {
+								let sessionId = ''
+								donnees.forEach(function (item) {
+									if (item.hasOwnProperty('identifiant') && item.identifiant === identifiant) {
+										sessionId = item.session
+									}
+								})
+								if (sessionId !== '') {
+									await db.DEL('sessions:' + sessionId)
+								}
+								res.send('compte_supprime')
+							})
+						} else {
+							res.send('erreur')
+						}
+					}
 				})
 			})
 		} else {
@@ -2691,70 +2748,69 @@ async function demarrerServeur () {
 		}
 	})
 
-	app.post('/api/verifier-identifiant', function (req, res) {
+	app.post('/api/verifier-identifiant', async function (req, res) {
 		const identifiant = req.body.identifiant
-		db.exists('utilisateurs:' + identifiant, function (err, resultat) {
-			if (err) { res.send('erreur'); return false }
-			if (resultat === 1) {
-				res.send('identifiant_valide')
-			} else {
-				res.send('identifiant_non_valide')
-			}
-		})
+		const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+		if (resultat === null) { res.send('erreur'); return false }
+		if (resultat === 1) {
+			res.send('identifiant_valide')
+		} else {
+			res.send('identifiant_non_valide')
+		}
 	})
 
-	app.post('/api/verifier-mot-de-passe', function (req, res) {
+	app.post('/api/verifier-mot-de-passe', async function (req, res) {
 		const mur = req.body.mur
-		db.hgetall('murs:' + mur, async function (err, donnees) {
-			if (err || !donnees || donnees === null) { res.send('erreur'); return false }
-			if (req.body.motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
-				res.send('motdepasse_correct')
-			} else if (donnees.hasOwnProperty('motdepasseAdmin') && req.body.motdepasse.trim() !== '' && req.body.motdepasse === donnees.motdepasseAdmin) {
-				res.send('motdepasseadmin_correct')
-			} else {
-				res.send('motdepasse_incorrect')
-			}
-		})
+		let donnees = await db.HGETALL('murs:' + mur)
+		donnees = Object.assign({}, donnees)
+		if (donnees === null) { res.send('erreur'); return false }
+		if (req.body.motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(req.body.motdepasse, donnees.motdepasse)) {
+			res.send('motdepasse_correct')
+		} else if (donnees.hasOwnProperty('motdepasseAdmin') && req.body.motdepasse.trim() !== '' && req.body.motdepasse === donnees.motdepasseAdmin) {
+			res.send('motdepasseadmin_correct')
+		} else {
+			res.send('motdepasse_incorrect')
+		}
 	})
 
-	app.post('/api/verifier-code-acces', function (req, res) {
+	app.post('/api/verifier-code-acces', async function (req, res) {
 		const mur = req.body.mur
 		const identifiant = req.body.identifiant
 		const code = req.body.code
-		db.hgetall('murs:' + mur, async function (err, donnees) {
-			if (err || !donnees || donnees === null || !donnees.hasOwnProperty('code')) { res.send('erreur'); return false }
-			if (code === donnees.code) {
-				const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
-				if (!req.session.hasOwnProperty('acces')) {
-					req.session.acces = []
+		let donnees = await db.HGETALL('murs:' + mur)
+		donnees = Object.assign({}, donnees)
+		if (donnees === null || !donnees.hasOwnProperty('code')) { res.send('erreur'); return false }
+		if (code === donnees.code) {
+			const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
+			if (!req.session.hasOwnProperty('acces')) {
+				req.session.acces = []
+			}
+			let murAcces = false
+			req.session.acces.forEach(function (acces) {
+				if (acces.mur === mur) {
+					murAcces = true
 				}
-				let murAcces = false
-				req.session.acces.forEach(function (acces) {
+			})
+			if (murAcces) {
+				req.session.acces.forEach(function (acces, index) {
 					if (acces.mur === mur) {
-						murAcces = true
+						req.session.acces[index].code = code
 					}
 				})
-				if (murAcces) {
-					req.session.acces.forEach(function (acces, index) {
-						if (acces.mur === mur) {
-							req.session.acces[index].code = code
-						}
-					})
-				} else {
-					req.session.acces.push({ code: code, mur: mur })
-				}
-				res.send({ mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
 			} else {
-				res.send('code_incorrect')
+				req.session.acces.push({ code: code, mur: mur })
 			}
-		})
+			res.send({ mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
+		} else {
+			res.send('code_incorrect')
+		}
 	})
 
-	app.post('/api/modifier-langue', function (req, res) {
+	app.post('/api/modifier-langue', async function (req, res) {
 		const identifiant = req.body.identifiant
 		const langue = req.body.langue
 		if (req.session.identifiant && req.session.identifiant === identifiant) {
-			db.hset('utilisateurs:' + identifiant, 'langue', langue)
+			await db.HSET('utilisateurs:' + identifiant, 'langue', langue)
 			req.session.langue = langue
 		} else {
 			req.session.langue = langue
@@ -2762,22 +2818,22 @@ async function demarrerServeur () {
 		res.send('langue_modifiee')
 	})
 
-	app.post('/api/modifier-affichage', function (req, res) {
+	app.post('/api/modifier-affichage', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const affichage = req.body.affichage
-			db.hset('utilisateurs:' + identifiant, 'affichage', affichage)
+			await db.HSET('utilisateurs:' + identifiant, 'affichage', affichage)
 			res.send('affichage_modifie')
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/modifier-classement', function (req, res) {
+	app.post('/api/modifier-classement', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const classement = req.body.classement
-			db.hset('utilisateurs:' + identifiant, 'classement', classement)
+			await db.HSET('utilisateurs:' + identifiant, 'classement', classement)
 			req.session.classement = classement
 			res.send('classement_modifie')
 		} else {
@@ -2785,68 +2841,62 @@ async function demarrerServeur () {
 		}
 	})
 
-	app.post('/api/ajouter-dossier', function (req, res) {
+	app.post('/api/ajouter-dossier', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const nom = req.body.dossier
-			db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
-				if (err) { res.send('erreur_ajout_dossier'); return false }
-				let dossiers = []
-				if (donnees.hasOwnProperty('dossiers')) {
-					dossiers = JSON.parse(donnees.dossiers)
+			let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.send('erreur_ajout_dossier'); return false }
+			let dossiers = []
+			if (donnees.hasOwnProperty('dossiers')) {
+				dossiers = JSON.parse(donnees.dossiers)
+			}
+			const id = Math.random().toString(36).substring(2)
+			dossiers.push({ id: id, nom: nom, murs: [] })
+			await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
+			res.json({ id: id, nom: nom, murs: [] })
+		} else {
+			res.send('non_connecte')
+		}
+	})
+
+	app.post('/api/modifier-dossier', async function (req, res) {
+		const identifiant = req.body.identifiant
+		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
+			const nom = req.body.dossier
+			const dossierId = req.body.dossierId
+			let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.send('erreur_modification_dossier'); return false }
+			const dossiers = JSON.parse(donnees.dossiers)
+			dossiers.forEach(function (dossier, index) {
+				if (dossier.id === dossierId) {
+					dossiers[index].nom = nom
 				}
-				const id = Math.random().toString(36).substring(2)
-				dossiers.push({ id: id, nom: nom, murs: [] })
-				db.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers), function (err) {
-					if (err) { res.send('erreur_ajout_dossier'); return false }
-					res.json({ id: id, nom: nom, murs: [] })
-				})
 			})
+			await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
+			res.send('dossier_modifie')
 		} else {
 			res.send('non_connecte')
 		}
 	})
 
-	app.post('/api/modifier-dossier', function (req, res) {
-		const identifiant = req.body.identifiant
-		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
-			const nom = req.body.dossier
-			const dossierId = req.body.dossierId
-			db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
-				if (err) { res.send('erreur_modification_dossier'); return false }
-				const dossiers = JSON.parse(donnees.dossiers)
-				dossiers.forEach(function (dossier, index) {
-					if (dossier.id === dossierId) {
-						dossiers[index].nom = nom
-					}
-				})
-				db.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers), function (err) {
-					if (err) { res.send('erreur_modification_dossier'); return false }
-					res.send('dossier_modifie')
-				})
-			})
-		} else {
-			res.send('non_connecte')
-		}
-	})
-
-	app.post('/api/supprimer-dossier', function (req, res) {
+	app.post('/api/supprimer-dossier', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur') {
 			const dossierId = req.body.dossierId
-			db.hgetall('utilisateurs:' + identifiant, function (err, donnees) {
-				if (err) { res.send('erreur_suppression_dossier'); return false }
-				const dossiers = JSON.parse(donnees.dossiers)
-				dossiers.forEach(function (dossier, index) {
-					if (dossier.id === dossierId) {
-						dossiers.splice(index, 1)
-					}
-				})
-				db.hset('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers), function (err) {
-					if (err) { res.send('erreur_suppression_dossier'); return false }
-					res.send('dossier_supprime')
-				})
+			let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.send('erreur_suppression_dossier'); return false }
+			const dossiers = JSON.parse(donnees.dossiers)
+			dossiers.forEach(function (dossier, index) {
+				if (dossier.id === dossierId) {
+					dossiers.splice(index, 1)
+				}
 			})
+			await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
+			res.send('dossier_supprime')
 		} else {
 			res.send('non_connecte')
 		}
@@ -2871,21 +2921,19 @@ async function demarrerServeur () {
 							sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
 								fit: sharp.fit.inside,
 								withoutEnlargement: true
-							}).toBuffer((err, buffer) => {
+							}).toBuffer(async function (err, buffer) {
 								if (err) { res.send('erreur_televersement'); return false }
-								fs.writeFile(chemin, buffer, function () {
-									res.json({ fichier: fichier.filename, mimetype: mimetype })
-								})
+								await fs.writeFile(chemin, buffer)
+								res.json({ fichier: fichier.filename, mimetype: mimetype })
 							})
 						} else if (extension.toLowerCase() !== '.gif') {
 							sharp(chemin).withMetadata().resize(1200, 1200, {
 								fit: sharp.fit.inside,
 								withoutEnlargement: true
-							}).toBuffer((err, buffer) => {
+							}).toBuffer(async function (err, buffer) {
 								if (err) { res.send('erreur_televersement'); return false }
-								fs.writeFile(chemin, buffer, function () {
-									res.json({ fichier: fichier.filename, mimetype: mimetype })
-								})
+								await fs.writeFile(chemin, buffer)
+								res.json({ fichier: fichier.filename, mimetype: mimetype })
 							})
 						} else {
 							res.json({ fichier: fichier.filename, mimetype: mimetype })
@@ -2987,21 +3035,19 @@ async function demarrerServeur () {
 					sharp(chemin).withMetadata().rotate().jpeg().resize(400, 400, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer((err, buffer) => {
+					}).toBuffer(async function (err, buffer) {
 						if (err) { res.send('erreur_televersement'); return false }
-						fs.writeFile(chemin, buffer, function () {
-							res.send('/temp/' + fichier.filename)
-						})
+						await fs.writeFile(chemin, buffer)
+						res.send('/temp/' + fichier.filename)
 					})
 				} else {
 					sharp(chemin).withMetadata().resize(400, 400, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer((err, buffer) => {
+					}).toBuffer(async function (err, buffer) {
 						if (err) { res.send('erreur_televersement'); return false }
-						fs.writeFile(chemin, buffer, function () {
-							res.send('/temp/' + fichier.filename)
-						})
+						await fs.writeFile(chemin, buffer)
+						res.send('/temp/' + fichier.filename)
 					})
 				}
 			})
@@ -3023,21 +3069,19 @@ async function demarrerServeur () {
 					sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer((err, buffer) => {
+					}).toBuffer(async function (err, buffer) {
 						if (err) { res.send('erreur_televersement'); return false }
-						fs.writeFile(chemin, buffer, function () {
-							res.send('/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier.filename)
-						})
+						await fs.writeFile(chemin, buffer)
+						res.send('/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier.filename)
 					})
 				} else {
 					sharp(chemin).withMetadata().resize(1200, 1200, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer((err, buffer) => {
+					}).toBuffer(async function (err, buffer) {
 						if (err) { res.send('erreur_televersement'); return false }
-						fs.writeFile(chemin, buffer, function () {
-							res.send('/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier.filename)
-						})
+						await fs.writeFile(chemin, buffer)
+						res.send('/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier.filename)
 					})
 				}
 			})
@@ -3121,113 +3165,55 @@ async function demarrerServeur () {
 				if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 					langue = req.session.langue
 				}
-				db.exists('mur', function (err, resultat) {
-					if (err) { res.send('erreur'); return false }
-					if (resultat === 1) {
-						db.get('mur', function (err, resultat) {
-							if (err) { res.send('erreur'); return false }
-							const id = parseInt(resultat) + 1
-							creerMurSansCompte(req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, 'api')
-						})
-					} else {
-						creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, 'api')
-					}
-				})
+				const resultat = await db.EXISTS('mur')
+				if (resultat === null) { res.send('erreur'); return false }
+				if (resultat === 1) {
+					const reponse = await db.GET('mur')
+					if (reponse === null) { res.send('erreur'); return false }
+					const id = parseInt(reponse) + 1
+					creerMurSansCompte(req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, 'api')
+				} else {
+					creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, 'api')
+				}
 			} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'modifier-titre') {
 				const mur = req.body.id
 				const titre = req.body.titre
-				db.hset('murs:' + mur, 'titre', titre, function (err) {
-					if (err) { res.send('erreur'); return false }
-					const slug = definirSlug(titre)
-					res.send(slug)
-				})
+				await db.HSET('murs:' + mur, 'titre', titre)
+				const slug = definirSlug(titre)
+				res.send(slug)
 			} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'ajouter') {
 				const identifiant = req.body.identifiant
 				const mur = req.body.id
 				const token = req.body.tokenContenu
 				const motdepasse = req.body.motdepasse
 				const nom = req.body.nomUtilisateur
-				db.exists('murs:' + mur, async function (err, resultat) {
-					if (err) { res.send('erreur'); return false }
-					if (resultat === 1) {
-						db.hgetall('murs:' + mur, async function (err, donneesMur) {
-							if (err) { res.send('erreur'); return false }
-							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
-								const date = dayjs().format()
-								let langue = 'fr'
-								if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
-									langue = req.session.langue
-								}
-								const multi = db.multi()
-								multi.hmset('utilisateurs:' + identifiant, 'id', identifiant, 'date', date, 'nom', nom, 'langue', langue)
-								multi.hset('murs:' + mur, 'identifiant', identifiant)
-								multi.exec(function (err) {
-									if (err) { res.send('erreur'); return false }
-									res.json({ titre: donneesMur.titre, identifiant: identifiant })
-								})
-							} else if (!donneesMur.hasOwnProperty('motdepasse') && token === donneesMur.token) {
-								db.exists('utilisateurs:' + donneesMur.identifiant, function (err, resultat) {
-									if (err) { res.send('erreur'); return false }
-									if (resultat === 1) {
-										db.hgetall('utilisateurs:' + donneesMur.identifiant, async function (err, utilisateur) {
-											if (err) { res.send('erreur'); return false }
-											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-												res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
-											} else {
-												res.send('non_autorise')
-											}
-										})
-									} else {
-										res.send('erreur')
-									}
-								})
-							} else {
-								res.send('non_autorise')
-							}
-						})
-					} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-						const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-						if (typeof donneesMur === 'object' && donneesMur !== null) {
-							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
-								const date = dayjs().format()
-								let langue = 'fr'
-								if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
-									langue = req.session.langue
-								}
-								db.hmset('utilisateurs:' + identifiant, 'id', identifiant, 'date', date, 'nom', nom, 'langue', langue, async function (err) {
-									if (err) { res.send('erreur'); return false }
-									const chemin = path.join(__dirname, '..', '/static/murs')
-									const donneesMurJSON = await fs.readJson(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-									if (typeof donneesMurJSON === 'object' && donneesMurJSON !== null && donneesMurJSON.hasOwnProperty('mur') && donneesMurJSON.hasOwnProperty('blocs') && donneesMurJSON.hasOwnProperty('activite')) {
-										donneesMurJSON.mur.identifiant = identifiant
-										fs.writeFile(path.normalize(chemin + '/' + mur + '.json'), JSON.stringify(donneesMurJSON, '', 4), 'utf8', function (err) {
-											if (err) { res.send('erreur'); return false }
-											donneesMur.identifiant = identifiant
-											fs.writeFile(path.normalize(chemin + '/mur-' + mur + '.json'), JSON.stringify(donneesMur, '', 4), 'utf8', function (err) {
-												if (err) { res.send('erreur'); return false }
-												res.send(donneesMur.titre)
-											})
-										})
-									} else {
-										res.send('erreur')
-									}
-								})
-							} else if (!donneesMur.hasOwnProperty('motdepasse') && token === donneesMur.token) {
-								db.exists('utilisateurs:' + donneesMur.identifiant, function (err, resultat) {
-									if (err) { res.send('erreur'); return false }
-									if (resultat === 1) {
-										db.hgetall('utilisateurs:' + donneesMur.identifiant, async function (err, utilisateur) {
-											if (err) { res.send('erreur'); return false }
-											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-												res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
-											} else {
-												res.send('non_autorise')
-											}
-										})
-									} else {
-										res.send('erreur')
-									}
-								})
+				const resultat = await db.EXISTS('murs:' + mur)
+				if (resultat === null) { res.send('erreur'); return false }
+				if (resultat === 1) {
+					let donneesMur = await db.HGETALL('murs:' + mur)
+					donneesMur = Object.assign({}, donneesMur)
+					if (donneesMur === null) { res.send('erreur'); return false }
+					if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+						const date = dayjs().format()
+						let langue = 'fr'
+						if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
+							langue = req.session.langue
+						}
+						await db
+						.multi()
+						.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'date', date, 'nom', nom, 'langue', langue])
+						.HSET('murs:' + mur, 'identifiant', identifiant)
+						.exec()
+						res.json({ titre: donneesMur.titre, identifiant: identifiant })
+					} else if (!donneesMur.hasOwnProperty('motdepasse') && token === donneesMur.token) {
+						const reponse = await db.EXISTS('utilisateurs:' + donneesMur.identifiant)
+						if (reponse === null) { res.send('erreur'); return false }
+						if (reponse === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + donneesMur.identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) { res.send('erreur'); return false }
+							if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+								res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
 							} else {
 								res.send('non_autorise')
 							}
@@ -3235,162 +3221,137 @@ async function demarrerServeur () {
 							res.send('erreur')
 						}
 					} else {
-						res.send('contenu_inexistant')
+						res.send('non_autorise')
 					}
-				})
+				} else if (resultat !== 1 && pgdb === true) {
+					const client = await pool.connect()
+					const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+					if (Object.keys(donneesQ.rows[0]).length === 1) {
+						const donneesMur = JSON.parse(donneesQ.rows[0].donnees)
+						if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
+							const date = dayjs().format()
+							let langue = 'fr'
+							if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
+								langue = req.session.langue
+							}
+							await db.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'date', date, 'nom', nom, 'langue', langue])
+							donneesMur.identifiant = identifiant
+							await client.query('UPDATE murs SET donnees = $1 WHERE mur = $2', [JSON.stringify(donneesMur), parseInt(mur)])
+							client.release()
+							res.send(donneesMur.titre)
+						} else if (!donneesMur.hasOwnProperty('motdepasse') && token === donneesMur.token) {
+							const reponse = await db.EXISTS('utilisateurs:' + donneesMur.identifiant)
+							if (reponse === null) { res.send('erreur'); return false }
+							if (reponse === 1) {
+								let utilisateur = await db.HGETALL('utilisateurs:' + donneesMur.identifiant)
+								utilisateur = Object.assign({}, utilisateur)
+								if (utilisateur === null) { res.send('erreur'); return false }
+								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+									res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
+								} else {
+									client.release()
+									res.send('non_autorise')
+								}
+							} else {
+								client.release()
+								res.send('erreur')
+							}
+						} else {
+							client.release()
+							res.send('non_autorise')
+						}
+					} else {
+						client.release()
+						res.send('erreur')
+					}
+				} else {
+					res.send('contenu_inexistant')
+				}
 			} else if (reponse.data === 'token_autorise' && req.body.action && req.body.action === 'supprimer') {
 				const identifiant = req.body.identifiant
 				const mur = req.body.id
 				const motdepasse = req.body.motdepasse
-				db.exists('murs:' + mur, async function (err, resultat) {
-					if (err) { res.send('erreur'); return false }
-					if (resultat === 1) {
-						db.hgetall('murs:' + mur, async function (err, donneesMur) {
-							if (err) { res.send('erreur'); return false }
-							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
-								db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-									if (err) { res.send('erreur'); return false }
-									const multi = db.multi()
-									for (let i = 0; i < blocs.length; i++) {
-										multi.del('commentaires:' + blocs[i])
-										multi.del('evaluations:' + blocs[i])
-										multi.del('contenu-blocs:' + mur + ':' + blocs[i])
-									}
-									multi.del('blocs:' + mur)
-									multi.del('murs:' + mur)
-									multi.del('activite:' + mur)
-									multi.del('dates-murs:' + mur)
-									multi.srem('murs-crees:' + identifiant, mur)
-									multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-										if (err) { res.send('erreur'); return false }
-										for (let j = 0; j < utilisateurs.length; j++) {
-											db.srem('murs-rejoints:' + utilisateurs[j], mur)
-											db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-											db.srem('murs-admins:' + utilisateurs[j], mur)
-											db.srem('murs-favoris:' + utilisateurs[j], mur)
-										}
-									})
-									multi.del('utilisateurs-murs:' + mur)
-									multi.exec(async function () {
-										const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
-										await fs.remove(chemin)
-										res.send('contenu_supprime')
-									})
-								})
-							} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
-								db.exists('utilisateurs:' + identifiant, function (err, resultat) {
-									if (err) { res.send('erreur'); return false }
-									if (resultat === 1) {
-										db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
-											if (err) { res.send('erreur'); return false }
-											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-												db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-													if (err) { res.send('erreur'); return false }
-													const multi = db.multi()
-													for (let i = 0; i < blocs.length; i++) {
-														multi.del('commentaires:' + blocs[i])
-														multi.del('evaluations:' + blocs[i])
-														multi.del('contenu-blocs:' + mur + ':' + blocs[i])
-													}
-													multi.del('blocs:' + mur)
-													multi.del('murs:' + mur)
-													multi.del('activite:' + mur)
-													multi.del('dates-murs:' + mur)
-													multi.srem('murs-crees:' + identifiant, mur)
-													multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-														if (err) { res.send('erreur'); return false }
-														for (let j = 0; j < utilisateurs.length; j++) {
-															db.srem('murs-rejoints:' + utilisateurs[j], mur)
-															db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-															db.srem('murs-admins:' + utilisateurs[j], mur)
-															db.srem('murs-favoris:' + utilisateurs[j], mur)
-														}
-													})
-													multi.del('utilisateurs-murs:' + mur)
-													multi.exec(async function () {
-														const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
-														await fs.remove(chemin)
-														res.send('contenu_supprime')
-													})
-												})
-											} else {
-												res.send('non_autorise')
-											}
-										})
-									} else {
-										res.send('erreur')
-									}
-								})			
-							} else {
-								res.send('non_autorise')
-							}
-						})
-					} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-						const donneesMur = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-						if (typeof donneesMur === 'object' && donneesMur !== null) {
-							const multi = db.multi()
-							if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
-								multi.srem('murs-crees:' + identifiant, mur)
-								multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-									if (err) { res.send('erreur'); return false }
-									for (let j = 0; j < utilisateurs.length; j++) {
-										db.srem('murs-rejoints:' + utilisateurs[j], mur)
-										db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-										db.srem('murs-admins:' + utilisateurs[j], mur)
-										db.srem('murs-favoris:' + utilisateurs[j], mur)
-									}
-								})
-								multi.del('utilisateurs-murs:' + mur)
-								multi.exec(async function () {
-									await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
-									await fs.remove(path.join(__dirname, '..', '/static/murs/' + mur + '.json'))
-									await fs.remove(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-									res.send('contenu_supprime')
-								})
-							} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
-								db.exists('utilisateurs:' + identifiant, function (err, resultat) {
-									if (err) { res.send('erreur'); return false }
-									if (resultat === 1) {
-										db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
-											if (err) { res.send('erreur'); return false }
-											if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-												db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-													if (err) { res.send('erreur'); return false }
-													const multi = db.multi()
-													for (let i = 0; i < blocs.length; i++) {
-														multi.del('commentaires:' + blocs[i])
-														multi.del('evaluations:' + blocs[i])
-														multi.del('contenu-blocs:' + mur + ':' + blocs[i])
-													}
-													multi.del('blocs:' + mur)
-													multi.del('murs:' + mur)
-													multi.del('activite:' + mur)
-													multi.del('dates-murs:' + mur)
-													multi.srem('murs-crees:' + identifiant, mur)
-													multi.smembers('utilisateurs-murs:' + mur, function (err, utilisateurs) {
-														if (err) { res.send('erreur'); return false }
-														for (let j = 0; j < utilisateurs.length; j++) {
-															db.srem('murs-rejoints:' + utilisateurs[j], mur)
-															db.srem('murs-utilisateurs:' + utilisateurs[j], mur)
-															db.srem('murs-admins:' + utilisateurs[j], mur)
-															db.srem('murs-favoris:' + utilisateurs[j], mur)
-														}
-													})
-													multi.del('utilisateurs-murs:' + mur)
-													multi.exec(async function () {
-														const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
-														await fs.remove(chemin)
-														res.send('contenu_supprime')
-													})
-												})
-											} else {
-												res.send('non_autorise')
-											}
-										})
-									} else {
-										res.send('erreur')
-									}
-								})			
+				const resultat = await db.EXISTS('murs:' + mur)
+				if (resultat === null) { res.send('erreur'); return false }
+				if (resultat === 1) {
+					let donneesMur = await db.HGETALL('murs:' + mur)
+					donneesMur = Object.assign({}, donneesMur)
+					if (donneesMur === null) { res.send('erreur'); return false }
+					if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
+						const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+						if (blocs === null) { res.send('erreur'); return false }
+						for (let i = 0; i < blocs.length; i++) {
+							await db
+							.multi()
+							.DEL('commentaires:' + blocs[i])
+							.DEL('evaluations:' + blocs[i])
+							.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+							.exec()
+						}
+						await db
+						.multi()
+						.DEL('blocs:' + mur)
+						.DEL('murs:' + mur)
+						.DEL('activite:' + mur)
+						.DEL('dates-murs:' + mur)
+						.SREM('murs-crees:' + identifiant, mur.toString())
+						.exec()
+						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+						if (utilisateurs === null) { res.send('erreur'); return false }
+						for (let j = 0; j < utilisateurs.length; j++) {
+							await db
+							.multi()
+							.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+							.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+							.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+							.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+							.exec()
+						}
+						await db.DEL('utilisateurs-murs:' + mur)
+						const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+						await fs.remove(chemin)
+						res.send('contenu_supprime')
+					} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
+						const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+						if (resultat === null) { res.send('erreur'); return false }
+						if (resultat === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) { res.send('erreur'); return false }
+							if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+								const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+								if (blocs === null) { res.send('erreur'); return false }
+								for (let i = 0; i < blocs.length; i++) {
+									await db
+									.multi()
+									.DEL('commentaires:' + blocs[i])
+									.DEL('evaluations:' + blocs[i])
+									.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+									.exec()
+								}
+								await db
+								.multi()
+								.DEL('blocs:' + mur)
+								.DEL('murs:' + mur)
+								.DEL('activite:' + mur)
+								.DEL('dates-murs:' + mur)
+								.SREM('murs-crees:' + identifiant, mur.toString())
+								.exec()
+								const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+								if (utilisateurs === null) { res.send('erreur'); return false }
+								for (let j = 0; j < utilisateurs.length; j++) {
+									await db
+									.multi()
+									.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+									.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+									.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+									.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+									.exec()
+								}
+								await db.DEL('utilisateurs-murs:' + mur)
+								const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+								await fs.remove(chemin)
+								res.send('contenu_supprime')
 							} else {
 								res.send('non_autorise')
 							}
@@ -3398,9 +3359,91 @@ async function demarrerServeur () {
 							res.send('erreur')
 						}
 					} else {
-						res.send('contenu_supprime')
+						res.send('non_autorise')
 					}
-				})
+				} else if (resultat !== 1 && pgdb === true) {
+					const client = await pool.connect()
+					const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+					if (Object.keys(donneesQ.rows[0]).length === 1) {
+						const donneesMur = JSON.parse(donneesQ.rows[0].donnees)
+						if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
+							await db.SREM('murs-crees:' + identifiant, mur.toString())
+							const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+							if (utilisateurs === null) { res.send('erreur'); return false }
+							for (let j = 0; j < utilisateurs.length; j++) {
+								await db
+								.multi()
+								.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+								.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+								.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+								.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+								.exec()
+							}
+							await db.DEL('utilisateurs-murs:' + mur)
+							await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
+							await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(mur)])
+							client.release()
+							res.send('contenu_supprime')
+						} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
+							const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+							if (resultat === null) { res.send('erreur'); return false }
+							if (resultat === 1) {
+								let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+								utilisateur = Object.assign({}, utilisateur)
+								if (utilisateur === null) { res.send('erreur'); return false }
+								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+									const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+									if (blocs === null) { res.send('erreur'); return false }
+									for (let i = 0; i < blocs.length; i++) {
+										await db
+										.multi()
+										.DEL('commentaires:' + blocs[i])
+										.DEL('evaluations:' + blocs[i])
+										.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+										.exec()
+									}
+									await db
+									.multi()
+									.DEL('blocs:' + mur)
+									.DEL('murs:' + mur)
+									.DEL('activite:' + mur)
+									.DEL('dates-murs:' + mur)
+									.SREM('murs-crees:' + identifiant, mur.toString())
+									.exec()
+									const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
+									if (utilisateurs === null) { res.send('erreur'); return false }
+									for (let j = 0; j < utilisateurs.length; j++) {
+										await db
+										.multi()
+										.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
+										.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
+										.SREM('murs-admins:' + utilisateurs[j], mur.toString())
+										.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
+										.exec()
+									}
+									await db.DEL('utilisateurs-murs:' + mur)
+									const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+									await fs.remove(chemin)
+									res.send('contenu_supprime')
+								} else {
+									client.release()
+									res.send('non_autorise')
+								}
+							} else {
+								client.release()
+								res.send('erreur')
+							}
+						} else {
+							client.release()
+							res.send('non_autorise')
+						}
+					} else {
+						client.release()
+						res.send('erreur')
+					}
+				} else {
+					res.send('contenu_supprime')
+				}
 			} else {
 				res.send('erreur')
 			}
@@ -3420,7 +3463,17 @@ async function demarrerServeur () {
 	const port = process.env.PORT || 3000
 	httpServer.listen(port)
 
-	const io = new Server(httpServer, { cookie: false })
+	const io = new Server(httpServer, {
+		// wsEngine: eiows.Server,
+		pingInterval: 95000,
+    	pingTimeout: 100000,
+    	maxHttpBufferSize: 1e8,
+		cookie: false,
+		perMessageDeflate: false
+	})
+	if (cluster === true) {
+		io.adapter(createAdapter())
+	}
 	const wrap = middleware => (socket, next) => middleware(socket.request, {}, next)
 	io.use(wrap(sessionMiddleware))
 
@@ -3430,13 +3483,13 @@ async function demarrerServeur () {
 			const identifiant = donnees.identifiant
 			const nom = donnees.nom
 			const room = 'mur-' + mur
-			socket.identifiant = identifiant
-			socket.nom = nom
+			socket.data.identifiant = identifiant
+			socket.data.nom = nom
 			socket.join(room)
 			const clients = await io.in(room).fetchSockets()
 			const utilisateurs = []
 			for (let i = 0; i < clients.length; i++) {
-				utilisateurs.push({ identifiant: clients[i].identifiant, nom: clients[i].nom })
+				utilisateurs.push({ identifiant: clients[i].data.identifiant, nom: clients[i].data.nom })
 			}
 			const utilisateursConnectes = utilisateurs.filter((v, i, a) => a.findIndex(t => (t.identifiant === v.identifiant)) === i)
 			io.in(room).emit('connexion', utilisateursConnectes)
@@ -3467,7 +3520,7 @@ async function demarrerServeur () {
 			}
 		})
 
-		socket.on('verifieracces', function (donnees) {
+		socket.on('verifieracces', async function (donnees) {
 			const mur = donnees.mur
 			const identifiant = donnees.identifiant
 			let code = ''
@@ -3484,1639 +3537,1585 @@ async function demarrerServeur () {
 				code = donnees.code
 			}
 			if (socket.request.session.identifiant === identifiant && code !== '') {
-				db.hgetall('murs:' + mur, async function (err, resultat) {
-					if (err || !resultat || resultat === null || !resultat.hasOwnProperty('code')) { socket.emit('erreur'); return false }
-					if (code === resultat.code) {
-						const donneesMur = await recupererDonneesMurProtege(resultat, mur, identifiant)
-						socket.emit('verifieracces', { acces: true, mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
-					} else {
-						socket.emit('verifieracces', { acces: false })
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('code')) { socket.emit('erreur'); return false }
+				if (code === donnees.code) {
+					const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
+					socket.emit('verifieracces', { acces: true, mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
+				} else {
+					socket.emit('verifieracces', { acces: false })
+				}
 			} else {
 				socket.emit('verifieracces', { acces: false })
 			}
 		})
 
-		socket.on('ajouterbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom) {
+		socket.on('ajouterbloc', async function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant') || !donnees.hasOwnProperty('bloc') || !donnees.hasOwnProperty('verrouillage')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant') || !donnees.hasOwnProperty('bloc') || !donnees.hasOwnProperty('verrouillage')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				let admin = false
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					admin = true
+				}
+				if (donnees.id === mur && donnees.token === token && (donnees.contributions !== 'fermees' || admin)) {
+					const id = parseInt(donnees.bloc) + 1
+					const date = dayjs().format()
+					const activiteId = parseInt(donnees.activite) + 1
+					let visibilite = 'visible'
+					if (admin && protegee === true) {
+						visibilite = 'protegee'
+					} else if (admin && visible === false) {
+						visibilite = 'privee'
+					} else if (!admin && donnees.contributions === 'moderees') {
+						visibilite = 'masquee'
 					}
-					let admin = false
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						admin = true
+					let edition = 'oui'
+					if (donnees.verrouillage === 'active') {
+						edition = 'non'
 					}
-					if (donnees.id === mur && donnees.token === token && (donnees.contributions !== 'fermees' || admin)) {
-						const id = parseInt(donnees.bloc) + 1
+					if (vignetteActivee === true) {
+						vignetteActivee = 'oui'
+					} else {
+						vignetteActivee = 'non'
+					}
+					if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+						vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
+					}
+					await db
+					.multi()
+					.HSET('contenu-blocs:' + mur + ':' + bloc, ['id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', edition, 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'epinglee', 'non', 'couleur', couleur])
+					.ZADD('blocs:' + mur, [{ score: id, value: bloc }])
+					.HSET('murs:' + mur, 'bloc', id)
+					.HSET('dates-murs:' + mur, 'date', date)
+					.exec()
+					if (visibilite === 'visible' || visibilite === 'protegee') {
+						// Enregistrer entrée du registre d'activité
+						await db
+						.multi()
+						.HINCRBY('murs:' + mur, 'activite', 1)
+						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }) }])
+						.exec()
+					}
+					if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+						await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+						await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+					}
+					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+						await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+						await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+					}
+					for (let i = 0; i < medias.length; i++) {
+						if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+							await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+							await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+						}
+					}
+					if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+						await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
+						await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+					}
+					io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('modifierbloc', async function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token')) { socket.emit('erreur'); return false }
+				if (donnees.id === mur && donnees.token === token) {
+					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
+					if (resultat === null) { socket.emit('erreur'); return false }
+					if (resultat === 1) {
+						let objet = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+						objet = Object.assign({}, objet)
+						if (objet === null) { socket.emit('erreur'); return false }
+						const proprietaire = donnees.identifiant
+						let admins = []
+						if (donnees.hasOwnProperty('admins')) {
+							admins = JSON.parse(donnees.admins)
+						}
+						let admin = false
+						if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+							admin = true
+						}
+						if (objet.identifiant === identifiant || admin || donnees.contributions === 'modifiables')  {
+							let visibilite = 'visible'
+							if (objet.hasOwnProperty('visibilite')) {
+								visibilite = objet.visibilite
+							}
+							/*if (visibilite !== 'masquee' && protegee === false && visible === true) {
+								visibilite = 'visible'
+							}*/
+							if (protegee === true) {
+								visibilite = 'protegee'
+							} else if (visible === false) {
+								visibilite = 'privee'
+							}
+							if (vignetteActivee === true) {
+								vignetteActivee = 'oui'
+							} else {
+								vignetteActivee = 'non'
+							}
+							const edition = objet.edition
+							const date = dayjs().format()
+							if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+								vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
+							}
+							if (visibilite === 'visible' || visibilite === 'protegee') {
+								// Enregistrer entrée du registre d'activité
+								const activiteId = parseInt(donnees.activite) + 1
+								await db
+								.multi()
+								.HSET('contenu-blocs:' + mur + ':' + bloc, ['typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur])
+								.HSET('dates-murs:' + mur, 'date', date)
+								.HINCRBY('murs:' + mur, 'activite', 1)
+								.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }) }])
+								.exec()
+								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+								}
+								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+									supprimerFichier(mur, objet.media)
+								}
+								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+								}
+								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
+									supprimerFichier(mur, objet.mediaExtra)
+								}
+								if (objet.hasOwnProperty('medias')) {
+									const mediasActuels = JSON.parse(objet.medias)
+									for (let i = 0; i < medias.length; i++) {
+										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+										}
+									}
+									mediasActuels.forEach(function (mediaActuel) {
+										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
+											supprimerFichier(mur, mediaActuel.fichier)
+										}
+									})
+								}
+								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+								}
+								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+									supprimerFichier(mur, path.basename(objet.vignette))
+								}
+								io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
+								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+								socket.request.session.save()
+							} else if (visibilite === 'privee' || visibilite === 'masquee') {
+								await db
+								.multi()
+								.HSET('contenu-blocs:' + mur + ':' + bloc, ['typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur])
+								.HSET('dates-murs:' + mur, 'date', date)
+								.exec()
+								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+								}
+								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+									supprimerFichier(mur, objet.media)
+								}
+								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+								}
+								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
+									supprimerFichier(mur, objet.mediaExtra)
+								}
+								if (objet.hasOwnProperty('medias')) {
+									const mediasActuels = JSON.parse(objet.medias)
+									for (let i = 0; i < medias.length; i++) {
+										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+										}
+									}
+									mediasActuels.forEach(function (mediaActuel) {
+										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
+											supprimerFichier(mur, mediaActuel.fichier)
+										}
+									})
+								}
+								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+								}
+								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+									supprimerFichier(mur, path.basename(objet.vignette))
+								}
+								io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
+								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+								socket.request.session.save()
+							} else {
+								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+								}
+								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+									supprimerFichier(mur, objet.media)
+								}
+								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+								}
+								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
+									supprimerFichier(mur, objet.mediaExtra)
+								}
+								if (objet.hasOwnProperty('medias')) {
+									const mediasActuels = JSON.parse(objet.medias)
+									for (let i = 0; i < medias.length; i++) {
+										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+										}
+									}
+									mediasActuels.forEach(function (mediaActuel) {
+										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
+											supprimerFichier(mur, mediaActuel.fichier)
+										}
+									})
+								}
+								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+								}
+								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+									supprimerFichier(mur, path.basename(objet.vignette))
+								}
+								io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
+								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+								socket.request.session.save()
+							}
+						} else {
+							socket.emit('nonautorise')
+						}
+					}
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('copierbloc', async function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visibilite, motdepasse, identifiant, nom, murOrigine) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant') || !donnees.hasOwnProperty('bloc')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					const id = parseInt(donnees.bloc) + 1
+					const date = dayjs().format()
+					const activiteId = parseInt(donnees.activite) + 1
+					if (vignetteActivee === true) {
+						vignetteActivee = 'oui'
+					} else {
+						vignetteActivee = 'non'
+					}
+					let vignetteOrigine = ''
+					if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+						vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
+						vignetteOrigine = '/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + path.basename(vignette)
+					}
+					await db
+					.multi()
+					.HSET('contenu-blocs:' + mur + ':' + bloc, ['id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', 'oui', 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'epinglee', 'non', 'couleur', couleur])
+					.ZADD('blocs:' + mur, [{ score: id, value: bloc }])
+					.HSET('murs:' + mur, 'bloc', id)
+					.HSET('dates-murs:' + mur, 'date', date)
+					.exec()
+					if (visibilite === 'visible' || visibilite === 'protegee') {
+						// Enregistrer entrée du registre d'activité
+						await db
+						.multi()
+						.HINCRBY('murs:' + mur, 'activite', 1)
+						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }) }])
+						.exec()
+					}
+					if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + media))) {
+						await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+					}
+					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + mediaExtra))) {
+						await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+					}
+					for (let i = 0; i < medias.length; i++) {
+						if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + medias[i].fichier))) {
+							await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+						}
+					}
+					if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + vignetteOrigine))) {
+						await fs.copy(path.join(__dirname, '..', '/static' + vignetteOrigine), path.join(__dirname, '..', '/static' + vignette))
+					}
+					io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, epinglee: 'non', activiteId: activiteId })
+					socket.emit('copierbloc')
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('verrouillerbloc', async function (mur, token, bloc, colonne, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
+					if (resultat === null) { socket.emit('erreur'); return false }
+					if (resultat === 1) {
+						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'edition', 'non')
+						io.in('mur-' + mur).emit('verrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
+						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+						socket.request.session.save()
+					}
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('deverrouillerbloc', async function (mur, token, bloc, colonne, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
+					if (resultat === null) { socket.emit('erreur'); return false }
+					if (resultat === 1) {
+						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'edition', 'oui')
+						io.in('mur-' + mur).emit('deverrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
+						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+						socket.request.session.save()
+					}
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('epinglerbloc', async function (mur, token, bloc, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
+					if (resultat === null) { socket.emit('erreur'); return false }
+					if (resultat === 1) {
+						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'oui')
+						io.in('mur-' + mur).emit('epinglerbloc', { bloc: bloc, identifiant: identifiant })
+						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+						socket.request.session.save()
+					}
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('desepinglerbloc', async function (mur, token, bloc, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
+					if (resultat === null) { socket.emit('erreur'); return false }
+					if (resultat === 1) {
+						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'non')
+						io.in('mur-' + mur).emit('desepinglerbloc', { bloc: bloc, identifiant: identifiant })
+						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+						socket.request.session.save()
+					}
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('autoriserbloc', async function (mur, token, item, indexBloc, indexBlocColonne, moderation, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + item.bloc)
+					if (resultat === null) { socket.emit('erreur'); return false }
+					if (resultat === 1) {
 						const date = dayjs().format()
 						const activiteId = parseInt(donnees.activite) + 1
-						const multi = db.multi()
-						let visibilite = 'visible'
-						if (admin && protegee === true) {
-							visibilite = 'protegee'
-						} else if (admin && visible === false) {
-							visibilite = 'privee'
-						} else if (!admin && donnees.contributions === 'moderees') {
-							visibilite = 'masquee'
+						if (item.hasOwnProperty('modifie')) {
+							await db.HDEL('contenu-blocs:' + mur + ':' + item.bloc, 'modifie')
 						}
-						let edition = 'oui'
-						if (donnees.verrouillage === 'active') {
-							edition = 'non'
-						}
-						if (vignetteActivee === true) {
-							vignetteActivee = 'oui'
+						await db
+						.multi()
+						.HSET('contenu-blocs:' + mur + ':' + item.bloc, ['visibilite', 'visible', 'date', date])
+						.HSET('dates-murs:' + mur, 'date', date)
+						// Enregistrer entrée du registre d'activité
+						.HINCRBY('murs:' + mur, 'activite', 1)
+						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: item.bloc, identifiant: item.identifiant, titre: item.titre, date: date, type: 'bloc-ajoute' }) }])
+						.exec()
+						io.in('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: item.nom, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', motdepasse: item.motdepasse, epinglee: item.epinglee, activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
+						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+						socket.request.session.save()
+					}
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('deplacerbloc', async function (items, mur, affichage, ordre, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (donnees.id === mur && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
+					if (ordre === 'decroissant') {
+						items.reverse()
+					}
+					const donneesBlocs = []
+					for (let i = 0; i < items.length; i++) {
+						const donneeBloc = new Promise(async function (resolve) {
+							const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + items[i].bloc)
+							if (resultat === null) { resolve('erreur'); return false }
+							if (resultat === 1) {
+								await db
+								.multi()
+								.ZREM('blocs:' + mur, items[i].bloc)
+								.ZADD('blocs:' + mur, [{ score: i + 1, value: items[i].bloc }])
+								.exec()
+								if (affichage === 'colonnes') {
+									await db.HSET('contenu-blocs:' + mur + ':' + items[i].bloc, 'colonne', items[i].colonne)
+								}
+								resolve(i)
+							} else {
+								resolve('erreur')
+							}
+						})
+						donneesBlocs.push(donneeBloc)
+					}
+					Promise.all(donneesBlocs).then(function (blocs) {
+						let erreurs = 0
+						blocs.forEach(function (bloc) {
+							if (bloc === 'erreur') {
+								erreurs++
+							}
+						})
+						if (erreurs === 0) {
+							if (ordre === 'decroissant') {
+								items.reverse()
+							}
+							io.in('mur-' + mur).emit('deplacerbloc', { blocs: items, identifiant: identifiant })
 						} else {
-							vignetteActivee = 'non'
+							socket.emit('erreur')
 						}
-						if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
-							vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
+					})
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('supprimerbloc', async function (bloc, mur, token, titre, colonne, identifiant, nom) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				if (donnees.id === mur && donnees.token === token) {
+					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
+					if (resultat === null) { socket.emit('erreur'); return false }
+					if (resultat === 1) {
+						let objet = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+						objet = Object.assign({}, objet)
+						if (objet === null) { socket.emit('erreur'); return false }
+						const proprietaire = donnees.identifiant
+						let admins = []
+						if (donnees.hasOwnProperty('admins')) {
+							admins = JSON.parse(donnees.admins)
 						}
-						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', edition, 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'epinglee', 'non', 'couleur', couleur)
-						multi.zadd('blocs:' + mur, id, bloc)
-						multi.hset('murs:' + mur, 'bloc', id)
-						multi.hset('dates-murs:' + mur, 'date', date)
-						if (visibilite === 'visible' || visibilite === 'protegee') {
-							// Enregistrer entrée du registre d'activité
-							multi.hincrby('murs:' + mur, 'activite', 1)
-							multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }))
-						}
-						multi.exec(async function () {
-							if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-								await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
-								await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+						if (objet.identifiant === identifiant || admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+							if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
+								supprimerFichier(mur, objet.media)
 							}
-							if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-								await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
-								await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+							if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
+								supprimerFichier(mur, objet.mediaExtra)
 							}
-							for (let i = 0; i < medias.length; i++) {
-								if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+							if (objet.hasOwnProperty('medias')) {
+								const medias = JSON.parse(objet.medias)
+								for (let i = 0; i < medias.length; i++) {
+									if (medias[i].hasOwnProperty('fichier')) {
+										supprimerFichier(mur, medias[i].fichier)
+									}
 								}
 							}
-							if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-								await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
-								await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+							if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+								supprimerFichier(mur, path.basename(objet.vignette))
 							}
-							io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('modifierbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visible, protegee, motdepasse, identifiant, nom) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token')) { socket.emit('erreur'); return false }
-					if (donnees.id === mur && donnees.token === token) {
-						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-							if (err) { socket.emit('erreur'); return false }
-							if (resultat === 1) {
-								db.hgetall('contenu-blocs:' + mur + ':' + bloc, async function (err, objet) {
-									if (err) { socket.emit('erreur'); return false }
-									const proprietaire = donnees.identifiant
-									let admins = []
-									if (donnees.hasOwnProperty('admins')) {
-										admins = JSON.parse(donnees.admins)
-									}
-									let admin = false
-									if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-										admin = true
-									}
-									if (objet.identifiant === identifiant || admin || donnees.contributions === 'modifiables')  {
-										let visibilite = 'visible'
-										if (objet.hasOwnProperty('visibilite')) {
-											visibilite = objet.visibilite
-										}
-										if (protegee === false && visible === true) {
-											visibilite = 'visible'
-										} else if (protegee === true) {
-											visibilite = 'protegee'
-										} else if (visible === false) {
-											visibilite = 'privee'
-										}
-										if (vignetteActivee === true) {
-											vignetteActivee = 'oui'
-										} else {
-											vignetteActivee = 'non'
-										}
-										const edition = objet.edition
-										const date = dayjs().format()
-										if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
-											vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
-										}
-										if (visibilite === 'visible' || visibilite === 'protegee') {
-											// Enregistrer entrée du registre d'activité
-											const activiteId = parseInt(donnees.activite) + 1
-											const multi = db.multi()
-											multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur)
-											multi.hset('dates-murs:' + mur, 'date', date)
-											multi.hincrby('murs:' + mur, 'activite', 1)
-											multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }))
-											multi.exec(async function () {
-												if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-													await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
-													await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
-												}
-												if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
-													supprimerFichier(mur, objet.media)
-												}
-												if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-													await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
-													await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
-												}
-												if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-													supprimerFichier(mur, objet.mediaExtra)
-												}
-												if (objet.hasOwnProperty('medias')) {
-													const mediasActuels = JSON.parse(objet.medias)
-													for (let i = 0; i < medias.length; i++) {
-														if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-															await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-															await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
-														}
-													}
-													mediasActuels.forEach(function (mediaActuel) {
-														if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-															supprimerFichier(mur, mediaActuel.fichier)
-														}
-													})
-												}
-												if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)))
-													await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
-												}
-												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-													supprimerFichier(mur, path.basename(objet.vignette))
-												}
-												io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
-												socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-												socket.request.session.save()
-											})
-										} else if (visibilite === 'privee' || visibilite === 'masquee') {
-											const multi = db.multi()
-											multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur)
-											multi.hset('dates-murs:' + mur, 'date', date)
-											multi.exec(async function () {
-												if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-													await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
-													await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
-												}
-												if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
-													supprimerFichier(mur, objet.media)
-												}
-												if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-													await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
-													await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
-												}
-												if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-													supprimerFichier(mur, objet.mediaExtra)
-												}
-												if (objet.hasOwnProperty('medias')) {
-													const mediasActuels = JSON.parse(objet.medias)
-													for (let i = 0; i < medias.length; i++) {
-														if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-															await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-															await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
-														}
-													}
-													mediasActuels.forEach(function (mediaActuel) {
-														if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-															supprimerFichier(mur, mediaActuel.fichier)
-														}
-													})
-												}
-												if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-													await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
-													await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
-												}
-												if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-													supprimerFichier(mur, path.basename(objet.vignette))
-												}
-												io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
-												socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-												socket.request.session.save()
-											})
-										} else {
-											if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-												await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
-												await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
-											}
-											if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
-												supprimerFichier(mur, objet.media)
-											}
-											if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-												await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
-												await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
-											}
-											if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-												supprimerFichier(mur, objet.mediaExtra)
-											}
-											if (objet.hasOwnProperty('medias')) {
-												const mediasActuels = JSON.parse(objet.medias)
-												for (let i = 0; i < medias.length; i++) {
-													if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-														await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-														await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
-													}
-												}
-												mediasActuels.forEach(function (mediaActuel) {
-													if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-														supprimerFichier(mur, mediaActuel.fichier)
-													}
-												})
-											}
-											if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-												await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
-												await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
-											}
-											if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-												supprimerFichier(mur, path.basename(objet.vignette))
-											}
-											io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
-											socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-											socket.request.session.save()
-										}
-									} else {
-										socket.emit('nonautorise')
-									}
-								})
+							let pad = ''
+							if (objet.hasOwnProperty('iframe') && objet.iframe !== '' && objet.iframe.includes(etherpad)) {
+								pad = objet.iframe
 							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('copierbloc', function (bloc, typeBloc, mur, token, titre, texte, media, iframe, type, source, vignette, vignetteActivee, mediaExtra, medias, couleur, colonne, visibilite, motdepasse, identifiant, nom, murOrigine) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant') || !donnees.hasOwnProperty('bloc')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
-						const id = parseInt(donnees.bloc) + 1
-						const date = dayjs().format()
-						const activiteId = parseInt(donnees.activite) + 1
-						const multi = db.multi()
-						if (vignetteActivee === true) {
-							vignetteActivee = 'oui'
-						} else {
-							vignetteActivee = 'non'
-						}
-						let vignetteOrigine = ''
-						if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
-							vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
-							vignetteOrigine = '/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + path.basename(vignette)
-						}
-						multi.hmset('contenu-blocs:' + mur + ':' + bloc, 'id', id, 'bloc', bloc, 'typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'edition', 'oui', 'date', date, 'identifiant', identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', colonne, 'visibilite', visibilite, 'motdepasse', motdepasse, 'epinglee', 'non', 'couleur', couleur)
-						multi.zadd('blocs:' + mur, id, bloc)
-						multi.hset('murs:' + mur, 'bloc', id)
-						multi.hset('dates-murs:' + mur, 'date', date)
-						if (visibilite === 'visible' || visibilite === 'protegee') {
-							// Enregistrer entrée du registre d'activité
-							multi.hincrby('murs:' + mur, 'activite', 1)
-							multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }))
-						}
-						multi.exec(async function () {
-							if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + media))) {
-								await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+							if (objet.hasOwnProperty('media') && objet.media !== '' && objet.media.includes(etherpad) && pad === '') {
+								pad = objet.media
 							}
-							if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + mediaExtra))) {
-								await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
-							}
-							for (let i = 0; i < medias.length; i++) {
-								if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + medias[i].fichier))) {
-									await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
-								}
-							}
-							if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + vignetteOrigine))) {
-								await fs.copy(path.join(__dirname, '..', '/static' + vignetteOrigine), path.join(__dirname, '..', '/static' + vignette))
-							}
-							io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, epinglee: 'non', activiteId: activiteId })
-							socket.emit('copierbloc')
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('verrouillerbloc', function (mur, token, bloc, colonne, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
-						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-							if (err) { socket.emit('erreur'); return false }
-							if (resultat === 1) {
-								db.hmset('contenu-blocs:' + mur + ':' + bloc, 'edition', 'non')
-								io.in('mur-' + mur).emit('verrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('deverrouillerbloc', function (mur, token, bloc, colonne, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
-						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-							if (err) { socket.emit('erreur'); return false }
-							if (resultat === 1) {
-								db.hmset('contenu-blocs:' + mur + ':' + bloc, 'edition', 'oui')
-								io.in('mur-' + mur).emit('deverrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('epinglerbloc', function (mur, token, bloc, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
-						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-							if (err) { socket.emit('erreur'); return false }
-							if (resultat === 1) {
-								db.hmset('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'oui')
-								io.in('mur-' + mur).emit('epinglerbloc', { bloc: bloc, identifiant: identifiant })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('desepinglerbloc', function (mur, token, bloc, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
-						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-							if (err) { socket.emit('erreur'); return false }
-							if (resultat === 1) {
-								db.hmset('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'non')
-								io.in('mur-' + mur).emit('desepinglerbloc', { bloc: bloc, identifiant: identifiant })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('autoriserbloc', function (mur, token, item, indexBloc, indexBlocColonne, moderation, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
-						db.exists('contenu-blocs:' + mur + ':' + item.bloc, function (err, resultat) {
-							if (err) { socket.emit('erreur'); return false }
-							if (resultat === 1) {
+							if (objet.hasOwnProperty('bloc') && objet.bloc === bloc) {
 								const date = dayjs().format()
 								const activiteId = parseInt(donnees.activite) + 1
-								const multi = db.multi()
-								if (item.hasOwnProperty('modifie')) {
-									multi.hdel('contenu-blocs:' + mur + ':' + item.bloc, 'modifie')
-								}
-								multi.hmset('contenu-blocs:' + mur + ':' + item.bloc, 'visibilite', 'visible', 'date', date)
-								multi.hset('dates-murs:' + mur, 'date', date)
+								await db
+								.multi()
+								.DEL('contenu-blocs:' + mur + ':' + bloc)
+								.ZREM('blocs:' + mur, bloc)
+								.DEL('commentaires:' + bloc)
+								.DEL('evaluations:' + bloc)
+								.HSET('dates-murs:' + mur, 'date', date)
 								// Enregistrer entrée du registre d'activité
-								multi.hincrby('murs:' + mur, 'activite', 1)
-								multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: item.bloc, identifiant: item.identifiant, titre: item.titre, date: date, type: 'bloc-ajoute' }))
-								multi.exec(function () {
-									io.in('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: item.nom, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', motdepasse: item.motdepasse, epinglee: item.epinglee, activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
-									socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-									socket.request.session.save()
-								})
-							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('deplacerbloc', function (items, mur, affichage, ordre, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (donnees.id === mur && (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur)))) {
-						if (ordre === 'decroissant') {
-							items.reverse()
-						}
-						const donneesBlocs = []
-						for (let i = 0; i < items.length; i++) {
-							const donneeBloc = new Promise(function (resolve) {
-								db.exists('contenu-blocs:' + mur + ':' + items[i].bloc, function (err, resultat) {
-									if (err) { resolve('erreur'); return false }
-									if (resultat === 1) {
-										const multi = db.multi()
-										multi.zrem('blocs:' + mur, items[i].bloc)
-										multi.zadd('blocs:' + mur, (i + 1), items[i].bloc)
-										if (affichage === 'colonnes') {
-											multi.hset('contenu-blocs:' + mur + ':' + items[i].bloc, 'colonne', items[i].colonne)
-										}
-										multi.exec(function (err) {
-											if (err) { resolve('erreur'); return false }
-											resolve(i)
-										})
-									} else {
-										resolve('erreur')
-									}
-								})
-							})
-							donneesBlocs.push(donneeBloc)
-						}
-						Promise.all(donneesBlocs).then(function (blocs) {
-							let erreurs = 0
-							blocs.forEach(function (bloc) {
-								if (bloc === 'erreur') {
-									erreurs++
-								}
-							})
-							if (erreurs === 0) {
-								if (ordre === 'decroissant') {
-									items.reverse()
-								}
-								io.in('mur-' + mur).emit('deplacerbloc', { blocs: items, identifiant: identifiant })
-							} else {
-								socket.emit('erreur')
-							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('supprimerbloc', function (bloc, mur, token, titre, colonne, identifiant, nom) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					if (donnees.id === mur && donnees.token === token) {
-						db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-							if (err) { socket.emit('erreur'); return false }
-							if (resultat === 1) {
-								db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, objet) {
-									if (err) { socket.emit('erreur'); return false }
-									const proprietaire = donnees.identifiant
-									let admins = []
-									if (donnees.hasOwnProperty('admins')) {
-										admins = JSON.parse(donnees.admins)
-									}
-									if (objet.identifiant === identifiant || admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-										if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
-											supprimerFichier(mur, objet.media)
-										}
-										if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
-											supprimerFichier(mur, objet.mediaExtra)
-										}
-										if (objet.hasOwnProperty('medias')) {
-											const medias = JSON.parse(objet.medias)
-											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].hasOwnProperty('fichier')) {
-													supprimerFichier(mur, medias[i].fichier)
-												}
-											}
-										}
-										if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-											supprimerFichier(mur, path.basename(objet.vignette))
-										}
-										let pad = ''
-										if (objet.hasOwnProperty('iframe') && objet.iframe !== '' && objet.iframe.includes(etherpad)) {
-											pad = objet.iframe
-										}
-										if (objet.hasOwnProperty('media') && objet.media !== '' && objet.media.includes(etherpad) && pad === '') {
-											pad = objet.media
-										}
-										if (objet.hasOwnProperty('bloc') && objet.bloc === bloc) {
-											const date = dayjs().format()
-											const activiteId = parseInt(donnees.activite) + 1
-											const multi = db.multi()
-											multi.del('contenu-blocs:' + mur + ':' + bloc)
-											multi.zrem('blocs:' + mur, bloc)
-											multi.del('commentaires:' + bloc)
-											multi.del('evaluations:' + bloc)
-											multi.hset('dates-murs:' + mur, 'date', date)
-											// Enregistrer entrée du registre d'activité
-											multi.hincrby('murs:' + mur, 'activite', 1)
-											multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-supprime' }))
-											multi.exec(function () {
-												io.in('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId, etherpad: pad })
-												socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-												socket.request.session.save()
-											})
-										}
-									} else {
-										socket.emit('nonautorise')
-									}
-								})
-							}
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('commenterbloc', function (bloc, mur, titre, texte, identifiant, nom) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, resultat) {
-					if (err || !resultat || resultat === null || !resultat.hasOwnProperty('activite')) { socket.emit('erreur'); return false }
-					db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, donnees) {
-						if (err || !donnees || donnees === null || !donnees.hasOwnProperty('commentaires')) { socket.emit('erreur'); return false }
-						db.zrange('commentaires:' + bloc, 0, -1, function (err, commentaires) {
-							if (err) { socket.emit('erreur'); return false }
-							const date = dayjs().format()
-							const activiteId = parseInt(resultat.activite) + 1
-							let commentaireId = parseInt(donnees.commentaires) + 1
-							const listeCommentaires = []
-							for (let commentaire of commentaires) {
-								const commentaireJSON = verifierJSON(commentaire)
-								if (commentaireJSON === false) {
-									socket.emit('erreur'); return false
-								} else {
-									listeCommentaires.push(commentaireJSON)
-								}
-							}
-							let maxCommentaireId = 0
-							if (listeCommentaires.length > 0) {
-								maxCommentaireId = listeCommentaires.reduce(function (p, c) {
-									return (p && p.id > c.id) ? p : c
-								})
-							}
-							if (commentaireId === maxCommentaireId.id || commentaireId < maxCommentaireId.id) {
-								commentaireId = maxCommentaireId.id + 1
-							}
-							const multi = db.multi()
-							const commentaire = { id: commentaireId, identifiant: identifiant, date: date, texte: texte }
-							multi.hset('contenu-blocs:' + mur + ':' + bloc, 'commentaires', commentaireId)
-							multi.hset('dates-murs:' + mur, 'date', date)
-							multi.zadd('commentaires:' + bloc, commentaireId, JSON.stringify(commentaire))
-							// Enregistrer entrée du registre d'activité
-							multi.hincrby('murs:' + mur, 'activite', 1)
-							multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-commente' }))
-							multi.exec(function () {
-								io.in('mur-' + mur).emit('commenterbloc', { id: commentaireId, bloc: bloc, identifiant: identifiant, nom: nom, texte: texte, titre: titre, date: date, commentaires: commentaires.length + 1, activiteId: activiteId })
+								.HINCRBY('murs:' + mur, 'activite', 1)
+								.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-supprime' }) }])
+								.exec()
+								io.in('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId, etherpad: pad })
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
-							})
-						})
-					})
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('modifiercommentaire', function (bloc, mur, id, texte, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.zrangebyscore('commentaires:' + bloc, id, id, function (err, resultats) {
-					if (err || !resultats || resultats === null) { socket.emit('erreur'); return false }
-					const dateModification = dayjs().format()
-					const resulatsJSON = verifierJSON(resultats)
-					let donnees
-					if (resulatsJSON === false) {
-						socket.emit('erreur'); return false
-					} else {
-						donnees = resulatsJSON
+							}
+						} else {
+							socket.emit('nonautorise')
+						}
 					}
-					const date = donnees.date
-					const commentaire = { id: id, identifiant: donnees.identifiant, date: date, modifie: dateModification, texte: texte }
-					const multi = db.multi()
-					multi.zremrangebyscore('commentaires:' + bloc, id, id)
-					multi.zadd('commentaires:' + bloc, id, JSON.stringify(commentaire))
-					multi.hset('dates-murs:' + mur, 'date', dateModification)
-					multi.exec(function () {
-						io.in('mur-' + mur).emit('modifiercommentaire', { id: id, texte: texte })
-						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-						socket.request.session.save()
-					})
-				})
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('supprimercommentaire', function (bloc, mur, id, identifiant) {
+		socket.on('commenterbloc', async function (bloc, mur, titre, texte, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let resultat = await db.HGETALL('murs:' + mur)
+				resultat = Object.assign({}, resultat)
+				if (resultat === null || !resultat.hasOwnProperty('activite')) { socket.emit('erreur'); return false }
+				let donnees = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('commentaires')) { socket.emit('erreur'); return false }
+				const commentaires = await db.ZRANGE('commentaires:' + bloc, 0, -1)
+				if (commentaires === null) { socket.emit('erreur'); return false }
 				const date = dayjs().format()
-				const multi = db.multi()
-				multi.zremrangebyscore('commentaires:' + bloc, id, id)
-				multi.hset('dates-murs:' + mur, 'date', date)
-				multi.exec(function () {
-					db.zcard('commentaires:' + bloc, function (err, commentaires) {
-						if (err) { socket.emit('erreur'); return false }
-						io.in('mur-' + mur).emit('supprimercommentaire', { id: id, bloc: bloc, commentaires: commentaires })
-						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-						socket.request.session.save()
-					})
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('commentaires', function (bloc, type) {
-			const donneesCommentaires = []
-			db.zrange('commentaires:' + bloc, 0, -1, function (err, commentaires) {
-				if (err) { socket.emit('erreur'); return false }
+				const activiteId = parseInt(resultat.activite) + 1
+				let commentaireId = parseInt(donnees.commentaires) + 1
+				const listeCommentaires = []
 				for (let commentaire of commentaires) {
 					const commentaireJSON = verifierJSON(commentaire)
 					if (commentaireJSON === false) {
 						socket.emit('erreur'); return false
 					} else {
-						commentaire = commentaireJSON
+						listeCommentaires.push(commentaireJSON)
 					}
-					const donneeCommentaire = new Promise(function (resolve) {
-						const identifiant = commentaire.identifiant
-						db.exists('utilisateurs:' + identifiant, function (err, resultat) {
-							if (err) { resolve(); return false }
-							if (resultat === 1) {
-								db.hgetall('utilisateurs:' + identifiant, function (err, utilisateur) {
-									if (err) { resolve(); return false }
-									commentaire.nom = utilisateur.nom
-									resolve(commentaire)
-								})
-							} else {
-								db.exists('noms:' + identifiant, function (err, resultat) {
-									if (err) { resolve(); return false }
-									if (resultat === 1) {
-										db.hget('noms:' + identifiant, 'nom', function (err, nom) {
-											if (err) { resolve(); return false }
-											commentaire.nom = nom
-											resolve(commentaire)
-										})
-									} else {
-										commentaire.nom = ''
-										resolve(commentaire)
-									}
-								})
-							}
-						})
-					})
-					donneesCommentaires.push(donneeCommentaire)
 				}
-				Promise.all(donneesCommentaires).then(function (resultat) {
-					socket.emit('commentaires', { commentaires: resultat, type: type })
-				})
-			})
-		})
-
-		socket.on('evaluerbloc', function (bloc, mur, titre, etoiles, identifiant, nom) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, resultat) {
-					if (err || !resultat || resultat === null || !resultat.hasOwnProperty('activite')) { socket.emit('erreur'); return false }
-					db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, donnees) {
-						if (err || !donnees || donnees === null || !donnees.hasOwnProperty('evaluations')) { socket.emit('erreur'); return false }
-						const date = dayjs().format()
-						const activiteId = parseInt(resultat.activite) + 1
-						const evaluationId = parseInt(donnees.evaluations) + 1
-						const evaluation = { id: evaluationId, identifiant: identifiant, date: date, etoiles: etoiles }
-						const multi = db.multi()
-						multi.hincrby('contenu-blocs:' + mur + ':' + bloc, 'evaluations', 1)
-						multi.zadd('evaluations:' + bloc, evaluationId, JSON.stringify(evaluation))
-						multi.hset('dates-murs:' + mur, 'date', date)
-						// Enregistrer entrée du registre d'activité
-						multi.hincrby('murs:' + mur, 'activite', 1)
-						multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-evalue' }))
-						multi.exec(function () {
-							io.in('mur-' + mur).emit('evaluerbloc', { id: evaluationId, bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, evaluation: evaluation, activiteId: activiteId })
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
+				let maxCommentaireId = 0
+				if (listeCommentaires.length > 0) {
+					maxCommentaireId = listeCommentaires.reduce(function (p, c) {
+						return (p && p.id > c.id) ? p : c
 					})
-				})
+				}
+				if (commentaireId === maxCommentaireId.id || commentaireId < maxCommentaireId.id) {
+					commentaireId = maxCommentaireId.id + 1
+				}
+				const commentaire = { id: commentaireId, identifiant: identifiant, date: date, texte: texte }
+				await db
+				.multi()
+				.HSET('contenu-blocs:' + mur + ':' + bloc, 'commentaires', commentaireId)
+				.HSET('dates-murs:' + mur, 'date', date)
+				.ZADD('commentaires:' + bloc, [{ score: commentaireId, value: JSON.stringify(commentaire) }])
+				// Enregistrer entrée du registre d'activité
+				.HINCRBY('murs:' + mur, 'activite', 1)
+				.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-commente' }) }])
+				.exec()
+				io.in('mur-' + mur).emit('commenterbloc', { id: commentaireId, bloc: bloc, identifiant: identifiant, nom: nom, texte: texte, titre: titre, date: date, commentaires: commentaires.length + 1, activiteId: activiteId })
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierevaluation', function (bloc, mur, id, etoiles, identifiant) {
+		socket.on('modifiercommentaire', async function (bloc, mur, id, texte, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.zrangebyscore('evaluations:' + bloc, id, id, function (err) {
-					if (err) { socket.emit('erreur'); return false }
-					const date = dayjs().format()
-					const evaluation = { id: id, identifiant: identifiant, date: date, etoiles: etoiles }
-					const multi = db.multi()
-					multi.zremrangebyscore('evaluations:' + bloc, id, id)
-					multi.zadd('evaluations:' + bloc, id, JSON.stringify(evaluation))
-					multi.hset('dates-murs:' + mur, 'date', date)
-					multi.exec(function () {
-						io.in('mur-' + mur).emit('modifierevaluation', { id: id, bloc: bloc, date: date, etoiles: etoiles })
-						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-						socket.request.session.save()
-					})
-				})
+				const resultats = await db.ZRANGEBYSCORE('commentaires:' + bloc, id, id)
+				if (resultats === null) { socket.emit('erreur'); return false }
+				const dateModification = dayjs().format()
+				const resulatsJSON = verifierJSON(resultats)
+				let donnees
+				if (resulatsJSON === false) {
+					socket.emit('erreur'); return false
+				} else {
+					donnees = resulatsJSON
+				}
+				const date = donnees.date
+				const commentaire = { id: id, identifiant: donnees.identifiant, date: date, modifie: dateModification, texte: texte }
+				await db
+				.multi()
+				.ZREMRANGEBYSCORE('commentaires:' + bloc, id, id)
+				.ZADD('commentaires:' + bloc, [{ score: id, value: JSON.stringify(commentaire) }])
+				.HSET('dates-murs:' + mur, 'date', dateModification)
+				.exec()
+				io.in('mur-' + mur).emit('modifiercommentaire', { id: id, texte: texte })
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('supprimerevaluation', function (bloc, mur, id, identifiant) {
+		socket.on('supprimercommentaire', async function (bloc, mur, id, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
 				const date = dayjs().format()
-				const multi = db.multi()
-				multi.hset('dates-murs:' + mur, 'date', date)
-				multi.zremrangebyscore('evaluations:' + bloc, id, id)
-				multi.exec(function () {
-					io.in('mur-' + mur).emit('supprimerevaluation', { id: id, bloc: bloc })
-					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-					socket.request.session.save()
-				})
+				await db
+				.multi()
+				.ZREMRANGEBYSCORE('commentaires:' + bloc, id, id)
+				.HSET('dates-murs:' + mur, 'date', date)
+				.exec()
+				const commentaires = await db.ZCARD('commentaires:' + bloc)
+				if (commentaires === null) { socket.emit('erreur'); return false }
+				io.in('mur-' + mur).emit('supprimercommentaire', { id: id, bloc: bloc, commentaires: commentaires })
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('verifierblocprotege', function (mur, bloc, colonne, motdepasse, identifiant) {
+		socket.on('commentaires', async function (bloc, type) {
+			const donneesCommentaires = []
+			const commentaires = await db.ZRANGE('commentaires:' + bloc, 0, -1)
+			if (commentaires === null) { socket.emit('erreur'); return false }
+			for (let commentaire of commentaires) {
+				const commentaireJSON = verifierJSON(commentaire)
+				if (commentaireJSON === false) {
+					socket.emit('erreur'); return false
+				} else {
+					commentaire = commentaireJSON
+				}
+				const donneeCommentaire = new Promise(async function (resolve) {
+					const identifiant = commentaire.identifiant
+					const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+					if (resultat === null) { resolve(); return false }
+					if (resultat === 1) {
+						let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+						utilisateur = Object.assign({}, utilisateur)
+						if (utilisateur === null) { resolve(); return false }
+						commentaire.nom = utilisateur.nom
+						resolve(commentaire)
+					} else {
+						const reponse = await db.EXISTS('noms:' + identifiant)
+						if (reponse === null) { resolve(); return false }
+						if (reponse === 1) {
+							const nom = await db.HGET('noms:' + identifiant, 'nom')
+							if (nom === null) { resolve(); return false }
+							commentaire.nom = nom
+							resolve(commentaire)
+						} else {
+							commentaire.nom = ''
+							resolve(commentaire)
+						}
+					}
+				})
+				donneesCommentaires.push(donneeCommentaire)
+			}
+			Promise.all(donneesCommentaires).then(function (resultat) {
+				socket.emit('commentaires', { commentaires: resultat, type: type })
+			})
+		})
+
+		socket.on('evaluerbloc', async function (bloc, mur, titre, etoiles, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.exists('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-					if (err) { socket.emit('erreur'); return false }
-					if (resultat === 1) {
-						db.hgetall('contenu-blocs:' + mur + ':' + bloc, async function (err, objet) {
-							if (err || !objet || objet === null) { socket.emit('erreur'); return false }
-							if (objet.bloc === bloc && objet.motdepasse === motdepasse) {
-								socket.request.session.blocsAutorises.push(bloc)
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-								socket.emit('blocautorise', bloc, colonne)
-							} else {
-								socket.emit('blocnonautorise')
-							}
-						})
-					}
-				})
+				let resultat = await db.HGETALL('murs:' + mur)
+				resultat = Object.assign({}, resultat)
+				if (resultat === null || !resultat.hasOwnProperty('activite')) { socket.emit('erreur'); return false }
+				let donnees = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('evaluations')) { socket.emit('erreur'); return false }
+				const date = dayjs().format()
+				const activiteId = parseInt(resultat.activite) + 1
+				const evaluationId = parseInt(donnees.evaluations) + 1
+				const evaluation = { id: evaluationId, identifiant: identifiant, date: date, etoiles: etoiles }
+				await db
+				.multi()
+				.HINCRBY('contenu-blocs:' + mur + ':' + bloc, 'evaluations', 1)
+				.ZADD('evaluations:' + bloc, [{ score: evaluationId, value: JSON.stringify(evaluation) }])
+				.HSET('dates-murs:' + mur, 'date', date)
+				// Enregistrer entrée du registre d'activité
+				.HINCRBY('murs:' + mur, 'activite', 1)
+				.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-evalue' }) }])
+				.exec()
+				io.in('mur-' + mur).emit('evaluerbloc', { id: evaluationId, bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, evaluation: evaluation, activiteId: activiteId })
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiernom', function (mur, nom, statut, identifiant) {
+		socket.on('modifierevaluation', async function (bloc, mur, id, etoiles, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				if (statut === 'invite') {
-					db.hset('noms:' + identifiant, 'nom', nom, function (err) {
-						if (err) { socket.emit('erreur'); return false }
-						io.in('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
-						socket.request.session.nom = nom
+				const date = dayjs().format()
+				const evaluation = { id: id, identifiant: identifiant, date: date, etoiles: etoiles }
+				await db
+				.multi()
+				.ZREMRANGEBYSCORE('evaluations:' + bloc, id, id)
+				.ZADD('evaluations:' + bloc, [{ score: id, value: JSON.stringify(evaluation) }])
+				.HSET('dates-murs:' + mur, 'date', date)
+				.exec()
+				io.in('mur-' + mur).emit('modifierevaluation', { id: id, bloc: bloc, date: date, etoiles: etoiles })
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('supprimerevaluation', async function (bloc, mur, id, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				const date = dayjs().format()
+				await db
+				.multi()
+				.HSET('dates-murs:' + mur, 'date', date)
+				.ZREMRANGEBYSCORE('evaluations:' + bloc, id, id)
+				.exec()
+				io.in('mur-' + mur).emit('supprimerevaluation', { id: id, bloc: bloc })
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('verifierblocprotege', async function (mur, bloc, colonne, motdepasse, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
+				if (resultat === null) { socket.emit('erreur'); return false }
+				if (resultat === 1) {
+					let objet = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+					objet = Object.assign({}, objet)
+					if (objet === null) { socket.emit('erreur'); return false }
+					if (objet.bloc === bloc && objet.motdepasse === motdepasse) {
+						socket.request.session.blocsAutorises.push(bloc)
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
-					})
-				} else if (statut === 'auteur') {
-					db.hset('utilisateurs:' + identifiant, 'nom', nom, function (err) {
-						if (err) { socket.emit('erreur'); return false }
-						io.in('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
-						socket.request.session.nom = nom
-						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-						socket.request.session.save()
-					})
+						socket.emit('blocautorise', bloc, colonne)
+					} else {
+						socket.emit('blocnonautorise')
+					}
 				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiertitre', function (mur, titre, identifiant) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
+		socket.on('modifiernom', async function (mur, nom, statut, identifiant) {
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'titre', titre, function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							const slug = definirSlug(titre)
-							io.in('mur-' + mur).emit('modifiertitre', { titre: titre, slug: slug, identifiant: identifiant })
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				if (statut === 'invite') {
+					await db.HSET('noms:' + identifiant, 'nom', nom)
+					io.in('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
+					socket.request.session.nom = nom
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else if (statut === 'auteur') {
+					await db.HSET('utilisateurs:' + identifiant, 'nom', nom)
+					io.in('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
+					socket.request.session.nom = nom
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiercodeacces', function (mur, code, identifiant) {
+		socket.on('modifiertitre', async function (mur, titre, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'code', code, function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							io.in('mur-' + mur).emit('modifiercodeacces', code, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'titre', titre)
+					const slug = definirSlug(titre)
+					io.in('mur-' + mur).emit('modifiertitre', { titre: titre, slug: slug, identifiant: identifiant })
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifieradmins', function (mur, admins, motdepasseAdmin, identifiant) {
+		socket.on('modifiercodeacces', async function (mur, code, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, async function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					if (donnees.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasseAdmin, donnees.motdepasse)) {
-						socket.emit('motsdepasseidentiques')
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'code', code)
+					io.in('mur-' + mur).emit('modifiercodeacces', code, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('modifieradmins', async function (mur, admins, motdepasseAdmin, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				if (donnees.hasOwnProperty('motdepasse') && await bcrypt.compare(motdepasseAdmin, donnees.motdepasse)) {
+					socket.emit('motsdepasseidentiques')
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					const listeAdmins = JSON.parse(donnees.admins)
+					const proprietaire = donnees.identifiant
+					if (listeAdmins.includes(identifiant) || proprietaire === identifiant) {
+						await db.HSET('murs:' + mur, ['admins', JSON.stringify(admins), 'motdepasseAdmin', motdepasseAdmin])
+						admins.forEach(async function (admin) {
+							if (!listeAdmins.includes(admin)) {
+								await db.SADD('murs-admins:' + admin, mur.toString())
+							}
+						})
+						listeAdmins.forEach(async function (admin) {
+							if (!admins.includes(admin)) {
+								await db.SREM('murs-admins:' + admin, mur.toString())
+							}
+						})
+						io.in('mur-' + mur).emit('modifieradmins', admins, motdepasseAdmin, identifiant)
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					} else {
-						const listeAdmins = JSON.parse(donnees.admins)
-						const proprietaire = donnees.identifiant
-						if (listeAdmins.includes(identifiant) || proprietaire === identifiant) {
-							const multi = db.multi()
-							multi.hmset('murs:' + mur, 'admins', JSON.stringify(admins), 'motdepasseAdmin', motdepasseAdmin)
-							admins.forEach(function (admin) {
-								if (!listeAdmins.includes(admin)) {
-									multi.sadd('murs-admins:' + admin, mur)
-								}
-							})
-							listeAdmins.forEach(function (admin) {
-								if (!admins.includes(admin)) {
-									multi.srem('murs-admins:' + admin, mur)
-								}
-							})
-							multi.exec(function () {
-								io.in('mur-' + mur).emit('modifieradmins', admins, motdepasseAdmin, identifiant)
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							})
-						} else {
-							socket.emit('nonautorise')
-						}
+						socket.emit('nonautorise')
 					}
-				})
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifieracces', function (mur, acces, identifiant) {
+		socket.on('modifieracces', async function (mur, acces, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hgetall('murs:' + mur, function (err, donnees) {
-							if (err) { socket.emit('erreur'); return false }
-							let code = ''
-							if (donnees && donnees.hasOwnProperty('code') && donnees.code !== '') {
-								code = donnees.code
-							} else {
-								code = Math.floor(100000 + Math.random() * 900000)
-							}
-							db.hmset('murs:' + mur, 'acces', acces, 'code', code, function (err) {
-								if (err) { socket.emit('erreur'); return false }
-								io.in('mur-' + mur).emit('modifieracces', { acces: acces, code: code })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							})
-						})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					let code = ''
+					if (donnees.hasOwnProperty('code') && donnees.code !== '') {
+						code = donnees.code
 					} else {
-						socket.emit('nonautorise')
+						code = Math.floor(100000 + Math.random() * 900000)
 					}
-				})
+					await db.HSET('murs:' + mur, ['acces', acces, 'code', code])
+					io.in('mur-' + mur).emit('modifieracces', { acces: acces, code: code })
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiercontributions', function (mur, contributions, contributionsPrecedentes, identifiant) {
+		socket.on('modifiercontributions', async function (mur, contributions, contributionsPrecedentes, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'contributions', contributions, function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							io.in('mur-' + mur).emit('modifiercontributions', { contributions: contributions, contributionsPrecedentes: contributionsPrecedentes })
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'contributions', contributions)
+					io.in('mur-' + mur).emit('modifiercontributions', { contributions: contributions, contributionsPrecedentes: contributionsPrecedentes })
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifieraffichage', function (mur, affichage, identifiant) {
+		socket.on('modifieraffichage', async function (mur, affichage, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'affichage', affichage, function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							io.in('mur-' + mur).emit('modifieraffichage', affichage, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'affichage', affichage)
+					io.in('mur-' + mur).emit('modifieraffichage', affichage, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierordre', function (mur, ordre, identifiant) {
+		socket.on('modifierordre', async function (mur, ordre, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'ordre', ordre, function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							io.in('mur-' + mur).emit('modifierordre', ordre, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'ordre', ordre)
+					io.in('mur-' + mur).emit('modifierordre', ordre, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierlargeur', function (mur, largeur, identifiant) {
+		socket.on('modifierlargeur', async function (mur, largeur, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'largeur', largeur, function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							io.in('mur-' + mur).emit('modifierlargeur', largeur, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'largeur', largeur)
+					io.in('mur-' + mur).emit('modifierlargeur', largeur, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierfond', function (mur, fond, ancienfond, identifiant) {
+		socket.on('modifierfond', async function (mur, fond, ancienfond, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'fond', fond)
+					io.in('mur-' + mur).emit('modifierfond', fond, identifiant)
+					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
+						supprimerFichier(mur, path.basename(ancienfond))
 					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'fond', fond, async function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							io.in('mur-' + mur).emit('modifierfond', fond, identifiant)
-							if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
-								supprimerFichier(mur, path.basename(ancienfond))
-							}
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiercouleurfond', function (mur, fond, ancienfond, identifiant) {
+		socket.on('modifiercouleurfond', async function (mur, fond, ancienfond, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'fond', fond)
+					io.in('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
+					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
+						supprimerFichier(mur, path.basename(ancienfond))
 					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'fond', fond, async function (err) {
-							if (err) { socket.emit('erreur'); return false }
-							io.in('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
-							if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
-								supprimerFichier(mur, path.basename(ancienfond))
-							}
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifieractivite', function (mur, statut, identifiant) {
+		socket.on('modifieractivite', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'registreActivite', statut, function () {
-							io.in('mur-' + mur).emit('modifieractivite', statut)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'registreActivite', statut)
+					io.in('mur-' + mur).emit('modifieractivite', statut)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierconversation', function (mur, statut, identifiant) {
+		socket.on('modifierconversation', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'conversation', statut, function () {
-							io.in('mur-' + mur).emit('modifierconversation', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'conversation', statut)
+					io.in('mur-' + mur).emit('modifierconversation', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierlisteutilisateurs', function (mur, statut, identifiant) {
+		socket.on('modifierlisteutilisateurs', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'listeUtilisateurs', statut, function () {
-							io.in('mur-' + mur).emit('modifierlisteutilisateurs', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'listeUtilisateurs', statut)
+					io.in('mur-' + mur).emit('modifierlisteutilisateurs', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiereditionnom', function (mur, statut, identifiant) {
+		socket.on('modifiereditionnom', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'editionNom', statut, function () {
-							io.in('mur-' + mur).emit('modifiereditionnom', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'editionNom', statut)
+					io.in('mur-' + mur).emit('modifiereditionnom', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierfichiers', function (mur, statut, identifiant) {
+		socket.on('modifierfichiers', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'fichiers', statut, function () {
-							io.in('mur-' + mur).emit('modifierfichiers', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'fichiers', statut)
+					io.in('mur-' + mur).emit('modifierfichiers', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierenregistrements', function (mur, statut, identifiant) {
+		socket.on('modifierenregistrements', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'enregistrements', statut, function () {
-							io.in('mur-' + mur).emit('modifierenregistrements', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'enregistrements', statut)
+					io.in('mur-' + mur).emit('modifierenregistrements', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierliens', function (mur, statut, identifiant) {
+		socket.on('modifierliens', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'liens', statut, function () {
-							io.in('mur-' + mur).emit('modifierliens', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'liens', statut)
+					io.in('mur-' + mur).emit('modifierliens', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierdocuments', function (mur, statut, identifiant) {
+		socket.on('modifierdocuments', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'documents', statut, function () {
-							io.in('mur-' + mur).emit('modifierdocuments', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'documents', statut)
+					io.in('mur-' + mur).emit('modifierdocuments', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiercommentaires', function (mur, statut, identifiant) {
+		socket.on('modifiercommentaires', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'commentaires', statut, function () {
-							io.in('mur-' + mur).emit('modifiercommentaires', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'commentaires', statut)
+					io.in('mur-' + mur).emit('modifiercommentaires', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierevaluations', function (mur, statut, identifiant) {
+		socket.on('modifierevaluations', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'evaluations', statut, function () {
-							io.in('mur-' + mur).emit('modifierevaluations', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'evaluations', statut)
+					io.in('mur-' + mur).emit('modifierevaluations', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierverrouillage', function (mur, statut, identifiant) {
+		socket.on('modifierverrouillage', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'verrouillage', statut, function () {
-							io.in('mur-' + mur).emit('modifierverrouillage', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'verrouillage', statut)
+					io.in('mur-' + mur).emit('modifierverrouillage', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifierepinglage', function (mur, statut, identifiant) {
+		socket.on('modifierepinglage', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'epinglage', statut, function () {
-							io.in('mur-' + mur).emit('modifierepinglage', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'epinglage', statut)
+					io.in('mur-' + mur).emit('modifierepinglage', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiercopiebloc', function (mur, statut, identifiant) {
+		socket.on('modifiercopiebloc', async function (mur, statut, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.hset('murs:' + mur, 'copieBloc', statut, function () {
-							io.in('mur-' + mur).emit('modifiercopiebloc', statut, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.HSET('murs:' + mur, 'copieBloc', statut)
+					io.in('mur-' + mur).emit('modifiercopiebloc', statut, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
@@ -5133,485 +5132,463 @@ async function demarrerServeur () {
 			}
 		})
 
-		socket.on('reinitialisermessages', function (mur, identifiant) {
+		socket.on('reinitialisermessages', async function (mur, identifiant) {
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						io.in('mur-' + mur).emit('reinitialisermessages', identifiant)
-						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-						socket.request.session.save()
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					io.in('mur-' + mur).emit('reinitialisermessages', identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('reinitialiseractivite', function (mur, identifiant) {
+		socket.on('reinitialiseractivite', async function (mur, identifiant) {
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.del('activite:' + mur, function () {
-							io.in('mur-' + mur).emit('reinitialiseractivite', identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.DEL('activite:' + mur)
+					io.in('mur-' + mur).emit('reinitialiseractivite', identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('ajoutercolonne', function (mur, titre, colonnes, affichageColonnes, identifiant, nom) {
+		socket.on('ajoutercolonne', async function (mur, titre, colonnes, affichageColonnes, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, resultat) {
-					if (err || !resultat || resultat === null || !resultat.hasOwnProperty('activite') || !resultat.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = resultat.identifiant
-					let admins = []
-					if (resultat.hasOwnProperty('admins')) {
-						admins = resultat.admins
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						const date = dayjs().format()
-						const activiteId = parseInt(resultat.activite) + 1
-						colonnes.push(titre)
-						affichageColonnes.push(true)
-						const multi = db.multi()
-						multi.hmset('murs:' + mur, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes))
-						// Enregistrer entrée du registre d'activité
-						multi.hincrby('murs:' + mur, 'activite', 1)
-						multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-ajoutee' }))
-						multi.exec(function () {
-							io.in('mur-' + mur).emit('ajoutercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('activite') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = donnees.admins
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					const date = dayjs().format()
+					const activiteId = parseInt(donnees.activite) + 1
+					colonnes.push(titre)
+					affichageColonnes.push(true)
+					await db
+					.multi()
+					.HSET('murs:' + mur, ['colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes)])
+					// Enregistrer entrée du registre d'activité
+					.HINCRBY('murs:' + mur, 'activite', 1)
+					.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-ajoutee' }) }])
+					.exec()
+					io.in('mur-' + mur).emit('ajoutercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('modifiertitrecolonne', function (mur, titre, index, identifiant) {
+		socket.on('modifiertitrecolonne', async function (mur, titre, index, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						const colonnes = JSON.parse(donnees.colonnes)
-						colonnes[index] = titre
-						db.hset('murs:' + mur, 'colonnes', JSON.stringify(colonnes), function () {
-							io.in('mur-' + mur).emit('modifiertitrecolonne', colonnes, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					const colonnes = JSON.parse(donnees.colonnes)
+					colonnes[index] = titre
+					await db.HSET('murs:' + mur, 'colonnes', JSON.stringify(colonnes))
+					io.in('mur-' + mur).emit('modifiertitrecolonne', colonnes, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 		
-		socket.on('modifieraffichagecolonne', function (mur, valeur, index, identifiant) {
+		socket.on('modifieraffichagecolonne', async function (mur, valeur, index, identifiant) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						let affichageColonnes = []
-						if (donnees.hasOwnProperty('affichageColonnes')) {
-							affichageColonnes = JSON.parse(donnees.affichageColonnes)
-						} else {
-							const colonnes = JSON.parse(donnees.colonnes)
-							colonnes.forEach(function () {
-								affichageColonnes.push(true)
-							})
-						}
-						affichageColonnes[index] = valeur
-						db.hset('murs:' + mur, 'affichageColonnes', JSON.stringify(affichageColonnes), function () {
-							io.in('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes, valeur, index, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					let affichageColonnes = []
+					if (donnees.hasOwnProperty('affichageColonnes')) {
+						affichageColonnes = JSON.parse(donnees.affichageColonnes)
 					} else {
-						socket.emit('nonautorise')
+						const colonnes = JSON.parse(donnees.colonnes)
+						colonnes.forEach(function () {
+							affichageColonnes.push(true)
+						})
 					}
-				})
+					affichageColonnes[index] = valeur
+					await db.HSET('murs:' + mur, 'affichageColonnes', JSON.stringify(affichageColonnes))
+					io.in('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes, valeur, index, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
 		})
 
-		socket.on('verifierblocscolonnes', function (donnees) {
+		socket.on('verifierblocscolonnes', async function (donnees) {
 			const mur = donnees.mur
 			const identifiant = donnees.identifiant
 			if (socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, async function (err, resultat) {
-					if (err || !resultat || resultat === null) { socket.emit('erreur'); return false }
-					const donneesMur = await recupererDonneesMurProtege(resultat, mur, identifiant)
-					socket.emit('verifierblocscolonnes', donneesMur.blocs)
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null) { socket.emit('erreur'); return false }
+				const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
+				socket.emit('verifierblocscolonnes', donneesMur.blocs)
 			}
 		})
 
-		socket.on('supprimercolonne', function (mur, titre, colonne, identifiant, nom) {
+		socket.on('supprimercolonne', async function (mur, titre, colonne, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					const colonnes = JSON.parse(donnees.colonnes)
+					colonnes.splice(colonne, 1)
+					const affichageColonnes = JSON.parse(donnees.affichageColonnes)
+					affichageColonnes.splice(colonne, 1)
+					const donneesBlocs = []
+					const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+					if (blocs === null) { socket.emit('erreur'); return false }
+					for (const bloc of blocs) {
+						const donneesBloc = new Promise(async function (resolve) {
+							let resultat = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+							resultat = Object.assign({}, resultat)
+							if (resultat === null) { resolve({}); return false }
+							resolve(resultat)
+						})
+						donneesBlocs.push(donneesBloc)
 					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						const colonnes = JSON.parse(donnees.colonnes)
-						colonnes.splice(colonne, 1)
-						const affichageColonnes = JSON.parse(donnees.affichageColonnes)
-						affichageColonnes.splice(colonne, 1)
-						const donneesBlocs = []
-						db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-							if (err) { socket.emit('erreur'); return false }
-							for (const bloc of blocs) {
-								const donneesBloc = new Promise(function (resolve) {
-									db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-										if (err) { resolve({}); return false }
-										resolve(resultat)
-									})
-								})
-								donneesBlocs.push(donneesBloc)
+					Promise.all(donneesBlocs).then(function (blocs) {
+						const blocsSupprimes = []
+						const blocsRestants = []
+						blocs.forEach(function (item) {
+							if (item && item.hasOwnProperty('colonne') && parseInt(item.colonne) === parseInt(colonne)) {
+								blocsSupprimes.push(item.bloc)
+							} else if (item) {
+								blocsRestants.push(item)
 							}
-							Promise.all(donneesBlocs).then(function (blocs) {
-								const blocsSupprimes = []
-								const blocsRestants = []
-								blocs.forEach(function (item) {
-									if (item && item.hasOwnProperty('colonne') && parseInt(item.colonne) === parseInt(colonne)) {
-										blocsSupprimes.push(item.bloc)
-									} else if (item) {
-										blocsRestants.push(item)
+						})
+						const donneesBlocsSupprimes = []
+						for (const blocSupprime of blocsSupprimes) {
+							const donneesBlocSupprime = new Promise(async function (resolve) {
+								const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + blocSupprime)
+								if (resultat === null) { resolve(); return false }
+								if (resultat === 1) {
+									let objet = await db.HGETALL('contenu-blocs:' + mur + ':' + blocSupprime)
+									objet = Object.assign({}, objet)
+									if (objet === null) { resolve(); return false }
+									if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
+										supprimerFichier(mur, objet.media)
 									}
-								})
-								const donneesBlocsSupprimes = []
-								for (const blocSupprime of blocsSupprimes) {
-									const donneesBlocSupprime = new Promise(function (resolve) {
-										db.exists('contenu-blocs:' + mur + ':' + blocSupprime, function (err, resultat) {
-											if (err) { resolve(); return false }
-											if (resultat === 1) {
-												db.hgetall('contenu-blocs:' + mur + ':' + blocSupprime, function (err, objet) {
-													if (err) { resolve(); return false }
-													if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
-														supprimerFichier(mur, objet.media)
-													}
-													if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
-														supprimerFichier(mur, objet.mediaExtra)
-													}
-													if (objet.hasOwnProperty('medias')) {
-														const medias = JSON.parse(objet.medias)
-														for (let i = 0; i < medias.length; i++) {
-															if (medias[i].hasOwnProperty('fichier')) {
-																supprimerFichier(mur, medias[i].fichier)
-															}
-														}
-													}
-													if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-														supprimerFichier(mur, path.basename(objet.vignette))
-													}
-													if (objet.hasOwnProperty('bloc') && objet.bloc === blocSupprime) {
-														const multi = db.multi()
-														multi.del('contenu-blocs:' + mur + ':' + blocSupprime)
-														multi.zrem('blocs:' + mur, blocSupprime)
-														multi.del('commentaires:' + blocSupprime)
-														multi.del('evaluations:' + blocSupprime)
-														multi.exec(function (err) {
-															if (err) { resolve(); return false }
-															resolve('supprime')
-														})
-													} else {
-														resolve()
-													}
-												})
-											} else {
-												resolve()
+									if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
+										supprimerFichier(mur, objet.mediaExtra)
+									}
+									if (objet.hasOwnProperty('medias')) {
+										const medias = JSON.parse(objet.medias)
+										for (let i = 0; i < medias.length; i++) {
+											if (medias[i].hasOwnProperty('fichier')) {
+												supprimerFichier(mur, medias[i].fichier)
 											}
-										})
-									})
-									donneesBlocsSupprimes.push(donneesBlocSupprime)
-								}
-								const donneesBlocsRestants = []
-								for (let i = 0; i < blocsRestants.length; i++) {
-									const donneeBloc = new Promise(function (resolve) {
-										if (parseInt(blocsRestants[i].colonne) > parseInt(colonne)) {
-											db.hset('contenu-blocs:' + mur + ':' + blocsRestants[i].bloc, 'colonne', (parseInt(blocsRestants[i].colonne) - 1), function (err) {
-												if (err) { resolve(); return false }
-												resolve(i)
-											})
-										} else {
-											resolve(i)
 										}
-									})
-									donneesBlocsRestants.push(donneeBloc)
+									}
+									if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && !String(objet.vignette).includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
+										supprimerFichier(mur, path.basename(objet.vignette))
+									}
+									if (objet.hasOwnProperty('bloc') && objet.bloc === blocSupprime) {
+										await db
+										.multi()
+										.DEL('contenu-blocs:' + mur + ':' + blocSupprime)
+										.ZREM('blocs:' + mur, blocSupprime)
+										.DEL('commentaires:' + blocSupprime)
+										.DEL('evaluations:' + blocSupprime)
+										.exec()
+										resolve('supprime')
+									} else {
+										resolve()
+									}
+								} else {
+									resolve()
 								}
-								Promise.all([donneesBlocsSupprimes, donneesBlocsRestants]).then(function () {
-									const date = dayjs().format()
-									const activiteId = parseInt(donnees.activite) + 1
-									const multi = db.multi()
-									multi.hmset('murs:' + mur, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes))
-									// Enregistrer entrée du registre d'activité
-									multi.hincrby('murs:' + mur, 'activite', 1)
-									multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-supprimee' }))
-									multi.exec(function () {
-										io.in('mur-' + mur).emit('supprimercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
-										socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-										socket.request.session.save()
-									})
-								})
 							})
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('deplacercolonne', function (mur, titre, affichage, direction, colonne, identifiant, nom) {
-			if (maintenance === true) {
-				socket.emit('maintenance')
-				return false
-			}
-			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						const colonnes = JSON.parse(donnees.colonnes)
-						const affichageColonnes = JSON.parse(donnees.affichageColonnes)
-						if (direction === 'gauche') {
-							colonnes.splice((parseInt(colonne) - 1), 0, titre)
-							colonnes.splice((parseInt(colonne) + 1), 1)
-							affichageColonnes.splice((parseInt(colonne) - 1), 0, affichage)
-							affichageColonnes.splice((parseInt(colonne) + 1), 1)
-						} else if (direction === 'droite') {
-							const titreDeplace = colonnes[parseInt(colonne) + 1]
-							colonnes.splice((parseInt(colonne) + 1), 0, titre)
-							colonnes.splice(parseInt(colonne), 1, titreDeplace)
-							colonnes.splice((parseInt(colonne) + 2), 1)
-							const affichageDeplace = affichageColonnes[parseInt(colonne) + 1]
-							affichageColonnes.splice((parseInt(colonne) + 1), 0, affichage)
-							affichageColonnes.splice(parseInt(colonne), 1, affichageDeplace)
-							affichageColonnes.splice((parseInt(colonne) + 2), 1)
+							donneesBlocsSupprimes.push(donneesBlocSupprime)
 						}
-						const donneesBlocs = []
-						db.zrange('blocs:' + mur, 0, -1, function (err, blocs) {
-							if (err) { socket.emit('erreur'); return false }
-							for (const bloc of blocs) {
-								const donneesBloc = new Promise(function (resolve) {
-									db.hgetall('contenu-blocs:' + mur + ':' + bloc, function (err, resultat) {
-										if (err) { resolve({}); return false }
-										resolve(resultat)
-									})
-								})
-								donneesBlocs.push(donneesBloc)
-							}
-							Promise.all(donneesBlocs).then(function (items) {
-								const donneesBlocsDeplaces = []
-								for (const item of items) {
-									const donneesBlocDeplace = new Promise(function (resolve) {
-										if (item && item.hasOwnProperty('bloc')) {
-											db.exists('contenu-blocs:' + mur + ':' + item.bloc, function (err, resultat) {
-												if (err) { resolve(); return false }
-												if (resultat === 1 && parseInt(item.colonne) === parseInt(colonne) && direction === 'gauche') {
-													db.hset('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', (parseInt(colonne) - 1), function (err) {
-														if (err) { resolve(); return false }
-														resolve('deplace')
-													})
-												} else if (resultat === 1 && parseInt(item.colonne) === parseInt(colonne) && direction === 'droite') {
-													db.hset('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', (parseInt(colonne) + 1), function (err) {
-														if (err) { resolve(); return false }
-														resolve('deplace')
-													})
-												} else if (resultat === 1 && parseInt(item.colonne) === (parseInt(colonne) - 1) && direction === 'gauche') {
-													db.hset('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', parseInt(colonne), function (err) {
-														if (err) { resolve(); return false }
-														resolve('deplace')
-													})
-												} else if (resultat === 1 && parseInt(item.colonne) === (parseInt(colonne) + 1) && direction === 'droite') {
-													db.hset('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', parseInt(colonne), function (err) {
-														if (err) { resolve(); return false }
-														resolve('deplace')
-													})
-												} else {
-													resolve()
-												}
-											})
-										} else {
-											resolve()
-										}
-									})
-									donneesBlocsDeplaces.push(donneesBlocDeplace)
+						const donneesBlocsRestants = []
+						for (let i = 0; i < blocsRestants.length; i++) {
+							const donneeBloc = new Promise(async function (resolve) {
+								if (parseInt(blocsRestants[i].colonne) > parseInt(colonne)) {
+									await db.HSET('contenu-blocs:' + mur + ':' + blocsRestants[i].bloc, 'colonne', (parseInt(blocsRestants[i].colonne) - 1))
+									resolve(i)
+								} else {
+									resolve(i)
 								}
-								Promise.all(donneesBlocsDeplaces).then(function () {
-									const date = dayjs().format()
-									const activiteId = parseInt(donnees.activite) + 1
-									const multi = db.multi()
-									multi.hmset('murs:' + mur, 'colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes))
-									// Enregistrer entrée du registre d'activité
-									multi.hincrby('murs:' + mur, 'activite', 1)
-									multi.zadd('activite:' + mur, activiteId, JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-deplacee' }))
-									multi.exec(function () {
-										io.in('mur-' + mur).emit('deplacercolonne', { identifiant: identifiant, nom: nom, titre: titre, direction: direction, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
-										socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-										socket.request.session.save()
-									})
-								})
 							})
+							donneesBlocsRestants.push(donneeBloc)
+						}
+						Promise.all([donneesBlocsSupprimes, donneesBlocsRestants]).then(async function () {
+							const date = dayjs().format()
+							const activiteId = parseInt(donnees.activite) + 1
+							await db
+							.multi()
+							.HSET('murs:' + mur, ['colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes)])
+							// Enregistrer entrée du registre d'activité
+							.HINCRBY('murs:' + mur, 'activite', 1)
+							.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-supprimee' }) }])
+							.exec()
+							io.in('mur-' + mur).emit('supprimercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
+							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+							socket.request.session.save()
 						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
-			} else {
-				socket.emit('deconnecte')
-			}
-		})
-
-		socket.on('debloquermur', function (identifiant, mur, acces) {
-			db.exists('utilisateurs:' + identifiant, function (err, resultat) {
-				if (err) { socket.emit('erreur'); return false }
-				if (resultat === 1) {
-					db.hgetall('utilisateurs:' + identifiant, function (err, utilisateur) {
-						if (err) { socket.emit('erreur'); return false }
-						socket.request.session.identifiant = identifiant
-						socket.request.session.nom = utilisateur.nom
-						socket.request.session.statut = 'auteur'
-						socket.request.session.langue = utilisateur.langue
-						if (!socket.request.session.hasOwnProperty('acces')) {
-							socket.request.session.acces = []
-						}
-						if (!socket.request.session.hasOwnProperty('murs')) {
-							socket.request.session.murs = []
-						}
-						if (!socket.request.session.murs.includes(mur)) {
-							socket.request.session.murs.push(mur)
-						}
-						if (!socket.request.session.hasOwnProperty('digidrive')) {
-							socket.request.session.digidrive = []
-						}
-						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-						socket.request.session.save()
-						if (acces === true) {
-							socket.emit('debloquermur', { identifiant: identifiant, nom: utilisateur.nom, langue: utilisateur.langue })
-						} else {
-							db.hgetall('murs:' + mur, async function (err, donnees) {
-								if (err || !donnees || donnees === null ) { socket.emit('erreur'); return false }
-								const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
-								socket.emit('debloquermur', { identifiant: identifiant, nom: utilisateur.nom, langue: utilisateur.langue, mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
-							})
-						}
 					})
 				} else {
-					socket.request.session.identifiant = identifiant
-					socket.request.session.statut = 'auteur'
-					if (!socket.request.session.hasOwnProperty('nom')) {
-						if (identifiant.length === 13 && identifiant.substring(0, 1) === 'u') {
-							socket.request.session.nom = identifiant.slice(0, 8).toUpperCase()
-						} else {
-							socket.request.session.nom = identifiant.toUpperCase()
-						}
-					}
-					if (!socket.request.session.hasOwnProperty('langue')) {
-						socket.request.session.langue = 'fr'
-					}
-					if (!socket.request.session.hasOwnProperty('acces')) {
-						socket.request.session.acces = []
-					}
-					if (!socket.request.session.hasOwnProperty('murs')) {
-						socket.request.session.murs = []
-					}
-					if (!socket.request.session.murs.includes(mur)) {
-						socket.request.session.murs.push(mur)
-					}
-					if (!socket.request.session.hasOwnProperty('digidrive')) {
-						socket.request.session.digidrive = []
-					}
-					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-					socket.request.session.save()
-					if (acces === true) {
-						socket.emit('debloquermur', { identifiant: identifiant, nom: socket.request.session.nom, langue: socket.request.session.langue })
-					} else {
-						db.hgetall('murs:' + mur, async function (err, donnees) {
-							if (err || !donnees || donnees === null ) { socket.emit('erreur'); return false }
-							const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
-							socket.emit('debloquermur', { identifiant: identifiant, nom: socket.request.session.nom, langue: socket.request.session.langue, mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
-						})
-					}
+					socket.emit('nonautorise')
 				}
-			})
+			} else {
+				socket.emit('deconnecte')
+			}
 		})
 
-		socket.on('modifiernotification', function (mur, admins) {
+		socket.on('deplacercolonne', async function (mur, titre, affichage, direction, colonne, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
 			}
-			db.hgetall('murs:' + mur, function () {
-				db.hset('murs:' + mur, 'notification', JSON.stringify(admins), function () {
-					io.in('mur-' + mur).emit('modifiernotification', admins)
-					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-					socket.request.session.save()
-				})
-			})
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					const colonnes = JSON.parse(donnees.colonnes)
+					const affichageColonnes = JSON.parse(donnees.affichageColonnes)
+					if (direction === 'gauche') {
+						colonnes.splice((parseInt(colonne) - 1), 0, titre)
+						colonnes.splice((parseInt(colonne) + 1), 1)
+						affichageColonnes.splice((parseInt(colonne) - 1), 0, affichage)
+						affichageColonnes.splice((parseInt(colonne) + 1), 1)
+					} else if (direction === 'droite') {
+						const titreDeplace = colonnes[parseInt(colonne) + 1]
+						colonnes.splice((parseInt(colonne) + 1), 0, titre)
+						colonnes.splice(parseInt(colonne), 1, titreDeplace)
+						colonnes.splice((parseInt(colonne) + 2), 1)
+						const affichageDeplace = affichageColonnes[parseInt(colonne) + 1]
+						affichageColonnes.splice((parseInt(colonne) + 1), 0, affichage)
+						affichageColonnes.splice(parseInt(colonne), 1, affichageDeplace)
+						affichageColonnes.splice((parseInt(colonne) + 2), 1)
+					}
+					const donneesBlocs = []
+					const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+					if (blocs === null) { socket.emit('erreur'); return false }
+					for (const bloc of blocs) {
+						const donneesBloc = new Promise(async function (resolve) {
+							let resultat = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+							resultat = Object.assign({}, resultat)
+							if (resultat === null) { resolve({}); return false }
+							resolve(resultat)
+						})
+						donneesBlocs.push(donneesBloc)
+					}
+					Promise.all(donneesBlocs).then(async function (items) {
+						const donneesBlocsDeplaces = []
+						for (const item of items) {
+							const donneesBlocDeplace = new Promise(async function (resolve) {
+								if (item && item.hasOwnProperty('bloc')) {
+									const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + item.bloc)
+									if (resultat === null) { resolve(); return false }
+									if (resultat === 1 && parseInt(item.colonne) === parseInt(colonne) && direction === 'gauche') {
+										await db.HSET('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', (parseInt(colonne) - 1))
+										resolve('deplace')
+									} else if (resultat === 1 && parseInt(item.colonne) === parseInt(colonne) && direction === 'droite') {
+										await db.HSET('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', (parseInt(colonne) + 1))
+										resolve('deplace')
+									} else if (resultat === 1 && parseInt(item.colonne) === (parseInt(colonne) - 1) && direction === 'gauche') {
+										await db.HSET('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', parseInt(colonne))
+										resolve('deplace')
+									} else if (resultat === 1 && parseInt(item.colonne) === (parseInt(colonne) + 1) && direction === 'droite') {
+										await db.HSET('contenu-blocs:' + mur + ':' + item.bloc, 'colonne', parseInt(colonne))
+										resolve('deplace')
+									} else {
+										resolve()
+									}
+								} else {
+									resolve()
+								}
+							})
+							donneesBlocsDeplaces.push(donneesBlocDeplace)
+						}
+						Promise.all(donneesBlocsDeplaces).then(async function () {
+							const date = dayjs().format()
+							const activiteId = parseInt(donnees.activite) + 1
+							await db
+							.multi()
+							.HSET('murs:' + mur, ['colonnes', JSON.stringify(colonnes), 'affichageColonnes', JSON.stringify(affichageColonnes)])
+							// Enregistrer entrée du registre d'activité
+							.HINCRBY('murs:' + mur, 'activite', 1)
+							.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-deplacee' }) }])
+							.exec()
+							io.in('mur-' + mur).emit('deplacercolonne', { identifiant: identifiant, nom: nom, titre: titre, direction: direction, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
+							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+							socket.request.session.save()
+						})
+					})
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('debloquermur', async function (identifiant, mur, acces) {
+			const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+			if (resultat === null) { socket.emit('erreur'); return false }
+			if (resultat === 1) {
+				let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+				utilisateur = Object.assign({}, utilisateur)
+				if (utilisateur === null) { socket.emit('erreur'); return false }
+				socket.request.session.identifiant = identifiant
+				socket.request.session.nom = utilisateur.nom
+				socket.request.session.statut = 'auteur'
+				socket.request.session.langue = utilisateur.langue
+				if (!socket.request.session.hasOwnProperty('acces')) {
+					socket.request.session.acces = []
+				}
+				if (!socket.request.session.hasOwnProperty('murs')) {
+					socket.request.session.murs = []
+				}
+				if (!socket.request.session.murs.includes(mur)) {
+					socket.request.session.murs.push(mur)
+				}
+				if (!socket.request.session.hasOwnProperty('digidrive')) {
+					socket.request.session.digidrive = []
+				}
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
+				if (acces === true) {
+					socket.emit('debloquermur', { identifiant: identifiant, nom: utilisateur.nom, langue: utilisateur.langue })
+				} else {
+					let donnees = await db.HGETALL('murs:' + mur)
+					donnees = Object.assign({}, donnees)
+					if (donnees === null ) { socket.emit('erreur'); return false }
+					const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
+					socket.emit('debloquermur', { identifiant: identifiant, nom: utilisateur.nom, langue: utilisateur.langue, mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
+				}
+			} else {
+				socket.request.session.identifiant = identifiant
+				socket.request.session.statut = 'auteur'
+				if (!socket.request.session.hasOwnProperty('nom')) {
+					if (identifiant.length === 13 && identifiant.substring(0, 1) === 'u') {
+						socket.request.session.nom = identifiant.slice(0, 8).toUpperCase()
+					} else {
+						socket.request.session.nom = identifiant.toUpperCase()
+					}
+				}
+				if (!socket.request.session.hasOwnProperty('langue')) {
+					socket.request.session.langue = 'fr'
+				}
+				if (!socket.request.session.hasOwnProperty('acces')) {
+					socket.request.session.acces = []
+				}
+				if (!socket.request.session.hasOwnProperty('murs')) {
+					socket.request.session.murs = []
+				}
+				if (!socket.request.session.murs.includes(mur)) {
+					socket.request.session.murs.push(mur)
+				}
+				if (!socket.request.session.hasOwnProperty('digidrive')) {
+					socket.request.session.digidrive = []
+				}
+				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+				socket.request.session.save()
+				if (acces === true) {
+					socket.emit('debloquermur', { identifiant: identifiant, nom: socket.request.session.nom, langue: socket.request.session.langue })
+				} else {
+					let donnees = await db.HGETALL('murs:' + mur)
+					donnees = Object.assign({}, donnees)
+					if (donnees === null ) { socket.emit('erreur'); return false }
+					const donneesMur = await recupererDonneesMurProtege(donnees, mur, identifiant)
+					socket.emit('debloquermur', { identifiant: identifiant, nom: socket.request.session.nom, langue: socket.request.session.langue, mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
+				}
+			}
+		})
+
+		socket.on('modifiernotification', async function (mur, admins) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			await db.HSET('murs:' + mur, 'notification', JSON.stringify(admins))
+			io.in('mur-' + mur).emit('modifiernotification', admins)
+			socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+			socket.request.session.save()
 		})
 
 		socket.on('verifiermodifierbloc', function (mur, bloc, identifiant) {
@@ -5630,25 +5607,24 @@ async function demarrerServeur () {
 			}
 		})
 
-		socket.on('supprimeractivite', function (mur, id, identifiant) {
+		socket.on('supprimeractivite', async function (mur, id, identifiant) {
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
-				db.hgetall('murs:' + mur, function (err, donnees) {
-					if (err || !donnees || donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-					const proprietaire = donnees.identifiant
-					let admins = []
-					if (donnees.hasOwnProperty('admins')) {
-						admins = JSON.parse(donnees.admins)
-					}
-					if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-						db.zremrangebyscore('activite:' + mur, id, id, function () {
-							io.in('mur-' + mur).emit('supprimeractivite', id, identifiant)
-							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-							socket.request.session.save()
-						})
-					} else {
-						socket.emit('nonautorise')
-					}
-				})
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = JSON.parse(donnees.admins)
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
+					await db.ZREMRANGEBYSCORE('activite:' + mur, id, id)
+					io.in('mur-' + mur).emit('supprimeractivite', id, identifiant)
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
 			} else {
 				socket.emit('deconnecte')
 			}
@@ -5686,426 +5662,400 @@ async function demarrerServeur () {
 		})
 	})
 
-	function creerMur (res, id, token, slug, titre, date, identifiant) {
-		const multi = db.multi()
+	async function creerMur (res, id, token, slug, titre, date, identifiant) {
 		if (id === 1) {
-			multi.set('mur', 1)
+			await db.SET('mur', 1)
 		} else {
-			multi.incr('mur')
+			await db.INCR('mur')
 		}
-		multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'epinglage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
-		multi.sadd('murs-crees:' + identifiant, id)
-		multi.sadd('utilisateurs-murs:' + id, identifiant)
-		multi.hset('dates-murs:' + id, 'date', date)
-		multi.exec(async function () {
-			const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-			await fs.mkdirp(chemin)
-			res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', epinglage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
-		})
+		await db
+		.multi()
+		.HSET('murs:' + id, ['id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'epinglage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0])
+		.SADD('murs-crees:' + identifiant, id.toString())
+		.SADD('utilisateurs-murs:' + id, identifiant)
+		.HSET('dates-murs:' + id, 'date', date)
+		.exec()
+		const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+		await fs.mkdirp(chemin)
+		res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', epinglage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
 	}
 
-	function creerMurSansCompte (req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, type) {
-		const multi = db.multi()
+	async function creerMurSansCompte (req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, type) {
 		if (id === 1) {
-			multi.set('mur', 1)
+			await db.SET('mur', 1)
 		} else {
-			multi.incr('mur')
+			await db.INCR('mur')
 		}
-		multi.hmset('murs:' + id, 'id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'motdepasse', hash, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'epinglage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0)
+		await db
+		.multi()
+		.HSET('murs:' + id, ['id', id, 'token', token, 'titre', titre, 'identifiant', identifiant, 'motdepasse', hash, 'fond', '/img/fond7.png', 'acces', 'public', 'motdepasseAdmin', '', 'contributions', 'ouvertes', 'affichage', 'mur', 'registreActivite', 'active', 'conversation', 'desactivee', 'listeUtilisateurs', 'activee', 'editionNom', 'desactivee', 'fichiers', 'actives', 'enregistrements', 'desactives', 'liens', 'actives', 'documents', 'desactives', 'commentaires', 'desactives', 'evaluations', 'desactivees', 'verrouillage', 'desactive', 'epinglage', 'desactive', 'copieBloc', 'desactivee', 'ordre', 'croissant', 'largeur', 'normale', 'date', date, 'colonnes', JSON.stringify([]), 'affichageColonnes', JSON.stringify([]), 'bloc', 0, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0])
+		.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'date', date, 'nom', nom, 'langue', langue])
+		.exec()
 		if (type === 'api') {
-			multi.sadd('murs-crees:' + identifiant, id)
+			await db.SADD('murs-crees:' + identifiant, id.toString())
 		}
-		multi.hmset('utilisateurs:' + identifiant, 'id', identifiant, 'date', date, 'nom', nom, 'langue', langue)
-		multi.exec(async function () {
-			const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
-			await fs.mkdirp(chemin)
-			if (type === 'api') {
-				res.send(id + '/' + token + '/' + slug)
-			} else {
-				req.session.langue = langue
-				req.session.statut = 'auteur'
-				req.session.cookie.expires = new Date(Date.now() + dureeSession)
-				res.json({ id: id, token: token, slug: slug })
-			}
-		})
+		const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+		await fs.mkdirp(chemin)
+		if (type === 'api') {
+			res.send(id + '/' + token + '/' + slug)
+		} else {
+			req.session.langue = langue
+			req.session.statut = 'auteur'
+			req.session.cookie.expires = new Date(Date.now() + dureeSession)
+			res.json({ id: id, token: token, slug: slug })
+		}
 	}
 
 	async function ajouterMurDansDb (id, donnees) {
 		return new Promise(function (resolveMain) {
 			const donneesBlocs = []
 			for (const [indexItem, item] of donnees.blocs.entries()) {
-				const donneesBloc = new Promise(function (resolve) {
-					const multi = db.multi()
-					multi.hmset('contenu-blocs:' + id + ':' + item.bloc, 'id', item.id, 'bloc', item.bloc, 'typeBloc', item.typeBloc, 'titre', item.titre, 'texte', item.texte, 'media', item.media, 'iframe', item.iframe, 'type', item.type, 'source', item.source, 'vignette', item.vignette, 'vignetteActivee', item.vignetteActivee, 'mediaExtra', item.mediaExtra, 'medias', item.medias, 'edition', item.edition, 'date', item.date, 'identifiant', item.identifiant, 'commentaires', item.commentaires, 'evaluations', item.evaluations, 'colonne', item.colonne, 'visibilite', item.visibilite, 'motdepasse', item.motdepasse, 'epinglee', item.epinglee, 'couleur', item.couleur)
-					multi.zadd('blocs:' + id, indexItem, item.bloc)
+				const donneesBloc = new Promise(async function (resolve) {
+					await db
+					.multi()
+					.HSET('contenu-blocs:' + id + ':' + item.bloc, ['id', item.id, 'bloc', item.bloc, 'typeBloc', item.typeBloc, 'titre', item.titre, 'texte', item.texte, 'media', item.media, 'iframe', item.iframe, 'type', item.type, 'source', item.source, 'vignette', item.vignette, 'vignetteActivee', item.vignetteActivee, 'mediaExtra', item.mediaExtra, 'medias', item.medias, 'edition', item.edition, 'date', item.date, 'identifiant', item.identifiant, 'commentaires', item.commentaires, 'evaluations', item.evaluations, 'colonne', item.colonne, 'visibilite', item.visibilite, 'motdepasse', item.motdepasse, 'epinglee', item.epinglee, 'couleur', item.couleur])
+					.ZADD('blocs:' + id, [{ score: indexItem, value: item.bloc }])
+					.exec()
 					for (const commentaire of item.listeCommentaires) {
 						if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
-							multi.zadd('commentaires:' + item.bloc, commentaire.id, JSON.stringify(commentaire))
+							await db.ZADD('commentaires:' + item.bloc, [{ score: commentaire.id, value: JSON.stringify(commentaire) }])
 						}
 					}
 					for (const evaluation of item.listeEvaluations) {
 						if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
-							multi.zadd('evaluations:' + item.bloc, evaluation.id, JSON.stringify(evaluation))
+							await db.ZADD('evaluations:' + item.bloc, [{ score: evaluation.id, value: JSON.stringify(evaluation) }])
 						}
 					}
-					multi.exec(function () {
-						resolve()
-					})
+					resolve()
 				})
 				donneesBlocs.push(donneesBloc)
 			}
-			Promise.all(donneesBlocs).then(function () {
+			Promise.all(donneesBlocs).then(async function () {
 				let epinglage = 'desactive'
 				if (donnees.mur.hasOwnProperty('epinglage')) {
 					epinglage = donnees.mur.epinglage
 				}
-				const multi = db.multi()
 				if (donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.hasOwnProperty('code')) {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues])
 				} else if (donnees.mur.hasOwnProperty('motdepasse') && !donnees.mur.hasOwnProperty('code')) {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues])
 				} else if (donnees.mur.hasOwnProperty('code')) {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues])
 				} else {
-					multi.hmset('murs:' + id, 'id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues)
+					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues])
 				}
 				for (const activite of donnees.activite) {
 					if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
-						multi.zadd('activite:' + id, activite.id, JSON.stringify(activite))
+						await db.ZADD('activite:' + id, [{ score: activite.id, value: JSON.stringify(activite) }])
 					}
 				}
-				multi.exec(async function () {
-					await fs.remove(path.join(__dirname, '..', '/static/murs/' + id + '.json'))
-					await fs.remove(path.join(__dirname, '..', '/static/murs/mur-' + id + '.json'))
+				if (pgdb === true) {
+					const client = await pool.connect()
+					await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(id)])
+					client.release()
 					resolveMain('mur_ajoute_dans_db')
-				})
+				} else {
+					resolveMain('')
+				}
 			})
 		})
 	}
 
 	function recupererDonneesUtilisateur (identifiant) {
 		// Murs créés
-		const donneesMursCrees = new Promise(function (resolveMain) {
-			db.smembers('murs-crees:' + identifiant, function (err, murs) {
-				const donneesMurs = []
-				if (err) { resolveMain(donneesMurs) }
-				for (const mur of murs) {
-					const donneeMur = new Promise(function (resolve) {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { resolve({}); return false }
-							if (resultat === 1) {
-								db.hgetall('murs:' + mur, function (err, donnees) {
-									if (err) { resolve({}); return false }
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
-								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('identifiant')) {
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
+		const donneesMursCrees = new Promise(async function (resolveMain) {
+			const murs = await db.SMEMBERS('murs-crees:' + identifiant)
+			const donneesMurs = []
+			if (murs === null) { resolveMain(donneesMurs) }
+			for (const mur of murs) {
+				const donneeMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve({}); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+						if (reponse === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) {
+								donnees.nom = donnees.identifiant
+								resolve(donnees)
+								return false
+							}
+							if (utilisateur.nom === '') {
+								donnees.nom = donnees.identifiant
+							} else {
+								donnees.nom = utilisateur.nom
+							}
+							resolve(donnees)
+						} else {
+							donnees.nom = donnees.identifiant
+							resolve(donnees)
+						}
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 1) {
+							const donnees = JSON.parse(donneesQ.rows[0].donnees)
+							if (donnees.hasOwnProperty('identifiant')) {
+								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+								if (reponse === 1) {
+									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+									utilisateur = Object.assign({}, utilisateur)
+									if (utilisateur === null) {
+										donnees.nom = donnees.identifiant
+										resolve(donnees)
+										return false
+									}
+									if (utilisateur.nom === '') {
+										donnees.nom = donnees.identifiant
+									} else {
+										donnees.nom = utilisateur.nom
+									}
+									resolve(donnees)
 								} else {
-									resolve({})
+									donnees.nom = donnees.identifiant
+									resolve(donnees)
 								}
 							} else {
 								resolve({})
 							}
-						})
-					})
-					donneesMurs.push(donneeMur)
-				}
-				Promise.all(donneesMurs).then(function (resultat) {
-					resolveMain(resultat)
+						} else {
+							resolve({})
+						}
+					} else {
+						resolve({})
+					}
 				})
+				donneesMurs.push(donneeMur)
+			}
+			Promise.all(donneesMurs).then(function (resultat) {
+				resolveMain(resultat)
 			})
 		})
 		// Murs rejoints
-		const donneesMursRejoints = new Promise(function (resolveMain) {
-			db.smembers('murs-rejoints:' + identifiant, function (err, murs) {
-				const donneesMurs = []
-				if (err) { resolveMain(donneesMurs); return false }
-				for (const mur of murs) {
-					const donneeMur = new Promise(function (resolve) {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { resolve({}); return false }
-							if (resultat === 1) {
-								db.hgetall('murs:' + mur, function (err, donnees) {
-									if (err) { resolve({}); return false }
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
-								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('identifiant')) {
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
+		const donneesMursRejoints = new Promise(async function (resolveMain) {
+			const murs = await db.SMEMBERS('murs-rejoints:' + identifiant)
+			const donneesMurs = []
+			if (murs === null) { resolveMain(donneesMurs); return false }
+			for (const mur of murs) {
+				const donneeMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve({}); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+						if (reponse === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) {
+								donnees.nom = donnees.identifiant
+								resolve(donnees)
+								return false
+							}
+							if (utilisateur.nom === '') {
+								donnees.nom = donnees.identifiant
+							} else {
+								donnees.nom = utilisateur.nom
+							}
+							resolve(donnees)
+						} else {
+							donnees.nom = donnees.identifiant
+							resolve(donnees)
+						}
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 1) {
+							const donnees = JSON.parse(donneesQ.rows[0].donnees)
+							if (donnees.hasOwnProperty('identifiant')) {
+								const reponse = db.EXISTS('utilisateurs:' + donnees.identifiant)
+								if (reponse === 1) {
+									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+									utilisateur = Object.assign({}, utilisateur)
+									if (utilisateur === null) {
+										donnees.nom = donnees.identifiant
+										resolve(donnees)
+										return false
+									}
+									if (utilisateur.nom === '') {
+										donnees.nom = donnees.identifiant
+									} else {
+										donnees.nom = utilisateur.nom
+									}
+									resolve(donnees)
 								} else {
-									resolve({})
+									donnees.nom = donnees.identifiant
+									resolve(donnees)
 								}
 							} else {
 								resolve({})
 							}
-						})
-					})
-					donneesMurs.push(donneeMur)
-				}
-				Promise.all(donneesMurs).then(function (resultat) {
-					resolveMain(resultat)
+						} else {
+							resolve({})
+						}
+					} else {
+						resolve({})
+					}
 				})
+				donneesMurs.push(donneeMur)
+			}
+			Promise.all(donneesMurs).then(function (resultat) {
+				resolveMain(resultat)
 			})
 		})
 		// Murs administrés
-		const donneesMursAdmins = new Promise(function (resolveMain) {
-			db.smembers('murs-admins:' + identifiant, function (err, murs) {
-				const donneesMurs = []
-				if (err) { resolveMain(donneesMurs) }
-				for (const mur of murs) {
-					const donneeMur = new Promise(function (resolve) {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { resolve({}); return false }
-							if (resultat === 1) {
-								db.hgetall('murs:' + mur, function (err, donnees) {
-									if (err) { resolve({}); return false }
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
-								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('identifiant')) {
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
+		const donneesMursAdmins = new Promise(async function (resolveMain) {
+			const murs = await db.SMEMBERS('murs-admins:' + identifiant)
+			const donneesMurs = []
+			if (murs === null) { resolveMain(donneesMurs) }
+			for (const mur of murs) {
+				const donneeMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve({}); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+						if (reponse === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) {
+								donnees.nom = donnees.identifiant
+								resolve(donnees)
+								return false
+							}
+							if (utilisateur.nom === '') {
+								donnees.nom = donnees.identifiant
+							} else {
+								donnees.nom = utilisateur.nom
+							}
+							resolve(donnees)
+						} else {
+							donnees.nom = donnees.identifiant
+							resolve(donnees)
+						}
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 1) {
+							const donnees = JSON.parse(donneesQ.rows[0].donnees)
+							if (donnees.hasOwnProperty('identifiant')) {
+								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+								if (reponse === 1) {
+									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+									utilisateur = Object.assign({}, utilisateur)
+									if (utilisateur === null) {
+										donnees.nom = donnees.identifiant
+										resolve(donnees)
+										return false
+									}
+									if (utilisateur.nom === '') {
+										donnees.nom = donnees.identifiant
+									} else {
+										donnees.nom = utilisateur.nom
+									}
+									resolve(donnees)
 								} else {
-									resolve({})
+									donnees.nom = donnees.identifiant
+									resolve(donnees)
 								}
 							} else {
 								resolve({})
 							}
-						})
-					})
-					donneesMurs.push(donneeMur)
-				}
-				Promise.all(donneesMurs).then(function (resultat) {
-					resolveMain(resultat)
+						} else {
+							resolve({})
+						}
+					} else {
+						resolve({})
+					}
 				})
+				donneesMurs.push(donneeMur)
+			}
+			Promise.all(donneesMurs).then(function (resultat) {
+				resolveMain(resultat)
 			})
 		})
 		// Murs favoris
-		const donneesMursFavoris = new Promise(function (resolveMain) {
-			db.smembers('murs-favoris:' + identifiant, function (err, murs) {
-				const donneesMurs = []
-				if (err) { resolveMain(donneesMurs) }
-				for (const mur of murs) {
-					const donneeMur = new Promise(function (resolve) {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { resolve({}); return false }
-							if (resultat === 1) {
-								db.hgetall('murs:' + mur, function (err, donnees) {
-									if (err) { resolve({}); return false }
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
-								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('identifiant')) {
-									db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-										if (err) {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-											return false
-										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-												if (err) {
-													donnees.nom = donnees.identifiant
-													resolve(donnees)
-													return false
-												}
-												if (utilisateur.nom === '') {
-													donnees.nom = donnees.identifiant
-												} else {
-													donnees.nom = utilisateur.nom
-												}
-												resolve(donnees)
-											})
-										} else {
-											donnees.nom = donnees.identifiant
-											resolve(donnees)
-										}
-									})
+		const donneesMursFavoris = new Promise(async function (resolveMain) {
+			const murs = await db.SMEMBERS('murs-favoris:' + identifiant)
+			const donneesMurs = []
+			if (murs === null) { resolveMain(donneesMurs) }
+			for (const mur of murs) {
+				const donneeMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve({}); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+						if (reponse === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) {
+								donnees.nom = donnees.identifiant
+								resolve(donnees)
+								return false
+							}
+							if (utilisateur.nom === '') {
+								donnees.nom = donnees.identifiant
+							} else {
+								donnees.nom = utilisateur.nom
+							}
+							resolve(donnees)
+						} else {
+							donnees.nom = donnees.identifiant
+							resolve(donnees)
+						}
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 1) {
+							const donnees = JSON.parse(donneesQ.rows[0].donnees)
+							if (donnees.hasOwnProperty('identifiant')) {
+								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+								if (reponse === 1) {
+									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+									utilisateur = Object.assign({}, utilisateur)
+									if (utilisateur === null) {
+										donnees.nom = donnees.identifiant
+										resolve(donnees)
+										return false
+									}
+									if (utilisateur.nom === '') {
+										donnees.nom = donnees.identifiant
+									} else {
+										donnees.nom = utilisateur.nom
+									}
+									resolve(donnees)
 								} else {
-									resolve({})
+									donnees.nom = donnees.identifiant
+									resolve(donnees)
 								}
 							} else {
 								resolve({})
 							}
-						})
-					})
-					donneesMurs.push(donneeMur)
-				}
-				Promise.all(donneesMurs).then(function (resultat) {
-					resolveMain(resultat)
+						} else {
+							resolve({})
+						}
+					} else {
+						resolve({})
+					}
 				})
+				donneesMurs.push(donneeMur)
+			}
+			Promise.all(donneesMurs).then(function (resultat) {
+				resolveMain(resultat)
 			})
 		})
 		return Promise.all([donneesMursCrees, donneesMursRejoints, donneesMursAdmins, donneesMursFavoris])
@@ -6113,353 +6063,338 @@ async function demarrerServeur () {
 
 	function recupererDonneesAuteur (identifiant) {
 		// Murs créés
-		const donneesMursCrees = new Promise(function (resolveMain) {
-			db.smembers('murs-crees:' + identifiant, function (err, murs) {
-				const donneesMurs = []
-				if (err) { resolveMain(donneesMurs); return false }
-				for (const mur of murs) {
-					const donneeMur = new Promise(function (resolve) {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { resolve({}); return false }
-							if (resultat === 1) {
-								db.hgetall('murs:' + mur, function (err, donnees) {
-									if (err) { resolve({}); return false }
-									resolve(donnees)
-								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('identifiant')) {
-									resolve(donnees)
-								} else {
-									resolve({})
-								}
+		const donneesMursCrees = new Promise(async function (resolveMain) {
+			const murs = await db.SMEMBERS('murs-crees:' + identifiant)
+			const donneesMurs = []
+			if (murs === null) { resolveMain(donneesMurs); return false }
+			for (const mur of murs) {
+				const donneeMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve({}); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						resolve(donnees)
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 1) {
+							const donnees = JSON.parse(donneesQ.rows[0].donnees)
+							if (donnees.hasOwnProperty('identifiant')) {
+								resolve(donnees)
 							} else {
 								resolve({})
 							}
-						})
-					})
-					donneesMurs.push(donneeMur)
-				}
-				Promise.all(donneesMurs).then(function (resultat) {
-					resolveMain(resultat)
+						} else {
+							resolve({})
+						}
+					} else {
+						resolve({})
+					}
 				})
+				donneesMurs.push(donneeMur)
+			}
+			Promise.all(donneesMurs).then(function (resultat) {
+				resolveMain(resultat)
 			})
 		})
 		// Murs administrés
-		const donneesMursAdmins = new Promise(function (resolveMain) {
-			db.smembers('murs-admins:' + identifiant, function (err, murs) {
-				const donneesMurs = []
-				if (err) { resolveMain(donneesMurs); return false }
-				for (const mur of murs) {
-					const donneeMur = new Promise(function (resolve) {
-						db.exists('murs:' + mur, async function (err, resultat) {
-							if (err) { resolve({}); return false }
-							if (resultat === 1) {
-								db.hgetall('murs:' + mur, function (err, donnees) {
-									if (err) { resolve({}); return false }
-									resolve(donnees)
-								})
-							} else if (resultat !== 1 && await fs.pathExists(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))) {
-								const donnees = await fs.readJson(path.join(__dirname, '..', '/static/murs/mur-' + mur + '.json'))
-								if (typeof donnees === 'object' && donnees !== null && donnees.hasOwnProperty('identifiant')) {
-									resolve(donnees)
-								} else {
-									resolve({})
-								}
+		const donneesMursAdmins = new Promise(async function (resolveMain) {
+			const murs = await db.SMEMBERS('murs-admins:' + identifiant)
+			const donneesMurs = []
+			if (murs === null) { resolveMain(donneesMurs); return false }
+			for (const mur of murs) {
+				const donneeMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve({}); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						resolve(donnees)
+					} else if (resultat !== 1 && pgdb === true) {
+						const client = await pool.connect()
+						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
+						client.release()
+						if (Object.keys(donneesQ.rows[0]).length === 1) {
+							const donnees = JSON.parse(donneesQ.rows[0].donnees)
+							if (donnees.hasOwnProperty('identifiant')) {
+								resolve(donnees)
 							} else {
 								resolve({})
 							}
-						})
-					})
-					donneesMurs.push(donneeMur)
-				}
-				Promise.all(donneesMurs).then(function (resultat) {
-					resolveMain(resultat)
+						} else {
+							resolve({})
+						}
+					} else {
+						resolve({})
+					}
 				})
+				donneesMurs.push(donneeMur)
+			}
+			Promise.all(donneesMurs).then(function (resultat) {
+				resolveMain(resultat)
 			})
 		})
 		return Promise.all([donneesMursCrees, donneesMursAdmins])
 	}
 
-	function recupererDonneesMur (id, token, identifiant, statut, murs, res) {
-		db.hgetall('murs:' + id, function (err, mur) {
-			if (err) { res.send('erreur'); return false }
-			if (mur !== null && mur.hasOwnProperty('id') && mur.id === id && mur.hasOwnProperty('token') && mur.token === token) {
-				mur.admins = JSON.parse(mur.admins)
-				// Vérifier si admin
-				let admin = false
-				if (mur.admins.includes(identifiant) || mur.identifiant === identifiant || (statut === 'auteur' && murs && murs.includes(id))) {
-					admin = true
+	async function recupererDonneesMur (id, token, identifiant, statut, murs, res) {
+		let mur = await db.HGETALL('murs:' + id)
+		mur = Object.assign({}, mur)
+		if (mur !== null && mur.hasOwnProperty('id') && mur.id === id && mur.hasOwnProperty('token') && mur.token === token) {
+			mur.admins = JSON.parse(mur.admins)
+			// Vérifier si admin
+			let admin = false
+			if (mur.admins.includes(identifiant) || mur.identifiant === identifiant || (statut === 'auteur' && murs && murs.includes(id))) {
+				admin = true
+			}
+			// Vérifier accès
+			let accesCode = false
+			if (mur.hasOwnProperty('code') && mur.acces === 'code') {
+				accesCode = true
+			}
+			let accesPrive = false
+			if (mur.acces === 'prive') {
+				accesPrive = true
+			}
+			const nombreColonnes = JSON.parse(mur.colonnes).length
+			mur.colonnes = JSON.parse(mur.colonnes)
+			if (mur.hasOwnProperty('notification')) {
+				mur.notification = JSON.parse(mur.notification)
+			}
+			const slug = definirSlug(mur.titre)
+			mur.slug = slug
+			let vues = parseInt(mur.vues)
+			if (!admin && !accesPrive) {
+				vues = vues + 1
+			}
+			mur.affichageColonnes = JSON.parse(mur.affichageColonnes)
+			if (!mur.hasOwnProperty('epinglage')) {
+				mur.epinglage = 'desactive'
+			}
+			// Cacher mots de passe front
+			if (mur.hasOwnProperty('motdepasse')) {
+				mur.motdepasse = ''
+			}
+			if (!admin && mur.hasOwnProperty('motdepasseAdmin')) {
+				mur.motdepasseAdmin = ''
+			}
+			// Cacher données front
+			if (!admin) {
+				if (accesCode) {
+					mur.code = ''
 				}
-				// Vérifier accès
-				let accesCode = false
-				if (mur.hasOwnProperty('code') && mur.acces === 'code') {
-					accesCode = true
+				if (accesCode || accesPrive) {
+					mur.colonnes = []
+					mur.affichageColonnes = []
 				}
-				let accesPrive = false
-				if (mur.acces === 'prive') {
-					accesPrive = true
-				}
-				const nombreColonnes = JSON.parse(mur.colonnes).length
-				mur.colonnes = JSON.parse(mur.colonnes)
-				if (mur.hasOwnProperty('notification')) {
-					mur.notification = JSON.parse(mur.notification)
-				}
-				const slug = definirSlug(mur.titre)
-				mur.slug = slug
-				let vues = parseInt(mur.vues)
-				if (!admin && !accesPrive) {
-					vues = vues + 1
-				}
-				mur.affichageColonnes = JSON.parse(mur.affichageColonnes)
-				if (!mur.hasOwnProperty('epinglage')) {
-					mur.epinglage = 'desactive'
-				}
-				// Cacher mots de passe front
-				if (mur.hasOwnProperty('motdepasse')) {
-					mur.motdepasse = ''
-				}
-				if (!admin && mur.hasOwnProperty('motdepasseAdmin')) {
-					mur.motdepasseAdmin = ''
-				}
-				// Cacher données front
-				if (!admin) {
-					if (accesCode) {
-						mur.code = ''
-					}
-					if (accesCode || accesPrive) {
-						mur.colonnes = []
-						mur.affichageColonnes = []
-					}
-					mur.admins = []
-				}
-				const blocsMur = new Promise(function (resolveMain) {
-					const donneesBlocs = []
-					if (admin || (!accesCode && !accesPrive)) {
-						db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
-							if (err) { resolveMain(donneesBlocs); return false }
-							for (const bloc of blocs) {
-								const donneesBloc = new Promise(function (resolve) {
-									db.hgetall('contenu-blocs:' + id + ':' + bloc, function (err, donnees) {
-										if (err) { resolve({}); return false }
-										if (donnees && Object.keys(donnees).length > 0) {
-											// Pour résoudre le problème des capsules qui sont référencées dans une colonne inexistante
-											if (parseInt(donnees.colonne) >= nombreColonnes) {
-												donnees.colonne = nombreColonnes - 1
-											}
-											donnees.medias = JSON.parse(donnees.medias)
-											if (!donnees.hasOwnProperty('motdepasse')) {
-												donnees.motdepasse = ''
-											}
-											if (!donnees.hasOwnProperty('epinglee')) {
-												donnees.epinglee = 'non'
-											}
-											// Ne pas ajouter les capsules en attente de modération ou privées
-											if (((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') && donnees.identifiant !== identifiant && !admin) {
-												resolve({})
-												return false
-											}
-											// Ne pas ajouter les capsules dans les colonnes masquées
-											if (mur.affichage === 'colonnes' && mur.affichageColonnes[donnees.colonne] === false && mur.identifiant !== identifiant && !admin) {
-												resolve({})
-												return false
-											}
-											db.zcard('commentaires:' + bloc, function (err, commentaires) {
-												if (err) {
-													donnees.commentaires = []
-													resolve(donnees)
-													return false
-												}
-												donnees.commentaires = commentaires
-												db.zrange('evaluations:' + bloc, 0, -1, function (err, evaluations) {
-													if (err) {
-														donnees.evaluations = []
-														resolve(donnees)
-														return false
-													}
-													const donneesEvaluations = []
-													evaluations.forEach(function (evaluation) {
-														donneesEvaluations.push(JSON.parse(evaluation))
-													})
-													donnees.evaluations = donneesEvaluations
-													db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-														if (err) {
-															donnees.nom = ''
-															resolve(donnees)
-															return false
-														}
-														if (resultat === 1) {
-															db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-																if (err) {
-																	donnees.nom = ''
-																	resolve(donnees)
-																	return false
-																}
-																donnees.nom = utilisateur.nom
-																resolve(donnees)
-															})
-														} else {
-															db.exists('noms:' + donnees.identifiant, function (err, resultat) {
-																if (err) {
-																	donnees.nom = ''
-																	resolve(donnees)
-																	return false
-																}
-																if (resultat === 1) {
-																	db.hget('noms:' + donnees.identifiant, 'nom', function (err, nom) {
-																		if (err) {
-																			donnees.nom = ''
-																			resolve(donnees)
-																			return false
-																		}
-																		donnees.nom = nom
-																		resolve(donnees)
-																	})
-																} else {
-																	donnees.nom = ''
-																	resolve(donnees)
-																}
-															})
-														}
-													})
-												})
-											})
-										} else {
-											resolve({})
-										}
-									})
+				mur.admins = []
+			}
+			const blocsMur = new Promise(async function (resolveMain) {
+				const donneesBlocs = []
+				if (admin || (!accesCode && !accesPrive)) {
+					const blocs = await db.ZRANGE('blocs:' + id, 0, -1)
+					if (blocs === null) { resolveMain(donneesBlocs); return false }
+					for (const bloc of blocs) {
+						const donneesBloc = new Promise(async function (resolve) {
+							let donnees = await db.HGETALL('contenu-blocs:' + id + ':' + bloc)
+							donnees = Object.assign({}, donnees)
+							if (donnees === null) { resolve({}); return false }
+							if (Object.keys(donnees).length > 0) {
+								// Pour résoudre le problème des capsules qui sont référencées dans une colonne inexistante
+								if (parseInt(donnees.colonne) >= nombreColonnes) {
+									donnees.colonne = nombreColonnes - 1
+								}
+								donnees.medias = JSON.parse(donnees.medias)
+								if (!donnees.hasOwnProperty('motdepasse')) {
+									donnees.motdepasse = ''
+								}
+								if (!donnees.hasOwnProperty('epinglee')) {
+									donnees.epinglee = 'non'
+								}
+								// Ne pas ajouter les capsules en attente de modération ou privées
+								if (((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') && donnees.identifiant !== identifiant && !admin) {
+									resolve({})
+									return false
+								}
+								// Ne pas ajouter les capsules dans les colonnes masquées
+								if (mur.affichage === 'colonnes' && mur.affichageColonnes[donnees.colonne] === false && mur.identifiant !== identifiant && !admin) {
+									resolve({})
+									return false
+								}
+								const commentaires = await db.ZCARD('commentaires:' + bloc)
+								if (commentaires === null) {
+									donnees.commentaires = []
+									resolve(donnees)
+									return false
+								}
+								donnees.commentaires = commentaires
+								const evaluations = await db.ZRANGE('evaluations:' + bloc, 0, -1)
+								if (evaluations === null) {
+									donnees.evaluations = []
+									resolve(donnees)
+									return false
+								}
+								const donneesEvaluations = []
+								evaluations.forEach(function (evaluation) {
+									donneesEvaluations.push(JSON.parse(evaluation))
 								})
-								donneesBlocs.push(donneesBloc)
-							}
-							Promise.all(donneesBlocs).then(function (resultat) {
-								resultat = resultat.filter(function (element) {
-									return Object.keys(element).length > 0
-								})
-								resolveMain(resultat)
-							})
-						})
-					} else {
-						resolveMain(donneesBlocs)
-					}
-				})
-				const activiteMur = new Promise(function (resolveMain) {
-					const donneesEntrees = []
-					if (admin || (!accesCode && !accesPrive)) {
-						db.zrange('activite:' + id, 0, -1, function (err, entrees) {
-							if (err) { resolveMain(donneesEntrees); return false }
-							for (let entree of entrees) {
-								entree = JSON.parse(entree)
-								const donneesEntree = new Promise(function (resolve) {
-									db.exists('utilisateurs:' + entree.identifiant, function (err, resultat) {
-										if (err) {
-											entree.nom = ''
-											resolve(entree)
+								donnees.evaluations = donneesEvaluations
+								const resultat = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+								if (resultat === null) {
+									donnees.nom = ''
+									resolve(donnees)
+									return false
+								}
+								if (resultat === 1) {
+									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+									utilisateur = Object.assign({}, utilisateur)
+									if (utilisateur === null) {
+										donnees.nom = ''
+										resolve(donnees)
+										return false
+									}
+									donnees.nom = utilisateur.nom
+									resolve(donnees)
+								} else {
+									const reponse = await db.EXISTS('noms:' + donnees.identifiant)
+									if (reponse === 1) {
+										const nom = await db.HGET('noms:' + donnees.identifiant, 'nom')
+										if (nom === null) {
+											donnees.nom = ''
+											resolve(donnees)
 											return false
 										}
-										if (resultat === 1) {
-											db.hgetall('utilisateurs:' + entree.identifiant, function (err, utilisateur) {
-												if (err) {
-													entree.nom = ''
-													resolve(entree)
-													return false
-												}
-												entree.nom = utilisateur.nom
-												resolve(entree)
-											})
-										} else {
-											db.exists('noms:' + entree.identifiant, function (err, resultat) {
-												if (err) {
-													entree.nom = ''
-													resolve(entree)
-													return false
-												}
-												if (resultat === 1) {
-													db.hget('noms:' + entree.identifiant, 'nom', function (err, nom) {
-														if (err) { resolve({}) }
-														entree.nom = nom
-														resolve(entree)
-														return false
-													})
-												} else {
-													entree.nom = ''
-													resolve(entree)
-												}
-											})
-										}
-									})
-								})
-								donneesEntrees.push(donneesEntree)
-							}
-							Promise.all(donneesEntrees).then(function (resultat) {
-								resolveMain(resultat)
-							})
-						})
-					} else {
-						resolveMain(donneesEntrees)
-					}
-				})
-				Promise.all([blocsMur, activiteMur]).then(function ([blocs, activite]) {
-					if (mur.ordre === 'decroissant') {
-						blocs.reverse()
-					}
-					// Vérifier capsules épinglées
-					const blocsEpingles = []
-					blocs.forEach(function (item, index) {
-						if (item.epinglee === 'oui') {
-							blocsEpingles.push(item)
-							blocs.splice(index, 1)
-						}
-					})
-					blocs.unshift(...blocsEpingles)
-					// Ajouter nombre de vues
-					db.hset('murs:' + id, 'vues', vues, function () {
-						// Ajouter dans murs rejoints
-						if (mur.identifiant !== identifiant && statut === 'utilisateur') {
-							db.smembers('murs-rejoints:' + identifiant, function (err, mursRejoints) {
-								if (err) { res.send('erreur'); return false }
-								let murDejaRejoint = false
-								for (const murRejoint of mursRejoints) {
-									if (murRejoint === id) {
-										murDejaRejoint = true
-									}
-								}
-								if (murDejaRejoint === false && mur.acces !== 'prive') {
-									const multi = db.multi()
-									multi.sadd('murs-rejoints:' + identifiant, id)
-									multi.sadd('murs-utilisateurs:' + identifiant, id)
-									multi.sadd('utilisateurs-murs:' + id, identifiant)
-									multi.exec(function () {
-										res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
-									})
-								} else {
-									// Vérifier notification mise à jour mur
-									if (mur.hasOwnProperty('notification') && mur.notification.includes(identifiant) && Array.isArray(mur.notification)) {
-										mur.notification.splice(mur.notification.indexOf(identifiant), 1)
-										db.hset('murs:' + id, 'notification', JSON.stringify(mur.notification), function () {
-											res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
-										})
+										donnees.nom = nom
+										resolve(donnees)
 									} else {
-										res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
+										donnees.nom = ''
+										resolve(donnees)
 									}
 								}
-							})
-						} else {
-							// Vérifier notification mise à jour mur
-							if (mur.hasOwnProperty('notification') && mur.notification.includes(identifiant) && Array.isArray(mur.notification)) {
-								mur.notification.splice(mur.notification.indexOf(identifiant), 1)
-								db.hset('murs:' + id, 'notification', JSON.stringify(mur.notification), function () {
-									res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
-								})
 							} else {
-								res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
+								resolve({})
 							}
-						}
+						})
+						donneesBlocs.push(donneesBloc)
+					}
+					Promise.all(donneesBlocs).then(function (resultat) {
+						resultat = resultat.filter(function (element) {
+							return Object.keys(element).length > 0
+						})
+						resolveMain(resultat)
 					})
+				} else {
+					resolveMain(donneesBlocs)
+				}
+			})
+			const activiteMur = new Promise(async function (resolveMain) {
+				const donneesEntrees = []
+				if (admin || (!accesCode && !accesPrive)) {
+					const entrees = await db.ZRANGE('activite:' + id, 0, -1)
+					if (entrees === null) { resolveMain(donneesEntrees); return false }
+					for (let entree of entrees) {
+						entree = JSON.parse(entree)
+						const donneesEntree = new Promise(async function (resolve) {
+							const resultat = await db.EXISTS('utilisateurs:' + entree.identifiant)
+							if (resultat === null) {
+								entree.nom = ''
+								resolve(entree)
+								return false
+							}
+							if (resultat === 1) {
+								let utilisateur = await db.HGETALL('utilisateurs:' + entree.identifiant)
+								utilisateur = Object.assign({}, utilisateur)
+								if (utilisateur === null) {
+									entree.nom = ''
+									resolve(entree)
+									return false
+								}
+								entree.nom = utilisateur.nom
+								resolve(entree)
+							} else {
+								const reponse = await db.EXISTS('noms:' + entree.identifiant)
+								if (reponse === 1) {
+									const nom = await db.HGET('noms:' + entree.identifiant, 'nom')
+									if (nom === null) { resolve({}) }
+									entree.nom = nom
+									resolve(entree)
+									return false
+								} else {
+									entree.nom = ''
+									resolve(entree)
+								}
+							}
+						})
+						donneesEntrees.push(donneesEntree)
+					}
+					Promise.all(donneesEntrees).then(function (resultat) {
+						resolveMain(resultat)
+					})
+				} else {
+					resolveMain(donneesEntrees)
+				}
+			})
+			Promise.all([blocsMur, activiteMur]).then(async function ([blocs, activite]) {
+				if (mur.ordre === 'decroissant') {
+					blocs.reverse()
+				}
+				// Vérifier capsules épinglées
+				const blocsEpingles = []
+				blocs.forEach(function (item, index) {
+					if (item.epinglee === 'oui') {
+						blocsEpingles.push(item)
+						blocs.splice(index, 1)
+					}
 				})
-			} else {
-				res.send('erreur')
-			}
-		})
+				blocs.unshift(...blocsEpingles)
+				// Ajouter nombre de vues
+				await db.HSET('murs:' + id, 'vues', vues)
+				// Ajouter dans murs rejoints
+				if (mur.identifiant !== identifiant && statut === 'utilisateur') {
+					const mursRejoints = await db.SMEMBERS('murs-rejoints:' + identifiant)
+					if (mursRejoints === null) { res.send('erreur'); return false }
+					let murDejaRejoint = false
+					for (const murRejoint of mursRejoints) {
+						if (murRejoint === id) {
+							murDejaRejoint = true
+						}
+					}
+					if (murDejaRejoint === false && mur.acces !== 'prive') {
+						await db
+						.multi()
+						.SADD('murs-rejoints:' + identifiant, id.toString())
+						.SADD('murs-utilisateurs:' + identifiant, id.toString())
+						.SADD('utilisateurs-murs:' + id, identifiant)
+						.exec()
+						res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
+					} else {
+						// Vérifier notification mise à jour mur
+						if (mur.hasOwnProperty('notification') && mur.notification.includes(identifiant) && Array.isArray(mur.notification)) {
+							mur.notification.splice(mur.notification.indexOf(identifiant), 1)
+							await db.HSET('murs:' + id, 'notification', JSON.stringify(mur.notification))
+							res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
+						} else {
+							res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
+						}
+					}
+				} else {
+					// Vérifier notification mise à jour mur
+					if (mur.hasOwnProperty('notification') && mur.notification.includes(identifiant) && Array.isArray(mur.notification)) {
+						mur.notification.splice(mur.notification.indexOf(identifiant), 1)
+						await db.HSET('murs:' + id, 'notification', JSON.stringify(mur.notification))
+						res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
+					} else {
+						res.json({ mur: mur, blocs: blocs, activite: activite.reverse() })
+					}
+				}
+			})
+		} else {
+			res.send('erreur')
+		}
 	}
 
 	async function recupererDonneesMurProtege (mur, id, identifiant) {
@@ -6470,164 +6405,144 @@ async function demarrerServeur () {
 				mur.notification = JSON.parse(mur.notification)
 			}
 			mur.affichageColonnes = JSON.parse(mur.affichageColonnes)
-			const blocsMur = new Promise(function (resolveMain) {
+			const blocsMur = new Promise(async function (resolveMain) {
 				const donneesBlocs = []
-				db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
-					if (err) { resolveMain(donneesBlocs); return false }
-					for (const bloc of blocs) {
-						const donneesBloc = new Promise(function (resolve) {
-							db.hgetall('contenu-blocs:' + id + ':' + bloc, function (err, donnees) {
-								if (err) { resolve({}); return false }
-								if (donnees && Object.keys(donnees).length > 0) {
-									// Pour résoudre le problème des capsules qui sont référencées dans une colonne inexistante
-									if (parseInt(donnees.colonne) >= nombreColonnes) {
-										donnees.colonne = nombreColonnes - 1
-									}
-									donnees.medias = JSON.parse(donnees.medias)
-									if (!donnees.hasOwnProperty('motdepasse')) {
-										donnees.motdepasse = ''
-									}
-									if (!donnees.hasOwnProperty('epinglee')) {
-										donnees.epinglee = 'non'
-									}
-									// Ne pas ajouter les capsules en attente de modération ou privées
-									if ((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') {
-										resolve({})
-										return false
-									}
-									// Ne pas ajouter les capsules dans les colonnes masquées
-									if (mur.affichage === 'colonnes' && mur.affichageColonnes[donnees.colonne] === false) {
-										resolve({})
-										return false
-									}
-									db.zcard('commentaires:' + bloc, function (err, commentaires) {
-										if (err) {
-											donnees.commentaires = []
-											resolve(donnees)
-											return false
-										}
-										donnees.commentaires = commentaires
-										db.zrange('evaluations:' + bloc, 0, -1, function (err, evaluations) {
-											if (err) {
-												donnees.evaluations = []
-												resolve(donnees)
-												return false
-											}
-											const donneesEvaluations = []
-											evaluations.forEach(function (evaluation) {
-												donneesEvaluations.push(JSON.parse(evaluation))
-											})
-											donnees.evaluations = donneesEvaluations
-											db.exists('utilisateurs:' + donnees.identifiant, function (err, resultat) {
-												if (err) {
-													donnees.nom = ''
-													resolve(donnees)
-													return false
-												}
-												if (resultat === 1) {
-													db.hgetall('utilisateurs:' + donnees.identifiant, function (err, utilisateur) {
-														if (err) {
-															donnees.nom = ''
-															resolve(donnees)
-															return false
-														}
-														donnees.nom = utilisateur.nom
-														resolve(donnees)
-													})
-												} else {
-													db.exists('noms:' + donnees.identifiant, function (err, resultat) {
-														if (err) {
-															donnees.nom = ''
-															resolve(donnees)
-															return false
-														}
-														if (resultat === 1) {
-															db.hget('noms:' + donnees.identifiant, 'nom', function (err, nom) {
-																if (err) {
-																	donnees.nom = ''
-																	resolve(donnees)
-																	return false
-																}
-																donnees.nom = nom
-																resolve(donnees)
-															})
-														} else {
-															donnees.nom = ''
-															resolve(donnees)
-														}
-													})
-												}
-											})
-										})
-									})
-								} else {
-									resolve({})
-								}
+				const blocs = await db.ZRANGE('blocs:' + id, 0, -1)
+				if (blocs === null) { resolveMain(donneesBlocs); return false }
+				for (const bloc of blocs) {
+					const donneesBloc = new Promise(async function (resolve) {
+						let donnees = await db.HGETALL('contenu-blocs:' + id + ':' + bloc)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						if (Object.keys(donnees).length > 0) {
+							// Pour résoudre le problème des capsules qui sont référencées dans une colonne inexistante
+							if (parseInt(donnees.colonne) >= nombreColonnes) {
+								donnees.colonne = nombreColonnes - 1
+							}
+							donnees.medias = JSON.parse(donnees.medias)
+							if (!donnees.hasOwnProperty('motdepasse')) {
+								donnees.motdepasse = ''
+							}
+							if (!donnees.hasOwnProperty('epinglee')) {
+								donnees.epinglee = 'non'
+							}
+							// Ne pas ajouter les capsules en attente de modération ou privées
+							if ((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') {
+								resolve({})
+								return false
+							}
+							// Ne pas ajouter les capsules dans les colonnes masquées
+							if (mur.affichage === 'colonnes' && mur.affichageColonnes[donnees.colonne] === false) {
+								resolve({})
+								return false
+							}
+							const commentaires = await db.ZCARD('commentaires:' + bloc)
+							if (commentaires === null) {
+								donnees.commentaires = []
+								resolve(donnees)
+								return false
+							}
+							donnees.commentaires = commentaires
+							const evaluations = await db.ZRANGE('evaluations:' + bloc, 0, -1)
+							if (evaluations === null) {
+								donnees.evaluations = []
+								resolve(donnees)
+								return false
+							}
+							const donneesEvaluations = []
+							evaluations.forEach(function (evaluation) {
+								donneesEvaluations.push(JSON.parse(evaluation))
 							})
-						})
-						donneesBlocs.push(donneesBloc)
-					}
-					Promise.all(donneesBlocs).then(function (resultat) {
-						resultat = resultat.filter(function (element) {
-							return Object.keys(element).length > 0
-						})
-						resolveMain(resultat)
-					})
-				})
-			})
-			const activiteMur = new Promise(function (resolveMain) {
-				const donneesEntrees = []
-				db.zrange('activite:' + id, 0, -1, function (err, entrees) {
-					if (err) { resolveMain(donneesEntrees); return false }
-					for (let entree of entrees) {
-						entree = JSON.parse(entree)
-						const donneesEntree = new Promise(function (resolve) {
-							db.exists('utilisateurs:' + entree.identifiant, function (err, resultat) {
-								if (err) {
-									entree.nom = ''
-									resolve(entree)
+							donnees.evaluations = donneesEvaluations
+							const resultat = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+							if (resultat === null) {
+								donnees.nom = ''
+								resolve(donnees)
+								return false
+							}
+							if (resultat === 1) {
+								let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+								utilisateur = Object.assign({}, utilisateur)
+								if (utilisateur === null) {
+									donnees.nom = ''
+									resolve(donnees)
 									return false
 								}
-								if (resultat === 1) {
-									db.hgetall('utilisateurs:' + entree.identifiant, function (err, utilisateur) {
-										if (err) {
-											entree.nom = ''
-											resolve(entree)
-											return false
-										}
-										entree.nom = utilisateur.nom
-										resolve(entree)
-									})
+								donnees.nom = utilisateur.nom
+								resolve(donnees)
+							} else {
+								const reponse = await db.EXISTS('noms:' + donnees.identifiant)
+								if (reponse === 1) {
+									const nom = await db.HGET('noms:' + donnees.identifiant, 'nom')
+									if (nom === null) {
+										donnees.nom = ''
+										resolve(donnees)
+										return false
+									}
+									donnees.nom = nom
+									resolve(donnees)
 								} else {
-									db.exists('noms:' + entree.identifiant, function (err, resultat) {
-										if (err) {
-											entree.nom = ''
-											resolve(entree)
-											return false
-										}
-										if (resultat === 1) {
-											db.hget('noms:' + entree.identifiant, 'nom', function (err, nom) {
-												if (err) { resolve({}) }
-												entree.nom = nom
-												resolve(entree)
-												return false
-											})
-										} else {
-											entree.nom = ''
-											resolve(entree)
-										}
-									})
+									donnees.nom = ''
+									resolve(donnees)
 								}
-							})
-						})
-						donneesEntrees.push(donneesEntree)
-					}
-					Promise.all(donneesEntrees).then(function (resultat) {
-						resolveMain(resultat)
+							}
+						} else {
+							resolve({})
+						}
 					})
+					donneesBlocs.push(donneesBloc)
+				}
+				Promise.all(donneesBlocs).then(function (resultat) {
+					resultat = resultat.filter(function (element) {
+						return Object.keys(element).length > 0
+					})
+					resolveMain(resultat)
 				})
 			})
-			Promise.all([blocsMur, activiteMur]).then(function ([blocs, activite]) {
+			const activiteMur = new Promise(async function (resolveMain) {
+				const donneesEntrees = []
+				const entrees = await db.ZRANGE('activite:' + id, 0, -1)
+				if (entrees === null) { resolveMain(donneesEntrees); return false }
+				for (let entree of entrees) {
+					entree = JSON.parse(entree)
+					const donneesEntree = new Promise(async function (resolve) {
+						const resultat = await db.EXISTS('utilisateurs:' + entree.identifiant)
+						if (resultat === null) {
+							entree.nom = ''
+							resolve(entree)
+							return false
+						}
+						if (resultat === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + entree.identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) {
+								entree.nom = ''
+								resolve(entree)
+								return false
+							}
+							entree.nom = utilisateur.nom
+							resolve(entree)
+						} else {
+							const reponse = await db.EXISTS('noms:' + entree.identifiant)
+							if (reponse === 1) {
+								const nom = await db.HGET('noms:' + entree.identifiant, 'nom')
+								if (nom === null) { resolve({}) }
+								entree.nom = nom
+								resolve(entree)
+								return false
+							} else {
+								entree.nom = ''
+								resolve(entree)
+							}
+						}
+					})
+					donneesEntrees.push(donneesEntree)
+				}
+				Promise.all(donneesEntrees).then(function (resultat) {
+					resolveMain(resultat)
+				})
+			})
+			Promise.all([blocsMur, activiteMur]).then(async function ([blocs, activite]) {
 				if (mur.ordre === 'decroissant') {
 					blocs.reverse()
 				}
@@ -6643,9 +6558,8 @@ async function demarrerServeur () {
 				// Vérifier notification mise à jour mur
 				if (mur.hasOwnProperty('notification') && mur.notification.includes(identifiant) && Array.isArray(mur.notification)) {
 					mur.notification.splice(mur.notification.indexOf(identifiant), 1)
-					db.hset('murs:' + id, 'notification', JSON.stringify(mur.notification), function () {
-						resolveData({ mur: mur, blocs: blocs, activite: activite.reverse() })
-					})
+					await db.HSET('murs:' + id, 'notification', JSON.stringify(mur.notification))
+					resolveData({ mur: mur, blocs: blocs, activite: activite.reverse() })
 				} else {
 					resolveData({ mur: mur, blocs: blocs, activite: activite.reverse() })
 				}
@@ -6654,12 +6568,43 @@ async function demarrerServeur () {
 	}
 
 	async function verifierAcces (req, mur, identifiant, motdepasse) {
-		return new Promise(function (resolve) {
-			db.hgetall('murs:' + mur, async function (err, donnees) {
-				if (err || !donnees || !donnees.hasOwnProperty('identifiant')) { resolve('erreur'); return false }
-				if (identifiant === donnees.identifiant && motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
-					db.hgetall('utilisateurs:' + identifiant, function (err, utilisateur) {
-						if (err || !utilisateur || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
+		return new Promise(async function (resolve) {
+			let donnees = await db.HGETALL('murs:' + mur)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null || !donnees.hasOwnProperty('identifiant')) { resolve('erreur'); return false }
+			if (identifiant === donnees.identifiant && motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
+				let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+				utilisateur = Object.assign({}, utilisateur)
+				if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
+				req.session.identifiant = utilisateur.id
+				req.session.nom = utilisateur.nom
+				req.session.statut = 'auteur'
+				req.session.langue = utilisateur.langue
+				if (!req.session.hasOwnProperty('acces')) {
+					req.session.acces = []
+				}
+				if (!req.session.hasOwnProperty('murs')) {
+					req.session.murs = []
+				}
+				if (!req.session.hasOwnProperty('blocsAutorises')) {
+					req.session.blocsAutorises = []
+				}
+				if (!req.session.hasOwnProperty('digidrive')) {
+					req.session.digidrive = []
+				}
+				if (!req.session.digidrive.includes(mur)) {
+					req.session.digidrive.push(mur)
+				}
+				req.session.cookie.expires = new Date(Date.now() + dureeSession)
+				resolve('mur_debloque')
+			} else if (identifiant === donnees.identifiant && !donnees.hasOwnProperty('motdepasse')) {
+				const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+				if (resultat === null) { resolve('erreur'); return false }
+				if (resultat === 1) {
+					let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+					utilisateur = Object.assign({}, utilisateur)
+					if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('motdepasse') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
+					if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 						req.session.identifiant = utilisateur.id
 						req.session.nom = utilisateur.nom
 						req.session.statut = 'auteur'
@@ -6681,47 +6626,15 @@ async function demarrerServeur () {
 						}
 						req.session.cookie.expires = new Date(Date.now() + dureeSession)
 						resolve('mur_debloque')
-					})
-				} else if (identifiant === donnees.identifiant && !donnees.hasOwnProperty('motdepasse')) {
-					db.exists('utilisateurs:' + identifiant, function (err, resultat) {
-						if (err) { resolve('erreur'); return false }
-						if (resultat === 1) {
-							db.hgetall('utilisateurs:' + identifiant, async function (err, utilisateur) {
-								if (err || !utilisateur || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('motdepasse') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
-								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-									req.session.identifiant = utilisateur.id
-									req.session.nom = utilisateur.nom
-									req.session.statut = 'auteur'
-									req.session.langue = utilisateur.langue
-									if (!req.session.hasOwnProperty('acces')) {
-										req.session.acces = []
-									}
-									if (!req.session.hasOwnProperty('murs')) {
-										req.session.murs = []
-									}
-									if (!req.session.hasOwnProperty('blocsAutorises')) {
-										req.session.blocsAutorises = []
-									}
-									if (!req.session.hasOwnProperty('digidrive')) {
-										req.session.digidrive = []
-									}
-									if (!req.session.digidrive.includes(mur)) {
-										req.session.digidrive.push(mur)
-									}
-									req.session.cookie.expires = new Date(Date.now() + dureeSession)
-									resolve('mur_debloque')
-								} else {
-									resolve('erreur')
-								}
-							})
-						} else {
-							resolve('erreur')
-						}
-					})
+					} else {
+						resolve('erreur')
+					}
 				} else {
 					resolve('erreur')
 				}
-			})
+			} else {
+				resolve('erreur')
+			}
 		})
 	}
 
