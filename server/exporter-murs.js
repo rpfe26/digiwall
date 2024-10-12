@@ -1,8 +1,6 @@
 import 'dotenv/config'
-import path from 'path'
-import fs from 'fs-extra'
 import redis from 'redis'
-import { fileURLToPath } from 'url'
+import pg from 'pg'
 import dayjs from 'dayjs'
 let db
 let db_port = 6379
@@ -15,11 +13,19 @@ if (process.env.NODE_ENV === 'production') {
 	db = redis.createClient({ port: db_port })
 }
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const { Client, Query } = pg
+const client = new Client({
+	user: process.env.PG_DB_USER,
+	password: process.env.PG_DB_PWD,
+	host: process.env.PG_DB_HOST,
+	port: process.env.PG_DB_PORT,
+	database: process.env.PG_DB_NAME
+})
+await client.connect()
 
-exporterMursJson(10)
+exporter(10)
 
-function exporterMursJson (jours) {
+function exporter (jours) {
 	db.get('mur', function (err, mur) {
 		for (let i = 0; i < mur + 1; i++) {
 			const id = i
@@ -94,29 +100,30 @@ function exporterMursJson (jours) {
 								})
 							})
 							Promise.all([donneesMur, blocsMur, activiteMur]).then(function (donnees) {
-								if (donnees.length > 0 && donnees[0].id) {
-									const parametres = {}
-									parametres.mur = donnees[0]
-									parametres.blocs = donnees[1]
-									parametres.activite = donnees[2]
-									fs.writeFile(path.normalize(chemin + '/' + id + '.json'), JSON.stringify(parametres, '', 4), 'utf8', function (err) {
-										fs.writeFile(path.normalize(chemin + '/mur-' + id + '.json'), JSON.stringify(parametres.mur, '', 4), 'utf8', function () {
-											// Suppression données redis
-											db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
-												const multi = db.multi()
-												for (let i = 0; i < blocs.length; i++) {
-													multi.del('commentaires:' + blocs[i])
-													multi.del('evaluations:' + blocs[i])
-													multi.del('contenu-blocs:' + id + ':' + blocs[i])
-												}
-												multi.del('blocs:' + id)
-												multi.del('murs:' + id)
-												multi.del('activite:' + id)
-												multi.exec(function () {
-													console.log(id)
-												})
+								if (donnees.length === 3 && donnees[0].id) {
+									const date = dayjs().format()
+									const requete = new Query('INSERT INTO murs (mur, donnees, blocs, activite, date) VALUES ($1, $2, $3, $4, $5)', [parseInt(id), JSON.stringify(donnees[0]), JSON.stringify(donnees[1]), JSON.stringify(donnees[2]), date])
+									client.query(requete)
+									requete.on('end', function () {
+										// Suppression données redis
+										db.zrange('blocs:' + id, 0, -1, function (err, blocs) {
+											const multi = db.multi()
+											for (let i = 0; i < blocs.length; i++) {
+												multi.del('commentaires:' + blocs[i])
+												multi.del('evaluations:' + blocs[i])
+												multi.del('contenu-blocs:' + id + ':' + blocs[i])
+											}
+											multi.del('blocs:' + id)
+											multi.del('murs:' + id)
+											multi.del('activite:' + id)
+											multi.exec(function () {
+												console.log(id)
 											})
 										})
+									})
+									
+									requete.on('error', function () {
+										console.log('erreur : pad-' + id)
 									})
 								}
 							})
