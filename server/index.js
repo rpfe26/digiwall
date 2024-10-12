@@ -45,26 +45,12 @@ const cluster = parseInt(process.env.NODE_CLUSTER) === 1
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = `${__dirname}/..`
 
-planifierCollecteDechets()
-
-function planifierCollecteDechets () {
-	if (!global.gc) {
-		return false
-	}
-	const prochainAppel = 30 + (Math.random() * 15)
-	setTimeout(function () {
-		global.gc()
-		planifierCollecteDechets()
-	}, prochainAppel * 1000)
-}
-
 demarrerServeur()
 
 async function demarrerServeur () {
 	const app = express()
 	app.use(compression())
 	const httpServer = createServer(app)
-	const { Pool } = pg
 
 	let hote = 'http://localhost:3000'
 	if (production) {
@@ -78,7 +64,9 @@ async function demarrerServeur () {
 		db_port = process.env.DB_PORT
 	}
 	if (production) {
-		db = await createClient({ host: process.env.DB_HOST, port: db_port, password: process.env.DB_PWD }).on('error', function (err) {
+		db = await createClient({
+			url: 'redis://' + process.env.DB_PWD  + '@' + process.env.DB_HOST + ':' + db_port
+		}).on('error', function (err) {
 			console.log('redis: ', err)
 		}).connect()
 	} else {
@@ -137,6 +125,7 @@ async function demarrerServeur () {
 	let pgdb = false
 	let pool = null
 	if (production && process.env.PG_DB && parseInt(process.env.PG_DB) === 1) {
+		const { Pool } = pg
 		pgdb = true
 		let maxCon = 240
 		if (cluster === true) {
