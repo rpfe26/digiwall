@@ -731,15 +731,15 @@ export default {
 				const donnees = reponse.data
 				if (donnees === 'non_connecte') {
 					window.location.replace('/')
-				} else if (donnees === 'erreur_ajout_favori') {
-					this.message = this.$t('erreurAjoutFavoris')
-				} else {
+				} else if (donnees === 'mur_ajoute_favoris') {
 					this.mursFavoris.push(mur)
 					this.favoris.push(mur.id)
 					this.notification = this.$t('murAjouteFavoris')
 					this.$nextTick(function () {
 						document.querySelector('#mur-' + mur.id + ' .supprimer-favori').focus()
 					})
+				} else {
+					this.message = this.$t('erreurAjoutFavoris')
 				}
 			}.bind(this)).catch(function () {
 				this.chargement = false
@@ -756,9 +756,7 @@ export default {
 				const donnees = reponse.data
 				if (donnees === 'non_connecte') {
 					window.location.replace('/')
-				} else if (donnees === 'erreur_suppression_favori') {
-					this.message = this.$t('erreurSuppressionFavoris')
-				} else {
+				} else if (donnees === 'mur_supprime_favoris') {
 					this.mursFavoris.forEach(function (mur, indexMur) {
 						if (mur.id === murId) {
 							this.mursFavoris.splice(indexMur, 1)
@@ -787,6 +785,8 @@ export default {
 							document.querySelector('#mur-' + murId + ' .ajouter-favori').focus()
 						}
 					})
+				} else {
+					this.message = this.$t('erreurSuppressionFavoris')
 				}
 			}.bind(this)).catch(function () {
 				this.chargement = false
@@ -831,9 +831,7 @@ export default {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
 						window.location.replace('/')
-					} else if (donnees === 'erreur_deplacement') {
-						this.message = this.$t('erreurDeplacementMur')
-					} else {
+					} else if (donnees === 'mur_deplace') {
 						this.dossiers.forEach(function (dossier, indexDossier) {
 							if (dossier.murs.includes(this.murId)) {
 								const indexMur = dossier.murs.indexOf(this.murId)
@@ -852,6 +850,8 @@ export default {
 						}
 						this.notification = this.$t('murDeplace')
 						this.fermerModaleDeplacerMur()
+					} else {
+						this.message = this.$t('erreurDeplacementMur')
 					}
 				}.bind(this)).catch(function () {
 					this.chargement = false
@@ -909,6 +909,8 @@ export default {
 					this.message = this.$t('erreurExportMur')
 				} else if (donnees === 'non_autorise') {
 					this.message = this.$t('actionNonAutorisee')
+				} else if (donnees === 'mur_inexistant') {
+					this.message = this.$t('murInexistant')
 				} else {
 					saveAs('/temp/' + donnees, 'mur-' + this.murId + '.zip')
 				}
@@ -1262,15 +1264,15 @@ export default {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
 						window.location.replace('/')
-					} else if (donnees === 'erreur_modification_dossier') {
-						this.message = this.$t('erreurModificationDossier')
-					} else {
+					} else if (donnees === 'dossier_modifie') {
 						this.dossiers.forEach(function (dossier, index) {
 							if (dossier.id === this.dossierId) {
 								this.dossiers[index].nom = this.dossier
 							}
 						}.bind(this))
 						this.notification = this.$t('dossierModifie')
+					} else {
+						this.message = this.$t('erreurModificationDossier')
 					}
 					this.fermerModaleModifierDossier()
 				}.bind(this)).catch(function () {
@@ -1297,9 +1299,7 @@ export default {
 				const donnees = reponse.data
 				if (donnees === 'non_connecte') {
 					window.location.replace('/')
-				} else if (donnees === 'erreur_suppression_dossier') {
-					this.message = this.$t('erreurSuppressionDossier')
-				} else {
+				} else if (donnees === 'dossier_supprime') {
 					this.dossiers.forEach(function (dossier, index) {
 						if (dossier.id === this.dossierId) {
 							this.dossiers.splice(index, 1)
@@ -1308,6 +1308,8 @@ export default {
 					this.onglet = 'murs-crees'
 					this.notification = this.$t('dossierSupprime')
 					this.dossierId = ''
+				} else {
+					this.message = this.$t('erreurSuppressionDossier')
 				}
 			}.bind(this)).catch(function () {
 				this.chargement = false
