@@ -17,7 +17,7 @@
     "prod": "npm run build && npm run server:prod",
     "build": "vite build",
     "server": "nodemon --watch server ./server",
-    "server:prod": "cross-env NODE_ENV=production --nouse-idle-notification --expose-gc node ./server",
+    "server:prod": "cross-env NODE_ENV=production node ./server",
     "export": "cross-env NODE_ENV=production node server/exporter-murs.js",
     "maintenance": "cross-env NODE_ENV=production node server/maintenance.js"
   },
