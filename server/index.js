@@ -6,6 +6,7 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { createAdapter } from '@socket.io/cluster-adapter'
+import { setupWorker } from '@socket.io/sticky'
 // import eiows from 'eiows'
 import compression from 'compression'
 import axios from 'axios'
@@ -3464,6 +3465,7 @@ async function demarrerServeur () {
 	})
 	if (cluster === true) {
 		io.adapter(createAdapter())
+		setupWorker(io)
 	}
 	const wrap = middleware => (socket, next) => middleware(socket.request, {}, next)
 	io.use(wrap(sessionMiddleware))
