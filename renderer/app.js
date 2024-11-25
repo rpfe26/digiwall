@@ -44,8 +44,8 @@ function createPageApp (pageContext) {
 	app.use(masonry)
 
 	app.config.globalProperties.$socket = io(pageProps.hote, {
-		upgrade: false,
-		transports: ['websocket'],
+		// upgrade: false,
+		// transports: ['websocket'],
 		autoConnect: true,
 		closeOnBeforeunload: false
 	})
