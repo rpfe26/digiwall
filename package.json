@@ -1,6 +1,6 @@
 {
   "name": "digiwall",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "homepage": "https://digiwall.app",
   "repository": {
     "type": "git",
@@ -25,6 +25,7 @@
   "dependencies": {
     "@panzoom/panzoom": "^4.5.1",
     "@socket.io/cluster-adapter": "^0.2.2",
+    "@socket.io/sticky": "^1.0.4",
     "@vitejs/plugin-vue": "^4.3.4",
     "@vue/compiler-sfc": "^3.3.4",
     "@vue/server-renderer": "^3.3.4",
