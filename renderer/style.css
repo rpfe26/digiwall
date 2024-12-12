@@ -1,13 +1,6 @@
-/* @font-face {
-	font-family: 'HKGroteskWide-ExtraBold';
-	src: url('/fonts/HKGroteskWide-ExtraBold.woff') format('woff'), url('/fonts/HKGroteskWide-ExtraBold.woff2') format('woff2');
-	font-weight: normal;
-	font-style: normal;
-} */
-
 @font-face {
-	font-family: 'HKGrotesk-ExtraBold';
-	src: url('/fonts/HKGrotesk-ExtraBold.woff') format('woff'), url('/fonts/HKGrotesk-ExtraBold.woff2') format('woff2');
+	font-family: 'HKGrotesk-Black';
+	src: url('/fonts/HKGrotesk-Black.woff2') format('woff2');
 	font-weight: normal;
 	font-style: normal;
 }
@@ -16,14 +9,14 @@
 	font-family: 'Roboto-Slab';
 	font-style: normal;
 	font-weight: 500;
-	src: url('/fonts/Roboto-Slab-Medium.woff2') format('woff2'), url('/fonts/Roboto-Slab-Medium.woff') format('woff');
+	src: url('/fonts/Roboto-Slab-Medium.woff2') format('woff2');
 }
 
 @font-face {
     font-family: 'Material Icons';
     font-style: normal;
     font-weight: 400;
-    src: url('/fonts/MaterialIcons-Regular.woff2') format('woff2'), url('/fonts/MaterialIcons-Regular.woff') format('woff')
+    src: url('/fonts/MaterialIcons-Regular.woff2') format('woff2');
 }
 
 .material-icons {

@@ -6,10 +6,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# fonts
-public/fonts/HKGroteskWide-ExtraBold.woff
-public/fonts/HKGroteskWide-ExtraBold.woff2
-
 # Resources
 package-lock.json
 _resources

@@ -537,7 +537,7 @@ export default {
 }
 
 #conteneur h1 {
-    font-family: 'HKGroteskWide-ExtraBold', 'HKGrotesk-ExtraBold', sans-serif;
+    font-family: 'HKGrotesk-Black', sans-serif;
     font-size: 3em;
 	font-weight: 900;
     margin-bottom: 0.85em;
