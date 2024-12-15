@@ -728,7 +728,7 @@ export default {
 #conteneur h1 {
     font-family: 'HKGrotesk-Black', sans-serif;
     font-size: 2rem;
-	font-weight: 900;
+	font-weight: 400;
 	margin: 0 1.5rem 0.85em;
     line-height: 1.4;
 }
