@@ -41,7 +41,10 @@ import pg from 'pg'
 import { renderPage } from 'vike/server'
 
 const production = process.env.NODE_ENV === 'production'
-const cluster = parseInt(process.env.NODE_CLUSTER) === 1
+let cluster = false
+if (production) {
+	cluster = parseInt(process.env.NODE_CLUSTER) === 1
+}
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = `${__dirname}/..`
 
@@ -967,7 +970,7 @@ async function demarrerServeur () {
 			const num = await db.GET('mur')
 			if (num === null) { res.send('erreur_duplication'); return false }
 			const id = parseInt(num) + 1
-			const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
+			const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 			checkDiskSpace(dossier).then(async function (diskSpace) {
 				const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
 				if (espace < minimumEspaceDisque) {
@@ -990,8 +993,8 @@ async function demarrerServeur () {
 									infos = Object.assign({}, infos)
 									if (infos === null) { resolve({}); return false }
 									const date = dayjs().format()
-									if (infos.hasOwnProperty('vignette') && infos.vignette !== '' && typeof infos.vignette === 'string' && !infos.vignette.includes('/img/') && !verifierURL(infos.vignette, ['https', 'http'])) {
-										infos.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(infos.vignette)
+									if (infos.hasOwnProperty('vignette') && definirVignettePersonnalisee(infos.vignette) === true) {
+										infos.vignette = path.basename(infos.vignette)
 									}
 									if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
 										const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
@@ -1025,7 +1028,7 @@ async function demarrerServeur () {
 								const date = dayjs().format()
 								const code = Math.floor(100000 + Math.random() * 900000)
 								if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
-									donnees.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.fond)
+									donnees.fond = path.basename(donnees.fond)
 								}
 								let epinglage = 'desactive'
 								if (donnees.hasOwnProperty('epinglage')) {
@@ -1048,8 +1051,8 @@ async function demarrerServeur () {
 									.SADD('utilisateurs-murs:' + id, identifiant)
 									.exec()
 								}
-								if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
-									await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
+								if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
+									await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
 								}
 								res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
 							})
@@ -1069,8 +1072,8 @@ async function demarrerServeur () {
 								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 									const donneesBloc = new Promise(async function (resolve) {
 										if (Object.keys(bloc).length > 0) {
-											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && typeof bloc.vignette === 'string' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-												bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
+											if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true) {
+												bloc.vignette = path.basename(bloc.vignette)
 											}
 											if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
 												const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
@@ -1106,7 +1109,7 @@ async function demarrerServeur () {
 									const slug = definirSlug(donnees.mur.titre)
 									const code = Math.floor(100000 + Math.random() * 900000)
 									if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
-										donnees.mur.fond = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(donnees.mur.fond)
+										donnees.mur.fond = path.basename(donnees.mur.fond)
 									}
 									let epinglage = 'desactive'
 									if (donnees.mur.hasOwnProperty('epinglage')) {
@@ -1129,8 +1132,8 @@ async function demarrerServeur () {
 										.SADD('utilisateurs-murs:' + id, identifiant)
 										.exec()
 									}
-									if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))) {
-										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur), path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id))
+									if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
+										await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
 									}
 									res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
 								})
@@ -1261,8 +1264,8 @@ async function demarrerServeur () {
 							await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
 							await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(parametres, '', 4), 'utf8')
 							await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
-							if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + parametres.mur.fond))) {
-								await fs.copy(path.join(__dirname, '..', '/static' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
+							if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + path.basename(parametres.mur.fond)))) {
+								await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + path.basename(parametres.mur.fond)), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
 							} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
 								await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
 							}
@@ -1276,17 +1279,17 @@ async function demarrerServeur () {
 							await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
 							await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
 							for (const bloc of parametres.blocs) {
-								if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media))) {
-									await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
+								if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media))) {
+									await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
 								}
-								if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra))) {
-									await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
+								if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra))) {
+									await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
 								}
 								if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('medias')) {
 									const medias = JSON.parse(bloc.medias)
 									for (let i = 0; i < medias.length; i++) {
-										if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier))) {
-											await fs.copyFile(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
+										if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier))) {
+											await fs.copyFile(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
 										}
 									}
 								}
@@ -1295,8 +1298,8 @@ async function demarrerServeur () {
 										await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
 									} else if (typeof bloc.vignette === 'string' && !verifierURL(bloc.vignette, ['https', 'http'])) {
 										const fichierVignette = path.basename(bloc.vignette)
-										if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette))) {
-											await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
+										if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette))) {
+											await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
 										}
 									}
 								}
@@ -1349,17 +1352,17 @@ async function demarrerServeur () {
 						await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
 						await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
 						for (const bloc of donnees.blocs) {
-							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media))) {
-								await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
+							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media))) {
+								await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
 							}
-							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra))) {
-								await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
+							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra))) {
+								await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
 							}
 							if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('medias')) {
 								const medias = JSON.parse(bloc.medias)
 								for (let i = 0; i < medias.length; i++) {
-									if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier))) {
-										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
+									if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier))) {
+										await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
 									}
 								}
 							}
@@ -1368,8 +1371,8 @@ async function demarrerServeur () {
 									await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
 								} else if (typeof bloc.vignette === 'string' && !verifierURL(bloc.vignette, ['https', 'http'])) {
 									const fichierVignette = path.basename(bloc.vignette)
-									if (await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette))) {
-										await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
+									if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette))) {
+										await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
 									}
 								}
 							}
@@ -1422,13 +1425,13 @@ async function demarrerServeur () {
 						const resultat = await db.GET('mur')
 						if (resultat === null) { res.send('erreur_import'); return false }
 						const id = parseInt(resultat) + 1
-						const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id))
+						const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 						checkDiskSpace(dossier).then(async function (diskSpace) {
 							const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
 							if (espace < minimumEspaceDisque) {
 								res.send('erreur_espace_disque')
 							} else {
-								const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+								const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 								const donneesBlocs = []
 								await fs.mkdirp(chemin)
 								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
@@ -1443,8 +1446,8 @@ async function demarrerServeur () {
 											if (parametres.evaluations === true) {
 												evaluations = bloc.evaluations
 											}
-											if (bloc.vignette !== '' && typeof bloc.vignette === 'string' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-												bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
+											if (definirVignettePersonnalisee(bloc.vignette) === true) {
+												bloc.vignette = path.basename(bloc.vignette)
 											}
 											let motdepasse = ''
 											if (bloc.hasOwnProperty('motdepasse')) {
@@ -1488,7 +1491,7 @@ async function demarrerServeur () {
 													}
 												}
 											}
-											if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && typeof bloc.vignette === 'string' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+											if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 												await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 											}
 											resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1600,7 +1603,7 @@ async function demarrerServeur () {
 							.DEL('activite:' + id)
 							.DEL('dates-murs:' + id)
 							.exec()
-							const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+							const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 							await fs.emptyDir(chemin)
 							const donneesBlocs = []
 							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
@@ -1615,8 +1618,8 @@ async function demarrerServeur () {
 										if (parametres.evaluations === true) {
 											evaluations = bloc.evaluations
 										}
-										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && typeof bloc.vignette === 'string' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-											bloc.vignette = '/' + definirDossierFichiers(donnees.mur.id) + '/' + donnees.mur.id + '/' + path.basename(bloc.vignette)
+										if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true) {
+											bloc.vignette = path.basename(bloc.vignette)
 										}
 										let motdepasse = ''
 										if (bloc.hasOwnProperty('motdepasse')) {
@@ -1660,7 +1663,7 @@ async function demarrerServeur () {
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && typeof bloc.vignette === 'string' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+										if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 										}
 										resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1716,7 +1719,7 @@ async function demarrerServeur () {
 							let donneesMur = await db.HGETALL('murs:' + id)
 							donneesMur = Object.assign({}, donneesMur)
 							if (donneesMur === null) { res.send('erreur_import'); return false }
-							const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+							const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 							await fs.emptyDir(chemin)
 							const donneesBlocs = []
 							for (const [indexBloc, bloc] of donnees.blocs.entries()) {
@@ -1733,8 +1736,8 @@ async function demarrerServeur () {
 										if (parametres.evaluations === true) {
 											evaluations = bloc.evaluations
 										}
-										if (bloc.vignette !== '' && typeof bloc.vignette === 'string' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http'])) {
-											bloc.vignette = '/' + definirDossierFichiers(id) + '/' + id + '/' + path.basename(bloc.vignette)
+										if (definirVignettePersonnalisee(bloc.vignette) === true) {
+											bloc.vignette = path.basename(bloc.vignette)
 										}
 										let motdepasse = ''
 										if (bloc.hasOwnProperty('motdepasse')) {
@@ -1778,7 +1781,7 @@ async function demarrerServeur () {
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('vignette') && bloc.vignette !== '' && typeof bloc.vignette === 'string' && !bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+										if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
 										}
 										resolve({ bloc: bloc.bloc, blocId: blocId })
@@ -1893,7 +1896,7 @@ async function demarrerServeur () {
 						.exec()
 					}
 					await db.DEL('utilisateurs-murs:' + mur)
-					const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+					const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 					if (suppressionFichiers === true) {
 						await fs.remove(chemin)
 					}
@@ -1963,7 +1966,7 @@ async function demarrerServeur () {
 						}
 						await db.DEL('utilisateurs-murs:' + mur)
 						if (suppressionFichiers === true) {
-							await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
+							await fs.remove(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))
 						}
 						const client = await pool.connect()
 						await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(mur)])
@@ -2457,7 +2460,7 @@ async function demarrerServeur () {
 							.exec()
 						}
 						await db.DEL('utilisateurs-murs:' + mur)
-						const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+						const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 						await fs.remove(chemin)
 						resolve(mur)
 					} else if (resultat !== 1 && pgdb === true) {
@@ -2475,7 +2478,7 @@ async function demarrerServeur () {
 								.exec()
 							}
 							await db.DEL('utilisateurs-murs:' + mur)
-							await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
+							await fs.remove(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))
 							await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(pad)])
 							client.release()
 							resolve(mur)
@@ -2508,21 +2511,21 @@ async function demarrerServeur () {
 								if (donnees === null) { resolve(); return false }
 								if (donnees.identifiant === identifiant) {
 									if (donnees.hasOwnProperty('media') && donnees.media !== '' && donnees.type !== 'embed') {
-										supprimerFichier(mur, donnees.media)
+										await supprimerFichier(mur, donnees.media)
 									}
 									if (donnees.hasOwnProperty('mediaExtra') && donnees.mediaExtra !== '') {
-										supprimerFichier(mur, donnees.mediaExtra)
+										await supprimerFichier(mur, donnees.mediaExtra)
 									}
 									if (donnees.hasOwnProperty('medias')) {
 										const medias = JSON.parse(donnees.medias)
 										for (let i = 0; i < medias.length; i++) {
 											if (medias[i].hasOwnProperty('fichier')) {
-												supprimerFichier(mur, medias[i].fichier)
+												await supprimerFichier(mur, medias[i].fichier)
 											}
 										}
 									}
-									if (donnees.hasOwnProperty('vignette') && donnees.vignette !== '' && typeof donnees.vignette === 'string' && !donnees.vignette.includes('/img/') && !verifierURL(donnees.vignette, ['https', 'http'])) {
-										supprimerFichier(mur, path.basename(donnees.vignette))
+									if (donnees.hasOwnProperty('vignette') && definirVignettePersonnalisee(donnees.vignette) === true) {
+										await supprimerFichier(mur, path.basename(donnees.vignette))
 									}
 									await db
 									.multi()
@@ -2600,21 +2603,21 @@ async function demarrerServeur () {
 								for (let i = 0; i < blocs.length; i++) {
 									if (blocs[i].hasOwnProperty('identifiant') && blocs[i].identifiant === identifiant) {
 										if (blocs[i].hasOwnProperty('media') && blocs[i].media !== '' && blocs[i].type !== 'embed') {
-											supprimerFichier(mur, blocs[i].media)
+											await supprimerFichier(mur, blocs[i].media)
 										}
 										if (blocs[i].hasOwnProperty('mediaExtra') && blocs[i].mediaExtra !== '') {
-											supprimerFichier(mur, blocs[i].mediaExtra)
+											await supprimerFichier(mur, blocs[i].mediaExtra)
 										}
 										if (blocs[i].hasOwnProperty('medias')) {
 											const medias = JSON.parse(blocs[i].medias)
 											for (let i = 0; i < medias.length; i++) {
 												if (medias[i].hasOwnProperty('fichier')) {
-													supprimerFichier(mur, medias[i].fichier)
+													await supprimerFichier(mur, medias[i].fichier)
 												}
 											}
 										}
-										if (blocs[i].hasOwnProperty('vignette') && blocs[i].vignette !== '' && typeof blocs[i].vignette === 'string' && !blocs[i].vignette.includes('/img/') && !verifierURL(blocs[i].vignette, ['https', 'http'])) {
-											supprimerFichier(mur, path.basename(blocs[i].vignette))
+										if (blocs[i].hasOwnProperty('vignette') && definirVignettePersonnalisee(blocs[i].vignette) === true) {
+											await supprimerFichier(mur, path.basename(blocs[i].vignette))
 										}
 										await db
 										.multi()
@@ -2905,23 +2908,27 @@ async function demarrerServeur () {
 					if (mimetype.split('/')[0] === 'image') {
 						const extension = path.parse(fichier.filename).ext
 						if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
-							sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
+							const buffer = await sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
 								fit: sharp.fit.inside,
 								withoutEnlargement: true
-							}).toBuffer(async function (err, buffer) {
-								if (err) { res.send('erreur_televersement'); return false }
+							}).toBuffer()
+							if (buffer !== null) {
 								await fs.writeFile(chemin, buffer)
 								res.json({ fichier: fichier.filename, mimetype: mimetype })
-							})
+							} else {
+								res.send('erreur_televersement')
+							}
 						} else if (extension.toLowerCase() !== '.gif') {
-							sharp(chemin).withMetadata().resize(1200, 1200, {
+							const buffer = await sharp(chemin).withMetadata().resize(1200, 1200, {
 								fit: sharp.fit.inside,
 								withoutEnlargement: true
-							}).toBuffer(async function (err, buffer) {
-								if (err) { res.send('erreur_televersement'); return false }
+							}).toBuffer()
+							if (buffer !== null) {
 								await fs.writeFile(chemin, buffer)
 								res.json({ fichier: fichier.filename, mimetype: mimetype })
-							})
+							} else {
+								res.send('erreur_televersement')
+							}
 						} else {
 							res.json({ fichier: fichier.filename, mimetype: mimetype })
 						}
@@ -3013,29 +3020,33 @@ async function demarrerServeur () {
 		if (!identifiant) {
 			res.send('non_connecte')
 		} else {
-			televerserTemp(req, res, function (err) {
+			televerserTemp(req, res, async function (err) {
 				if (err) { res.send('erreur_televersement'); return false }
 				const fichier = req.file
 				const chemin = path.join(__dirname, '..', '/static/temp/' + fichier.filename)
 				const extension = path.parse(fichier.filename).ext
 				if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
-					sharp(chemin).withMetadata().rotate().jpeg().resize(400, 400, {
+					const buffer = await sharp(chemin).withMetadata().rotate().jpeg().resize(400, 400, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer(async function (err, buffer) {
-						if (err) { res.send('erreur_televersement'); return false }
+					}).toBuffer()
+					if (buffer !== null) {
 						await fs.writeFile(chemin, buffer)
-						res.send('/temp/' + fichier.filename)
-					})
+						res.send(fichier.filename)
+					} else {
+						res.send('erreur_televersement')
+					}
 				} else {
-					sharp(chemin).withMetadata().resize(400, 400, {
+					const buffer = await sharp(chemin).withMetadata().resize(400, 400, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer(async function (err, buffer) {
-						if (err) { res.send('erreur_televersement'); return false }
+					}).toBuffer()
+					if (buffer !== null) {
 						await fs.writeFile(chemin, buffer)
-						res.send('/temp/' + fichier.filename)
-					})
+						res.send(fichier.filename)
+					} else {
+						res.send('erreur_televersement')
+					}
 				}
 			})
 		}
@@ -3046,30 +3057,34 @@ async function demarrerServeur () {
 		if (!identifiant) {
 			res.send('non_connecte')
 		} else {
-			televerser(req, res, function (err) {
+			televerser(req, res, async function (err) {
 				if (err) { res.send('erreur_televersement'); return false }
 				const fichier = req.file
 				const mur = req.body.mur
-				const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier.filename)
+				const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + fichier.filename)
 				const extension = path.parse(fichier.filename).ext
 				if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
-					sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
+					const buffer = await sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer(async function (err, buffer) {
-						if (err) { res.send('erreur_televersement'); return false }
+					}).toBuffer()
+					if (buffer !== null) {
 						await fs.writeFile(chemin, buffer)
-						res.send('/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier.filename)
-					})
+						res.send(fichier.filename)
+					} else {
+						res.send('erreur_televersement')
+					}
 				} else {
-					sharp(chemin).withMetadata().resize(1200, 1200, {
+					const buffer = await sharp(chemin).withMetadata().resize(1200, 1200, {
 						fit: sharp.fit.inside,
 						withoutEnlargement: true
-					}).toBuffer(async function (err, buffer) {
-						if (err) { res.send('erreur_televersement'); return false }
+					}).toBuffer()
+					if (buffer !== null) {
 						await fs.writeFile(chemin, buffer)
-						res.send('/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier.filename)
-					})
+						res.send(fichier.filename)
+					} else {
+						res.send('erreur_televersement')
+					}
 				}
 			})
 		}
@@ -3295,7 +3310,7 @@ async function demarrerServeur () {
 							.exec()
 						}
 						await db.DEL('utilisateurs-murs:' + mur)
-						const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+						const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 						await fs.remove(chemin)
 						res.send('contenu_supprime')
 					} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
@@ -3336,7 +3351,7 @@ async function demarrerServeur () {
 									.exec()
 								}
 								await db.DEL('utilisateurs-murs:' + mur)
-								const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+								const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 								await fs.remove(chemin)
 								res.send('contenu_supprime')
 							} else {
@@ -3367,7 +3382,7 @@ async function demarrerServeur () {
 								.exec()
 							}
 							await db.DEL('utilisateurs-murs:' + mur)
-							await fs.remove(path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur))
+							await fs.remove(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))
 							await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(mur)])
 							client.release()
 							res.send('contenu_supprime')
@@ -3409,7 +3424,7 @@ async function demarrerServeur () {
 										.exec()
 									}
 									await db.DEL('utilisateurs-murs:' + mur)
-									const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur)
+									const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 									await fs.remove(chemin)
 									res.send('contenu_supprime')
 								} else {
@@ -3473,13 +3488,13 @@ async function demarrerServeur () {
 			socket.data.identifiant = identifiant
 			socket.data.nom = nom
 			socket.join(room)
-			const clients = await io.in(room).fetchSockets()
+			const clients = await io.to(room).fetchSockets()
 			const utilisateurs = []
 			for (let i = 0; i < clients.length; i++) {
 				utilisateurs.push({ identifiant: clients[i].data.identifiant, nom: clients[i].data.nom })
 			}
 			const utilisateursConnectes = utilisateurs.filter((v, i, a) => a.findIndex(t => (t.identifiant === v.identifiant)) === i)
-			io.in(room).emit('connexion', utilisateursConnectes)
+			io.to(room).emit('connexion', utilisateursConnectes)
 		})
 
 		socket.on('sortie', function (mur, identifiant) {
@@ -3577,8 +3592,8 @@ async function demarrerServeur () {
 					} else {
 						vignetteActivee = 'non'
 					}
-					if (vignette && vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
-						vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
+					if (vignette && definirVignettePersonnalisee(vignette) === true) {
+						vignette = path.basename(vignette)
 					}
 					await db
 					.multi()
@@ -3596,24 +3611,24 @@ async function demarrerServeur () {
 						.exec()
 					}
 					if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-						await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+						await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 						await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 					}
 					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-						await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+						await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 						await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
 					}
 					for (let i = 0; i < medias.length; i++) {
 						if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-							await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+							await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 							await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
 						}
 					}
-					if (vignette && vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-						await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
-						await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+					if (vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+						await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
+						await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
 					}
-					io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
+					io.to('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -3669,8 +3684,8 @@ async function demarrerServeur () {
 							}
 							const edition = objet.edition
 							const date = dayjs().format()
-							if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
-								vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
+							if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true) {
+								vignette = path.basename(vignette)
 							}
 							if (visibilite === 'visible' || visibilite === 'protegee') {
 								// Enregistrer entrée du registre d'activité
@@ -3683,41 +3698,41 @@ async function demarrerServeur () {
 								.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }) }])
 								.exec()
 								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 								}
 								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
-									supprimerFichier(mur, objet.media)
+									await supprimerFichier(mur, objet.media)
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-									supprimerFichier(mur, objet.mediaExtra)
+									await supprimerFichier(mur, objet.mediaExtra)
 								}
 								if (objet.hasOwnProperty('medias')) {
 									const mediasActuels = JSON.parse(objet.medias)
 									for (let i = 0; i < medias.length; i++) {
 										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
 										}
 									}
-									mediasActuels.forEach(function (mediaActuel) {
+									mediasActuels.forEach(async function (mediaActuel) {
 										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-											supprimerFichier(mur, mediaActuel.fichier)
+											await supprimerFichier(mur, mediaActuel.fichier)
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
 								}
-								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && typeof objet.vignette === 'string' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-									supprimerFichier(mur, path.basename(objet.vignette))
+								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
+									await supprimerFichier(mur, path.basename(objet.vignette))
 								}
-								io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
+								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
 							} else if (visibilite === 'privee' || visibilite === 'masquee') {
@@ -3727,80 +3742,80 @@ async function demarrerServeur () {
 								.HSET('dates-murs:' + mur, 'date', date)
 								.exec()
 								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 								}
 								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
-									supprimerFichier(mur, objet.media)
+									await supprimerFichier(mur, objet.media)
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-									supprimerFichier(mur, objet.mediaExtra)
+									await supprimerFichier(mur, objet.mediaExtra)
 								}
 								if (objet.hasOwnProperty('medias')) {
 									const mediasActuels = JSON.parse(objet.medias)
 									for (let i = 0; i < medias.length; i++) {
 										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
 										}
 									}
-									mediasActuels.forEach(function (mediaActuel) {
+									mediasActuels.forEach(async function (mediaActuel) {
 										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-											supprimerFichier(mur, mediaActuel.fichier)
+											await supprimerFichier(mur, mediaActuel.fichier)
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
 								}
-								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && typeof objet.vignette === 'string' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-									supprimerFichier(mur, path.basename(objet.vignette))
+								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
+									await supprimerFichier(mur, path.basename(objet.vignette))
 								}
-								io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
+								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
 							} else {
 								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 								}
 								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
-									supprimerFichier(mur, objet.media)
+									await supprimerFichier(mur, objet.media)
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-									supprimerFichier(mur, objet.mediaExtra)
+									await supprimerFichier(mur, objet.mediaExtra)
 								}
 								if (objet.hasOwnProperty('medias')) {
 									const mediasActuels = JSON.parse(objet.medias)
 									for (let i = 0; i < medias.length; i++) {
 										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
 										}
 									}
-									mediasActuels.forEach(function (mediaActuel) {
+									mediasActuels.forEach(async function (mediaActuel) {
 										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-											supprimerFichier(mur, mediaActuel.fichier)
+											await supprimerFichier(mur, mediaActuel.fichier)
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)), path.join(__dirname, '..', '/static' + vignette))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + path.basename(vignette)))
+								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
+									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
 								}
-								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && objet.vignette !== '' && typeof objet.vignette === 'string' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-									supprimerFichier(mur, path.basename(objet.vignette))
+								if (objet.hasOwnProperty('vignette') && definirVignettePersonnalisee(objet.vignette) === true) {
+									await supprimerFichier(mur, path.basename(objet.vignette))
 								}
-								io.in('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
+								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
 							}
@@ -3839,10 +3854,8 @@ async function demarrerServeur () {
 					} else {
 						vignetteActivee = 'non'
 					}
-					let vignetteOrigine = ''
-					if (vignette && vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
-						vignette = '/' + definirDossierFichiers(mur) + '/' + mur + '/' + path.basename(vignette)
-						vignetteOrigine = '/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + path.basename(vignette)
+					if (vignette && definirVignettePersonnalisee(vignette) === true) {
+						vignette = path.basename(vignette)
 					}
 					await db
 					.multi()
@@ -3859,21 +3872,21 @@ async function demarrerServeur () {
 						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }) }])
 						.exec()
 					}
-					if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + media))) {
-						await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + media), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + media))
+					if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media))) {
+						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 					}
-					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + mediaExtra))) {
-						await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + mediaExtra), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + mediaExtra))
+					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + mediaExtra))) {
+						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 					}
 					for (let i = 0; i < medias.length; i++) {
-						if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + medias[i].fichier))) {
-							await fs.copy(path.join(__dirname, '..', '/static/' + definirDossierFichiers(murOrigine) + '/' + murOrigine + '/' + medias[i].fichier), path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + medias[i].fichier))
+						if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + medias[i].fichier))) {
+							await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 						}
 					}
-					if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + vignetteOrigine))) {
-						await fs.copy(path.join(__dirname, '..', '/static' + vignetteOrigine), path.join(__dirname, '..', '/static' + vignette))
+					if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + vignette))) {
+						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 					}
-					io.in('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, epinglee: 'non', activiteId: activiteId })
+					io.to('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, epinglee: 'non', activiteId: activiteId })
 					socket.emit('copierbloc')
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
@@ -3904,7 +3917,7 @@ async function demarrerServeur () {
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
 						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'edition', 'non')
-						io.in('mur-' + mur).emit('verrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
+						io.to('mur-' + mur).emit('verrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					}
@@ -3935,7 +3948,7 @@ async function demarrerServeur () {
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
 						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'edition', 'oui')
-						io.in('mur-' + mur).emit('deverrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
+						io.to('mur-' + mur).emit('deverrouillerbloc', { bloc: bloc, colonne: colonne, identifiant: identifiant })
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					}
@@ -3966,7 +3979,7 @@ async function demarrerServeur () {
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
 						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'oui')
-						io.in('mur-' + mur).emit('epinglerbloc', { bloc: bloc, identifiant: identifiant })
+						io.to('mur-' + mur).emit('epinglerbloc', { bloc: bloc, identifiant: identifiant })
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					}
@@ -3997,7 +4010,7 @@ async function demarrerServeur () {
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
 						await db.HSET('contenu-blocs:' + mur + ':' + bloc, 'epinglee', 'non')
-						io.in('mur-' + mur).emit('desepinglerbloc', { bloc: bloc, identifiant: identifiant })
+						io.to('mur-' + mur).emit('desepinglerbloc', { bloc: bloc, identifiant: identifiant })
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					}
@@ -4040,7 +4053,7 @@ async function demarrerServeur () {
 						.HINCRBY('murs:' + mur, 'activite', 1)
 						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: item.bloc, identifiant: item.identifiant, titre: item.titre, date: date, type: 'bloc-ajoute' }) }])
 						.exec()
-						io.in('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: item.nom, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', motdepasse: item.motdepasse, epinglee: item.epinglee, activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
+						io.to('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: item.nom, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', motdepasse: item.motdepasse, epinglee: item.epinglee, activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					}
@@ -4102,7 +4115,7 @@ async function demarrerServeur () {
 							if (ordre === 'decroissant') {
 								items.reverse()
 							}
-							io.in('mur-' + mur).emit('deplacerbloc', { blocs: items, identifiant: identifiant })
+							io.to('mur-' + mur).emit('deplacerbloc', { blocs: items, identifiant: identifiant })
 						} else {
 							socket.emit('erreur')
 						}
@@ -4138,21 +4151,21 @@ async function demarrerServeur () {
 						}
 						if (objet.identifiant === identifiant || admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 							if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
-								supprimerFichier(mur, objet.media)
+								await supprimerFichier(mur, objet.media)
 							}
 							if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
-								supprimerFichier(mur, objet.mediaExtra)
+								await supprimerFichier(mur, objet.mediaExtra)
 							}
 							if (objet.hasOwnProperty('medias')) {
 								const medias = JSON.parse(objet.medias)
 								for (let i = 0; i < medias.length; i++) {
 									if (medias[i].hasOwnProperty('fichier')) {
-										supprimerFichier(mur, medias[i].fichier)
+										await supprimerFichier(mur, medias[i].fichier)
 									}
 								}
 							}
-							if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && typeof objet.vignette === 'string' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-								supprimerFichier(mur, path.basename(objet.vignette))
+							if (objet.hasOwnProperty('vignette') && definirVignettePersonnalisee(objet.vignette) === true) {
+								await supprimerFichier(mur, path.basename(objet.vignette))
 							}
 							let pad = ''
 							if (objet.hasOwnProperty('iframe') && objet.iframe !== '' && objet.iframe.includes(etherpad)) {
@@ -4175,7 +4188,7 @@ async function demarrerServeur () {
 								.HINCRBY('murs:' + mur, 'activite', 1)
 								.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-supprime' }) }])
 								.exec()
-								io.in('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId, etherpad: pad })
+								io.to('mur-' + mur).emit('supprimerbloc', { bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, colonne: colonne, activiteId: activiteId, etherpad: pad })
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
 							}
@@ -4236,7 +4249,7 @@ async function demarrerServeur () {
 				.HINCRBY('murs:' + mur, 'activite', 1)
 				.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-commente' }) }])
 				.exec()
-				io.in('mur-' + mur).emit('commenterbloc', { id: commentaireId, bloc: bloc, identifiant: identifiant, nom: nom, texte: texte, titre: titre, date: date, commentaires: commentaires.length + 1, activiteId: activiteId })
+				io.to('mur-' + mur).emit('commenterbloc', { id: commentaireId, bloc: bloc, identifiant: identifiant, nom: nom, texte: texte, titre: titre, date: date, commentaires: commentaires.length + 1, activiteId: activiteId })
 				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.request.session.save()
 			} else {
@@ -4268,7 +4281,7 @@ async function demarrerServeur () {
 				.ZADD('commentaires:' + bloc, [{ score: id, value: JSON.stringify(commentaire) }])
 				.HSET('dates-murs:' + mur, 'date', dateModification)
 				.exec()
-				io.in('mur-' + mur).emit('modifiercommentaire', { id: id, texte: texte })
+				io.to('mur-' + mur).emit('modifiercommentaire', { id: id, texte: texte })
 				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.request.session.save()
 			} else {
@@ -4290,7 +4303,7 @@ async function demarrerServeur () {
 				.exec()
 				const commentaires = await db.ZCARD('commentaires:' + bloc)
 				if (commentaires === null) { socket.emit('erreur'); return false }
-				io.in('mur-' + mur).emit('supprimercommentaire', { id: id, bloc: bloc, commentaires: commentaires })
+				io.to('mur-' + mur).emit('supprimercommentaire', { id: id, bloc: bloc, commentaires: commentaires })
 				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.request.session.save()
 			} else {
@@ -4365,7 +4378,7 @@ async function demarrerServeur () {
 				.HINCRBY('murs:' + mur, 'activite', 1)
 				.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-evalue' }) }])
 				.exec()
-				io.in('mur-' + mur).emit('evaluerbloc', { id: evaluationId, bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, evaluation: evaluation, activiteId: activiteId })
+				io.to('mur-' + mur).emit('evaluerbloc', { id: evaluationId, bloc: bloc, identifiant: identifiant, nom: nom, titre: titre, date: date, evaluation: evaluation, activiteId: activiteId })
 				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.request.session.save()
 			} else {
@@ -4387,7 +4400,7 @@ async function demarrerServeur () {
 				.ZADD('evaluations:' + bloc, [{ score: id, value: JSON.stringify(evaluation) }])
 				.HSET('dates-murs:' + mur, 'date', date)
 				.exec()
-				io.in('mur-' + mur).emit('modifierevaluation', { id: id, bloc: bloc, date: date, etoiles: etoiles })
+				io.to('mur-' + mur).emit('modifierevaluation', { id: id, bloc: bloc, date: date, etoiles: etoiles })
 				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.request.session.save()
 			} else {
@@ -4407,7 +4420,7 @@ async function demarrerServeur () {
 				.HSET('dates-murs:' + mur, 'date', date)
 				.ZREMRANGEBYSCORE('evaluations:' + bloc, id, id)
 				.exec()
-				io.in('mur-' + mur).emit('supprimerevaluation', { id: id, bloc: bloc })
+				io.to('mur-' + mur).emit('supprimerevaluation', { id: id, bloc: bloc })
 				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.request.session.save()
 			} else {
@@ -4445,13 +4458,13 @@ async function demarrerServeur () {
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
 				if (statut === 'invite') {
 					await db.HSET('noms:' + identifiant, 'nom', nom)
-					io.in('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
+					io.to('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
 					socket.request.session.nom = nom
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else if (statut === 'auteur') {
 					await db.HSET('utilisateurs:' + identifiant, 'nom', nom)
-					io.in('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
+					io.to('mur-' + mur).emit('modifiernom', { identifiant: identifiant, nom: nom })
 					socket.request.session.nom = nom
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
@@ -4478,7 +4491,7 @@ async function demarrerServeur () {
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'titre', titre)
 					const slug = definirSlug(titre)
-					io.in('mur-' + mur).emit('modifiertitre', { titre: titre, slug: slug, identifiant: identifiant })
+					io.to('mur-' + mur).emit('modifiertitre', { titre: titre, slug: slug, identifiant: identifiant })
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4505,7 +4518,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'code', code)
-					io.in('mur-' + mur).emit('modifiercodeacces', code, identifiant)
+					io.to('mur-' + mur).emit('modifiercodeacces', code, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4544,7 +4557,7 @@ async function demarrerServeur () {
 								await db.SREM('murs-admins:' + admin, mur.toString())
 							}
 						})
-						io.in('mur-' + mur).emit('modifieradmins', admins, motdepasseAdmin, identifiant)
+						io.to('mur-' + mur).emit('modifieradmins', admins, motdepasseAdmin, identifiant)
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					} else {
@@ -4578,7 +4591,7 @@ async function demarrerServeur () {
 						code = Math.floor(100000 + Math.random() * 900000)
 					}
 					await db.HSET('murs:' + mur, ['acces', acces, 'code', code])
-					io.in('mur-' + mur).emit('modifieracces', { acces: acces, code: code })
+					io.to('mur-' + mur).emit('modifieracces', { acces: acces, code: code })
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4605,7 +4618,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'contributions', contributions)
-					io.in('mur-' + mur).emit('modifiercontributions', { contributions: contributions, contributionsPrecedentes: contributionsPrecedentes })
+					io.to('mur-' + mur).emit('modifiercontributions', { contributions: contributions, contributionsPrecedentes: contributionsPrecedentes })
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4632,7 +4645,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'affichage', affichage)
-					io.in('mur-' + mur).emit('modifieraffichage', affichage, identifiant)
+					io.to('mur-' + mur).emit('modifieraffichage', affichage, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4659,7 +4672,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'ordre', ordre)
-					io.in('mur-' + mur).emit('modifierordre', ordre, identifiant)
+					io.to('mur-' + mur).emit('modifierordre', ordre, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4686,7 +4699,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'largeur', largeur)
-					io.in('mur-' + mur).emit('modifierlargeur', largeur, identifiant)
+					io.to('mur-' + mur).emit('modifierlargeur', largeur, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4712,10 +4725,10 @@ async function demarrerServeur () {
 					admins = JSON.parse(donnees.admins)
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-					await db.HSET('murs:' + mur, 'fond', fond)
-					io.in('mur-' + mur).emit('modifierfond', fond, identifiant)
+					await db.HSET('murs:' + mur, ['fond', fond, 'fondRepete', 'desactive'])
+					io.to('mur-' + mur).emit('modifierfond', fond, identifiant)
 					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
-						supprimerFichier(mur, path.basename(ancienfond))
+						await supprimerFichier(mur, path.basename(ancienfond))
 					}
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
@@ -4742,11 +4755,38 @@ async function demarrerServeur () {
 					admins = JSON.parse(donnees.admins)
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-					await db.HSET('murs:' + mur, 'fond', fond)
-					io.in('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
+					await db.HSET('murs:' + mur, ['fond', fond, 'fondRepete', 'desactive'])
+					io.to('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
 					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
-						supprimerFichier(mur, path.basename(ancienfond))
+						await supprimerFichier(mur, path.basename(ancienfond))
 					}
+					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+					socket.request.session.save()
+				} else {
+					socket.emit('nonautorise')
+				}
+			} else {
+				socket.emit('deconnecte')
+			}
+		})
+
+		socket.on('modifierfondrepete', async function (mur, statut, identifiant) {
+			if (maintenance === true) {
+				socket.emit('maintenance')
+				return false
+			}
+			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
+				let donnees = await db.HGETALL('murs:' + mur)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = donnees.admins
+				}
+				if (admins.includes(identifiant) || proprietaire === identifiant) {
+					await db.HSET('murs:' + mur, 'fondRepete', statut)
+					io.to('mur-' + mur).emit('modifierfondrepete', statut)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4773,7 +4813,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'registreActivite', statut)
-					io.in('mur-' + mur).emit('modifieractivite', statut)
+					io.to('mur-' + mur).emit('modifieractivite', statut)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4800,7 +4840,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'conversation', statut)
-					io.in('mur-' + mur).emit('modifierconversation', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierconversation', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4827,7 +4867,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'listeUtilisateurs', statut)
-					io.in('mur-' + mur).emit('modifierlisteutilisateurs', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierlisteutilisateurs', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4854,7 +4894,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'editionNom', statut)
-					io.in('mur-' + mur).emit('modifiereditionnom', statut, identifiant)
+					io.to('mur-' + mur).emit('modifiereditionnom', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4881,7 +4921,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'fichiers', statut)
-					io.in('mur-' + mur).emit('modifierfichiers', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierfichiers', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4908,7 +4948,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'enregistrements', statut)
-					io.in('mur-' + mur).emit('modifierenregistrements', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierenregistrements', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4935,7 +4975,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'liens', statut)
-					io.in('mur-' + mur).emit('modifierliens', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierliens', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4962,7 +5002,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'documents', statut)
-					io.in('mur-' + mur).emit('modifierdocuments', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierdocuments', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -4989,7 +5029,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'commentaires', statut)
-					io.in('mur-' + mur).emit('modifiercommentaires', statut, identifiant)
+					io.to('mur-' + mur).emit('modifiercommentaires', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5016,7 +5056,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'evaluations', statut)
-					io.in('mur-' + mur).emit('modifierevaluations', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierevaluations', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5043,7 +5083,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'verrouillage', statut)
-					io.in('mur-' + mur).emit('modifierverrouillage', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierverrouillage', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5070,7 +5110,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'epinglage', statut)
-					io.in('mur-' + mur).emit('modifierepinglage', statut, identifiant)
+					io.to('mur-' + mur).emit('modifierepinglage', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5097,7 +5137,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.HSET('murs:' + mur, 'copieBloc', statut)
-					io.in('mur-' + mur).emit('modifiercopiebloc', statut, identifiant)
+					io.to('mur-' + mur).emit('modifiercopiebloc', statut, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5111,7 +5151,7 @@ async function demarrerServeur () {
 		socket.on('messagechat', function (mur, texte, identifiant, nom) {
 			if (identifiant !== '' && identifiant !== undefined && socket.request.session.identifiant === identifiant) {
 				const date = dayjs().format()
-				io.in('mur-' + mur).emit('messagechat', { texte: texte, identifiant: identifiant, nom: nom, date: date })
+				io.to('mur-' + mur).emit('messagechat', { texte: texte, identifiant: identifiant, nom: nom, date: date })
 				socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 				socket.request.session.save()
 			} else {
@@ -5130,7 +5170,7 @@ async function demarrerServeur () {
 					admins = JSON.parse(donnees.admins)
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-					io.in('mur-' + mur).emit('reinitialisermessages', identifiant)
+					io.to('mur-' + mur).emit('reinitialisermessages', identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5153,7 +5193,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.DEL('activite:' + mur)
-					io.in('mur-' + mur).emit('reinitialiseractivite', identifiant)
+					io.to('mur-' + mur).emit('reinitialiseractivite', identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5190,7 +5230,7 @@ async function demarrerServeur () {
 					.HINCRBY('murs:' + mur, 'activite', 1)
 					.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-ajoutee' }) }])
 					.exec()
-					io.in('mur-' + mur).emit('ajoutercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
+					io.to('mur-' + mur).emit('ajoutercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5219,7 +5259,7 @@ async function demarrerServeur () {
 					const colonnes = JSON.parse(donnees.colonnes)
 					colonnes[index] = titre
 					await db.HSET('murs:' + mur, 'colonnes', JSON.stringify(colonnes))
-					io.in('mur-' + mur).emit('modifiertitrecolonne', colonnes, identifiant)
+					io.to('mur-' + mur).emit('modifiertitrecolonne', colonnes, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5256,7 +5296,7 @@ async function demarrerServeur () {
 					}
 					affichageColonnes[index] = valeur
 					await db.HSET('murs:' + mur, 'affichageColonnes', JSON.stringify(affichageColonnes))
-					io.in('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes, valeur, index, identifiant)
+					io.to('mur-' + mur).emit('modifieraffichagecolonne', affichageColonnes, valeur, index, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5330,21 +5370,21 @@ async function demarrerServeur () {
 									objet = Object.assign({}, objet)
 									if (objet === null) { resolve(); return false }
 									if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
-										supprimerFichier(mur, objet.media)
+										await supprimerFichier(mur, objet.media)
 									}
 									if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
-										supprimerFichier(mur, objet.mediaExtra)
+										await supprimerFichier(mur, objet.mediaExtra)
 									}
 									if (objet.hasOwnProperty('medias')) {
 										const medias = JSON.parse(objet.medias)
 										for (let i = 0; i < medias.length; i++) {
 											if (medias[i].hasOwnProperty('fichier')) {
-												supprimerFichier(mur, medias[i].fichier)
+												await supprimerFichier(mur, medias[i].fichier)
 											}
 										}
 									}
-									if (objet.hasOwnProperty('vignette') && objet.vignette !== '' && typeof objet.vignette === 'string' && !objet.vignette.includes('/img/') && !verifierURL(objet.vignette, ['https', 'http'])) {
-										supprimerFichier(mur, path.basename(objet.vignette))
+									if (objet.hasOwnProperty('vignette') && definirVignettePersonnalisee(objet.vignette) === true) {
+										await supprimerFichier(mur, path.basename(objet.vignette))
 									}
 									if (objet.hasOwnProperty('bloc') && objet.bloc === blocSupprime) {
 										await db
@@ -5386,7 +5426,7 @@ async function demarrerServeur () {
 							.HINCRBY('murs:' + mur, 'activite', 1)
 							.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-supprimee' }) }])
 							.exec()
-							io.in('mur-' + mur).emit('supprimercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
+							io.to('mur-' + mur).emit('supprimercolonne', { identifiant: identifiant, nom: nom, titre: titre, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
 							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 							socket.request.session.save()
 						})
@@ -5481,7 +5521,7 @@ async function demarrerServeur () {
 							.HINCRBY('murs:' + mur, 'activite', 1)
 							.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, identifiant: identifiant, titre: titre, date: date, type: 'colonne-deplacee' }) }])
 							.exec()
-							io.in('mur-' + mur).emit('deplacercolonne', { identifiant: identifiant, nom: nom, titre: titre, direction: direction, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
+							io.to('mur-' + mur).emit('deplacercolonne', { identifiant: identifiant, nom: nom, titre: titre, direction: direction, colonne: colonne, colonnes: colonnes, affichageColonnes: affichageColonnes, date: date, activiteId: activiteId })
 							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 							socket.request.session.save()
 						})
@@ -5573,7 +5613,7 @@ async function demarrerServeur () {
 				return false
 			}
 			await db.HSET('murs:' + mur, 'notification', JSON.stringify(admins))
-			io.in('mur-' + mur).emit('modifiernotification', admins)
+			io.to('mur-' + mur).emit('modifiernotification', admins)
 			socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 			socket.request.session.save()
 		})
@@ -5606,7 +5646,7 @@ async function demarrerServeur () {
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
 					await db.ZREMRANGEBYSCORE('activite:' + mur, id, id)
-					io.in('mur-' + mur).emit('supprimeractivite', id, identifiant)
+					io.to('mur-' + mur).emit('supprimeractivite', id, identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
 				} else {
@@ -5662,7 +5702,7 @@ async function demarrerServeur () {
 		.SADD('utilisateurs-murs:' + id, identifiant)
 		.HSET('dates-murs:' + id, 'date', date)
 		.exec()
-		const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+		const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 		await fs.mkdirp(chemin)
 		res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', epinglage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
 	}
@@ -5681,7 +5721,7 @@ async function demarrerServeur () {
 		if (type === 'api') {
 			await db.SADD('murs-crees:' + identifiant, id.toString())
 		}
-		const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(id) + '/' + id)
+		const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 		await fs.mkdirp(chemin)
 		if (type === 'api') {
 			res.send(id + '/' + token + '/' + slug)
@@ -5762,6 +5802,10 @@ async function demarrerServeur () {
 						let donnees = await db.HGETALL('murs:' + mur)
 						donnees = Object.assign({}, donnees)
 						if (donnees === null) { resolve({}); return false }
+						// Pour compatibilité avec les anciens chemins
+						if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+							donnees.fond = path.basename(donnees.fond)
+						}
 						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
 						if (reponse === 1) {
 							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -5788,6 +5832,10 @@ async function demarrerServeur () {
 						if (Object.keys(donneesQ.rows[0]).length === 1) {
 							const donnees = JSON.parse(donneesQ.rows[0].donnees)
 							if (donnees.hasOwnProperty('identifiant')) {
+								// Pour compatibilité avec les anciens chemins
+								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+									donnees.fond = path.basename(donnees.fond)
+								}
 								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
 								if (reponse === 1) {
 									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -5836,6 +5884,10 @@ async function demarrerServeur () {
 						let donnees = await db.HGETALL('murs:' + mur)
 						donnees = Object.assign({}, donnees)
 						if (donnees === null) { resolve({}); return false }
+						// Pour compatibilité avec les anciens chemins
+						if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+							donnees.fond = path.basename(donnees.fond)
+						}
 						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
 						if (reponse === 1) {
 							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -5862,6 +5914,10 @@ async function demarrerServeur () {
 						if (Object.keys(donneesQ.rows[0]).length === 1) {
 							const donnees = JSON.parse(donneesQ.rows[0].donnees)
 							if (donnees.hasOwnProperty('identifiant')) {
+								// Pour compatibilité avec les anciens chemins
+								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+									donnees.fond = path.basename(donnees.fond)
+								}
 								const reponse = db.EXISTS('utilisateurs:' + donnees.identifiant)
 								if (reponse === 1) {
 									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -5910,6 +5966,10 @@ async function demarrerServeur () {
 						let donnees = await db.HGETALL('murs:' + mur)
 						donnees = Object.assign({}, donnees)
 						if (donnees === null) { resolve({}); return false }
+						// Pour compatibilité avec les anciens chemins
+						if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+							donnees.fond = path.basename(donnees.fond)
+						}
 						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
 						if (reponse === 1) {
 							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -5936,6 +5996,10 @@ async function demarrerServeur () {
 						if (Object.keys(donneesQ.rows[0]).length === 1) {
 							const donnees = JSON.parse(donneesQ.rows[0].donnees)
 							if (donnees.hasOwnProperty('identifiant')) {
+								// Pour compatibilité avec les anciens chemins
+								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+									donnees.fond = path.basename(donnees.fond)
+								}
 								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
 								if (reponse === 1) {
 									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -5984,6 +6048,10 @@ async function demarrerServeur () {
 						let donnees = await db.HGETALL('murs:' + mur)
 						donnees = Object.assign({}, donnees)
 						if (donnees === null) { resolve({}); return false }
+						// Pour compatibilité avec les anciens chemins
+						if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+							donnees.fond = path.basename(donnees.fond)
+						}
 						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
 						if (reponse === 1) {
 							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -6010,6 +6078,10 @@ async function demarrerServeur () {
 						if (Object.keys(donneesQ.rows[0]).length === 1) {
 							const donnees = JSON.parse(donneesQ.rows[0].donnees)
 							if (donnees.hasOwnProperty('identifiant')) {
+								// Pour compatibilité avec les anciens chemins
+								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+									donnees.fond = path.basename(donnees.fond)
+								}
 								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
 								if (reponse === 1) {
 									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
@@ -6162,6 +6234,13 @@ async function demarrerServeur () {
 			if (!mur.hasOwnProperty('epinglage')) {
 				mur.epinglage = 'desactive'
 			}
+			if (!mur.hasOwnProperty('fondRepete')) {
+				mur.fondRepete = 'desactive'
+			}
+			// Pour compatibilité avec les anciens chemins
+			if (mur.hasOwnProperty('fond') && !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#' && mur.fond !== '' && typeof mur.fond === 'string') {
+				mur.fond = path.basename(mur.fond)
+			}
 			// Cacher mots de passe front
 			if (mur.hasOwnProperty('motdepasse')) {
 				mur.motdepasse = ''
@@ -6194,6 +6273,10 @@ async function demarrerServeur () {
 								// Pour résoudre le problème des capsules qui sont référencées dans une colonne inexistante
 								if (parseInt(donnees.colonne) >= nombreColonnes) {
 									donnees.colonne = nombreColonnes - 1
+								}
+								// Pour compatibilité avec les anciens chemins
+								if (donnees.hasOwnProperty('vignette') && definirVignettePersonnalisee(donnees.vignette) === true) {
+									donnees.vignette = path.basename(donnees.vignette)
 								}
 								donnees.medias = JSON.parse(donnees.medias)
 								if (!donnees.hasOwnProperty('motdepasse')) {
@@ -6657,30 +6740,61 @@ async function demarrerServeur () {
 		return motdepasse  
 	}
 
+	function definirNomFichier (fichier) {
+		const info = path.parse(fichier)
+		const extension = info.ext.toLowerCase()
+		let nom = v.latinise(info.name.toLowerCase())
+		nom = nom.replace(/\ /gi, '-')
+		nom = nom.replace(/[^0-9a-z_\-]/gi, '')
+		if (nom.length > 100) {
+			nom = nom.substring(0, 100)
+		}
+		nom = nom + '_' + Math.random().toString(36).substring(2) + extension
+		return nom
+	}
+
+	function definirVignettePersonnalisee (vignette) {
+		if (vignette !== '' && typeof vignette === 'string' && !vignette.includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+			return true
+		} else {
+			return false
+		}
+	}
+
+	function definirCheminFichiers () {
+		return '/fichiers'
+	}
+
+	function definirSlug (titre) {
+		let slug = v.latinise(titre.toLowerCase())
+		slug = slug.replace(/\ /gi, '-')
+		slug = slug.replace(/[^0-9a-z_\-]/gi, '')
+		return slug
+	}
+
+	async function supprimerFichier (mur, fichier) {
+		return new Promise(async function (resolve) {
+			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + fichier)
+			await fs.remove(chemin)
+			resolve()
+		})
+	}
+
 	const televerser = multer({
 		storage: multer.diskStorage({
 			destination: function (req, fichier, callback) {
 				const mur = req.body.mur
-				const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/')
+				const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/')
 				callback(null, chemin)
 			},
 			filename: function (req, fichier, callback) {
-				const info = path.parse(fichier.originalname)
-				const extension = info.ext.toLowerCase()
-				let nom = v.latinise(info.name.toLowerCase())
-				nom = nom.replace(/\ /gi, '-')
-				nom = nom.replace(/[^0-9a-z_\-]/gi, '')
-				if (nom.length > 100) {
-					nom = nom.substring(0, 100)
-				}
-				nom = nom + '_' + Math.random().toString(36).substring(2) + extension
+				const nom = definirNomFichier(fichier.originalname)
 				callback(null, nom)
 			}
 		}),
 		fileFilter: function (req, fichier, callback) {
 			if (req.body.mur) {
-				const mur = req.body.mur
-				const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur))
+				const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 				checkDiskSpace(dossier).then(function (diskSpace) {
 					const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
 					if (espace < minimumEspaceDisque) {
@@ -6702,22 +6816,13 @@ async function demarrerServeur () {
 				callback(null, chemin)
 			},
 			filename: function (req, fichier, callback) {
-				const info = path.parse(fichier.originalname)
-				const extension = info.ext.toLowerCase()
-				let nom = v.latinise(info.name.toLowerCase())
-				nom = nom.replace(/\ /gi, '-')
-				nom = nom.replace(/[^0-9a-z_\-]/gi, '')
-				if (nom.length > 100) {
-					nom = nom.substring(0, 100)
-				}
-				nom = nom + '_' + Math.random().toString(36).substring(2) + extension
+				const nom = definirNomFichier(fichier.originalname)
 				callback(null, nom)
 			}
 		}),
 		fileFilter: function (req, fichier, callback) {
 			if (req.body.mur) {
-				const mur = req.body.mur
-				const dossier = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur))
+				const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 				checkDiskSpace(dossier).then(function (diskSpace) {
 					const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
 					if (espace < minimumEspaceDisque) {
@@ -6731,26 +6836,6 @@ async function demarrerServeur () {
 			}
 		}
 	}).single('fichier')
-
-	async function supprimerFichier (mur, fichier) {
-		const chemin = path.join(__dirname, '..', '/static/' + definirDossierFichiers(mur) + '/' + mur + '/' + fichier)
-		await fs.remove(chemin)
-	}
-
-	function definirDossierFichiers (id) {
-		if (process.env.VITE_NFS_WALL_NUMBER && process.env.VITE_NFS_WALL_NUMBER !== '' && process.env.VITE_NFS_FOLDER && process.env.VITE_NFS_FOLDER !== '' && parseInt(id) > parseInt(process.env.VITE_NFS_WALL_NUMBER)) {
-			return process.env.VITE_NFS_FOLDER
-		} else {
-			return 'fichiers'
-		}
-	}
-
-	function definirSlug (titre) {
-		let slug = v.latinise(titre.toLowerCase())
-		slug = slug.replace(/\ /gi, '-')
-		slug = slug.replace(/[^0-9a-z_\-]/gi, '')
-		return slug
-	}
 
 	function verifierURL (s, protocoles) {
 		try {
@@ -6848,7 +6933,7 @@ async function demarrerServeur () {
 							<span id="titre">{{ mur.titre }}</span>
 						</header>
 
-						<div id="mur" :class="{'fond-personnalise': mur.fond.substring(0, 1) !== '#' && !mur.fond.includes('/img/')}" :style="definirFond(mur.fond)" v-if="!chargement">
+						<div id="mur" :class="{'fond-personnalise': mur.fond.substring(0, 1) !== '#' && !mur.fond.includes('/img/') && (!mur.hasOwnProperty('fondRepete') || mur.fondRepete === 'desactive'), 'fond-personnalise-repete': mur.fond.substring(0, 1) !== '#' && !mur.fond.includes('/img/') && mur.hasOwnProperty('fondRepete') && mur.fondRepete === 'active'}" :style="definirFond(mur.fond)" v-if="!chargement">
 							<!-- Affichage mur -->
 							<masonry id="blocs" class="mur" :cols="definirLargeurCapsules()" :gutter="0" v-if="mur.affichage === 'mur'">
 								<div :id="item.bloc" class="bloc" v-for="(item, indexItem) in blocs" :style="{'border-color': item.couleur}" :data-bloc="item.bloc" :key="'bloc' + indexItem">
