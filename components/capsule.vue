@@ -6,15 +6,15 @@
 		</div>
 		<div class="texte" v-if="item.texte !== ''" v-html="item.texte" />
 		<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-			<img role="button" :tabindex="tabindex" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'/' + $parent.$parent.definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" loading="lazy" :alt="item.media" @click="$parent.$parent.afficherVisionneuse(item)" @keydown.enter="$parent.$parent.afficherVisionneuse(item)">
+			<img role="button" :tabindex="tabindex" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="$parent.$parent.definirCheminFichiers() + '/' + mur.id + '/' + item.media" loading="lazy" :alt="item.media" @click="$parent.$parent.afficherVisionneuse(item)" @keydown.enter="$parent.$parent.afficherVisionneuse(item)">
 			<img role="button" :tabindex="tabindex" v-else-if="item.type === 'lien-image'" :src="item.media" loading="lazy" :alt="item.media" @click="$parent.$parent.afficherVisionneuse(item)" @keydown.enter="$parent.$parent.afficherVisionneuse(item)">
-			<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'/' + $parent.$parent.definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></audio>
-			<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'/' + $parent.$parent.definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media"></video>
+			<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="$parent.$parent.definirCheminFichiers() + '/' + mur.id + '/' + item.media"></audio>
+			<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="$parent.$parent.definirCheminFichiers() + '/' + mur.id + '/' + item.media"></video>
 			<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allow="autoplay; fullscreen"></iframe>
-			<span role="button" :tabindex="tabindex" v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'document' || item.type === 'pdf' || item.type === 'office' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="$parent.$parent.afficherVisionneuse(item)" @keydown.enter="$parent.$parent.afficherVisionneuse(item)"><img :class="{'vignette': $parent.$parent.definirVignette(item).substring(0, 5) !== '/img/'}" :src="$parent.$parent.definirVignette(item)" :alt="$parent.$parent.definirVignette(item)" loading="lazy"></span>
-			<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': $parent.$parent.definirVignette(item).substring(0, 5) !== '/img/'}" :src="$parent.$parent.definirVignette(item)" :alt="$parent.$parent.definirVignette(item)" loading="lazy"></a></span>
-			<span v-else><a :href="'/' + $parent.$parent.definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': $parent.$parent.definirVignette(item).substring(0, 5) !== '/img/'}" :src="$parent.$parent.definirVignette(item)" :alt="$parent.$parent.definirVignette(item)" loading="lazy"></a></span>
-			<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'/' + $parent.$parent.definirDossierFichiers(mur.id) + '/' + mur.id + '/' + item.mediaExtra"></audio>
+			<span role="button" :tabindex="tabindex" v-else-if="item.type === 'audio' || item.type === 'video' || (item.type === 'document' && visionneuseDocx !== '') || item.type === 'pdf' || (item.type === 'office' && visionneuseDocx !== '') || item.type === 'embed' || item.typeBloc === 'galerie'" @click="$parent.$parent.afficherVisionneuse(item)" @keydown.enter="$parent.$parent.afficherVisionneuse(item)"><img :class="{'vignette': $parent.$parent.definirVignette(item).substring(0, 5) !== '/img/'}" :src="$parent.$parent.definirVignette(item)" :alt="$parent.$parent.definirNomLienFichier($parent.$parent.definirVignette(item))" loading="lazy"></span>
+			<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': $parent.$parent.definirVignette(item).substring(0, 5) !== '/img/'}" :src="$parent.$parent.definirVignette(item)" :alt="$parent.$parent.definirNomLienFichier($parent.$parent.definirVignette(item))" loading="lazy"></a></span>
+			<span v-else><a :href="$parent.$parent.definirCheminFichiers() + '/' + mur.id + '/' + item.media" download><img :class="{'vignette': $parent.$parent.definirVignette(item).substring(0, 5) !== '/img/'}" :src="$parent.$parent.definirVignette(item)" :alt="$parent.$parent.definirNomLienFichier($parent.$parent.definirVignette(item))" loading="lazy"></a></span>
+			<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="$parent.$parent.definirCheminFichiers() + '/' + mur.id + '/' + item.mediaExtra"></audio>
 		</div>
 		<div class="evaluation" v-if="mur.evaluations === 'activees'">
 			<span class="etoiles">
@@ -93,6 +93,11 @@ export default {
 		action: String,
 		statut: String,
 		digidrive: Boolean
+	},
+	data () {
+		return {
+			visionneuseDocx: import.meta.env.VITE_DOCX_VIEWER
+		}
 	}
 }
 </script>
