@@ -151,6 +151,10 @@
 					<span class="icone lien" role="button" :tabindex="definirTabIndex()" :title="$t('copierCode')" @keydown.enter="copierIframe"><i class="material-icons">content_copy</i></span>
 				</div>
 			</div>
+			<div class="conteneur" v-if="mur.vues && mur.vues > 0">
+				<label>{{ $t('nombreVues') }}</label>
+				<div>{{ mur.vues }}</div>
+			</div>
 			<div class="conteneur">
 				<label>{{ $t('langue') }}</label>
 				<div id="langues">
@@ -268,6 +272,13 @@
 				<div class="conteneur-chargement progression" v-if="menu === 'options' && progressionFond > 0">
 					<progress class="barre-progression" max="100" :value="progressionFond" />
 					<div class="chargement" />
+				</div>
+				<div class="conteneur-interrupteur" v-if="mur.hasOwnProperty('fond') && !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'">
+					<span>{{ $t('repeterImageFond') }}</span>
+					<label class="bouton-interrupteur" :tabindex="definirTabIndex()" @keydown.enter="activerInput('parametre-fond-repete')">
+						<input id="parametre-fond-repete" type="checkbox" :checked="mur.fondRepete === 'active'" @change="modifierFondRepete">
+						<span class="barre" />
+					</label>
 				</div>
 			</div>
 			<div class="conteneur">
@@ -425,7 +436,7 @@
 		</div>
 	</div>
 
-	<div id="mur" :class="{'fond-personnalise': mur.hasOwnProperty('fond') && mur.fond.substring(1, definirDossierFichiers(mur.id).length + 1) === definirDossierFichiers(mur.id), 'organiser': action === 'organiser'}" :style="definirFond(mur.fond)" v-if="Object.keys(mur).length > 0 && mur.acces !== 'code' || (mur.acces === 'code' && accesAutorise)">
+	<div id="mur" :class="{'fond-personnalise': mur.hasOwnProperty('fond') && !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#' && (!mur.hasOwnProperty('fondRepete') || mur.fondRepete === 'desactive'), 'fond-personnalise-repete': mur.hasOwnProperty('fond') && !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#' && mur.hasOwnProperty('fondRepete') && mur.fondRepete === 'active', 'organiser': action === 'organiser'}" :style="definirFond(mur.fond)" v-if="Object.keys(mur).length > 0 && mur.acces !== 'code' || (mur.acces === 'code' && accesAutorise)">
 		<!-- Affichage mur // sans recherche -->
 		<masonry id="blocs" class="mur" :cols="definirLargeurCapsules()" :gutter="0" v-if="mur.affichage === 'mur' && action !== 'organiser' && !recherche">
 			<div :id="item.bloc" class="bloc" :tabindex="definirTabIndex()" :class="{'privee': item.visibilite === 'privee'}" v-for="(item, indexItem) in blocs" :style="{'border-color': item.couleur}" :data-bloc="item.bloc" @focus="definirBlocActif(item.bloc)" :key="'bloc_' + indexItem">
@@ -720,13 +731,13 @@
 							<div class="conteneur-chargement" v-if="chargementMedia">
 								<div class="chargement" />
 							</div>
-							<img id="image" :src="definirLienFichier(mur.id, media)" :alt="definirLienFichier(mur.id, media)" v-show="!chargementMedia" v-if="type === 'image'">
-							<img id="image" :src="media" :alt="media" v-show="!chargementMedia" v-else-if="type === 'lien-image'">
+							<img id="image" :src="definirLienFichier(mur.id, media)" :alt="definirNomLienFichier(media)" v-show="!chargementMedia" v-if="type === 'image'">
+							<img id="image" :src="media" :alt="definirNomLienFichier(media)" v-show="!chargementMedia" v-else-if="type === 'lien-image'">
 							<audio id="audio" controls :src="media" v-show="!chargementMedia" v-else-if="type === 'enregistrement'" />
 							<audio id="audio" controls :src="definirLienFichier(mur.id, media)" v-show="!chargementMedia" v-else-if="type === 'audio'" />
 							<video id="video" controls playsinline crossOrigin="anonymous" :src="definirLienFichier(mur.id, media)" v-show="!chargementMedia" v-else-if="type === 'video'" />
-							<iframe id="document" :src="'/pdfjs/web/viewer.html?file=' + hote + definirLienFichier(mur.id, media)" allowfullscreen v-show="!chargementMedia" v-else-if="type === 'pdf'" />
-							<iframe id="document" :src="'https://view.officeapps.live.com/op/embed.aspx?src=' + hote + definirLienFichier(mur.id, media)" allowfullscreen v-show="!chargementMedia" v-else-if="type === 'office' || type === 'document'" />
+							<iframe id="document" :src="'/pdfjs/web/viewer.html?file=' + definirLienFichierHote(mur.id, media)" allowfullscreen v-show="!chargementMedia" v-else-if="type === 'pdf'" />
+							<iframe id="document" :src="visionneuseDocx + definirLienFichierHote(mur.id, media)" allowfullscreen v-show="!chargementMedia" v-else-if="(type === 'office' || type === 'document') && visionneuseDocx !== ''" />
 							<a id="lien" :href="media" target="_blank" v-show="!chargementMedia" v-else-if="type === 'lien'">
 								<span class="type">{{ $t('lienExterne') }}</span>
 								<span class="nom">{{ definirNomFichier(media) }}</span>
@@ -744,7 +755,7 @@
 						<div id="recherche" v-if="mur.liens === 'actives' && !chargementLien && Object.keys(resultats).length > 0 && media === ''">
 							<div id="resultats">
 								<div class="item" role="button" :tabindex="definirTabIndexModale()" :data-w="resultat.previewWidth" :data-h="resultat.previewHeight" v-for="(resultat, index) in resultats.hits" @click="selectionnerImage(resultat.previewURL.replace('_150', '_1280'))" @keydown.enter="selectionnerImage(resultat.previewURL.replace('_150', '_1280'))" :key="'image_' + index">
-									<img :src="resultat.previewURL" :alt="resultat.previewURL">
+									<img :src="resultat.previewURL" :alt="definirNomLienFichier(resultat.previewURL)">
 								</div>
 							</div>
 							<div id="navigation" v-if="page > 1 || page < (resultats.total / 16)">
@@ -761,7 +772,7 @@
 						</div>
 						<label v-if="type !== 'image' && type !== 'lien-image' && media !== '' && vignetteActivee">{{ $t('vignette') }}</label>
 						<div id="vignette" v-if="progressionVignette === 0 && type !== 'image' && type !== 'lien-image' && media !== '' && vignetteActivee">
-							<img :src="vignette" :alt="vignette" v-if="!chargementVignette">
+							<img :src="definirLienVignette(mur.id, vignette)" :alt="definirNomLienFichier(vignette)" v-if="!chargementVignette">
 							<div class="conteneur-chargement" v-else>
 								<div class="chargement" />
 							</div>
@@ -790,7 +801,7 @@
 							<div class="conteneur-chargement" v-if="chargementMedia">
 								<div class="chargement" />
 							</div>
-							<img id="image" :src="definirLienFichier(mur.id, media)" :alt="media" v-show="!chargementMedia" v-if="media !== ''">
+							<img id="image" :src="definirLienFichier(mur.id, media)" :alt="definirNomLienFichier(media)" v-show="!chargementMedia" v-if="media !== ''">
 							<div class="action">
 								<span class="bouton supprimer" role="button" :tabindex="definirTabIndexModale()" @click="supprimerImage" @keydown.enter="supprimerImage" v-show="!chargementMedia">{{ $t('supprimer') }}</span>
 							</div>
@@ -857,7 +868,7 @@
 						</div>
 						<label v-if="medias.length > 0">{{ $t('vignette') }}</label>
 						<div id="vignette" v-if="progressionVignette === 0 && medias.length > 0">
-							<img :src="vignette" :alt="vignette" v-if="!chargementVignette">
+							<img :src="definirLienVignette(mur.id, vignette)" :alt="definirNomLienFichier(vignette)" v-if="!chargementVignette">
 							<div class="conteneur-chargement" v-else>
 								<div class="chargement" />
 							</div>
@@ -873,8 +884,8 @@
 						</div>
 					</template>
 
-					<div class="valider" role="button" :tabindex="definirTabIndexModale()" :class="{'desactive': (titre === '' && texte === '' && media === '') || enregistrement}" @click="ajouterBloc" @keydown.enter="ajouterBloc" v-if="mode === 'creation'">{{ $t('valider') }}</div>
-					<div class="valider" role="button" :tabindex="definirTabIndexModale()" :class="{'desactive': (titre === '' && texte === '' && media === '') || enregistrement}" @click="modifierBloc" @keydown.enter="modifierBloc" v-else-if="mode === 'edition'">{{ $t('valider') }}</div>
+					<div class="valider" role="button" :tabindex="definirTabIndexModale()" :class="{'desactive': (titre === '' && texte === '' && media === '' && medias.length === 0) || enregistrement}" @click="ajouterBloc" @keydown.enter="ajouterBloc" v-if="mode === 'creation'">{{ $t('valider') }}</div>
+					<div class="valider" role="button" :tabindex="definirTabIndexModale()" :class="{'desactive': (titre === '' && texte === '' && media === '' && medias.length === 0) || enregistrement}" @click="modifierBloc" @keydown.enter="modifierBloc" v-else-if="mode === 'edition'">{{ $t('valider') }}</div>
 				</div>
 			</div>
 		</div>
@@ -934,7 +945,7 @@
 						<span role="button" :tabindex="definirTabIndexModale()" :title="$t('supprimerCommentaire')" @click="afficherSupprimerCommentaire(entreeCommentaire.id)" @keydown.enter="afficherSupprimerCommentaire(entreeCommentaire.id)"><i class="material-icons">delete</i></span>
 					</div>
 					<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
-					<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
+					<div class="texte edition" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
 						<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
 						<button :tabindex="definirTabIndexModale()"  :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
 						<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :diaporama="modaleDiaporama" :tabindex="definirTabIndexModale()" @emoji="insererEmoji" />
@@ -1169,31 +1180,31 @@
 				</div>
 				<div class="conteneur conteneur-media" v-if="donneesBloc.media !== '' || donneesBloc.medias.length > 0">
 					<div class="media" v-if="donneesBloc.iframe === ''">
-						<img :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" :alt="donneesBloc.media" v-if="donneesBloc.type === 'image' || donneesBloc.typeBloc === 'image-audio'">
-						<img :src="donneesBloc.media" :alt="donneesBloc.media" v-else-if="donneesBloc.type === 'lien-image'">
-						<audio controls :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'audio'" />
-						<video controls playsinline crossOrigin="anonymous" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'video'" />
-						<iframe class="document" :src="'/pdfjs/web/viewer.html?file=' + hote + '/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="donneesBloc.type === 'pdf'" />
-						<iframe class="document" :src="'https://view.officeapps.live.com/op/embed.aspx?src=' + hote + '/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="donneesBloc.type === 'office' || donneesBloc.type === 'document'" />
+						<img :src="definirCheminFichiers() + '/' + mur.id + '/' + donneesBloc.media" :alt="definirNomLienFichier(donneesBloc.media)" v-if="donneesBloc.type === 'image' || donneesBloc.typeBloc === 'image-audio'">
+						<img :src="donneesBloc.media" :alt="definirNomLienFichier(donneesBloc.media)" v-else-if="donneesBloc.type === 'lien-image'">
+						<audio controls :src="definirCheminFichiers() + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'audio'" />
+						<video controls playsinline crossOrigin="anonymous" :src="definirCheminFichiers() + '/' + mur.id + '/' + donneesBloc.media" v-else-if="donneesBloc.type === 'video'" />
+						<iframe class="document" :src="'/pdfjs/web/viewer.html?file=' + definirCheminFichiersHote() + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="donneesBloc.type === 'pdf'" />
+						<iframe class="document" :src="visionneuseDocx + definirCheminFichiersHote() + '/' + mur.id + '/' + donneesBloc.media" allowfullscreen v-else-if="(donneesBloc.type === 'office' || donneesBloc.type === 'document') && visionneuseDocx !== ''" />
 						<span v-else-if="donneesBloc.type === 'lien'">
 							<a :href="donneesBloc.media" target="_blank">
-								<img :src="donneesBloc.vignette" :alt="donneesBloc.vignette" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
+								<img :src="definirLienVignette(mur.id, donneesBloc.vignette)" :alt="definirNomLienFichier(donneesBloc.vignette)" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
 								<img src="/img/lien.png" alt="lien.png" v-else>
 							</a>
 						</span>
 						<div class="galerie" v-else-if="donneesBloc.typeBloc === 'galerie'">
 							<div class="image-galerie" :class="{'avec-legende': imageGalerie.legende !== ''}" v-for="(imageGalerie, index) in donneesBloc.medias" :key="'image_galerie_' + index">
-								<img :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + imageGalerie.fichier" :alt="imageGalerie.fichier">
+								<img :src="definirCheminFichiers() + '/' + mur.id + '/' + imageGalerie.fichier" :alt="imageGalerie.fichier">
 								<span class="legende" v-if="imageGalerie.legende !== ''">{{ imageGalerie.legende }}</span>
 							</div>
 						</div>
 						<span v-else>
-							<a :href="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.media" download>
-								<img :src="donneesBloc.vignette" :alt="donneesBloc.vignette" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
+							<a :href="definirCheminFichiers() + '/' + mur.id + '/' + donneesBloc.media" download>
+								<img :src="definirLienVignette(mur.id, donneesBloc.vignette)" :alt="definirNomLienFichier(donneesBloc.vignette)" v-if="donneesBloc.vignette && donneesBloc.vignette !== ''">
 								<img src="/img/telechargement.png" alt="telechargement.png" v-else>
 							</a>
 						</span>
-						<audio controls preload="metadata" :src="'/' + definirDossierFichiers(mur.id) + '/' + mur.id + '/' + donneesBloc.mediaExtra" v-if="donneesBloc.typeBloc === 'image-audio'"></audio>
+						<audio controls preload="metadata" :src="definirCheminFichiers() + '/' + mur.id + '/' + donneesBloc.mediaExtra" v-if="donneesBloc.typeBloc === 'image-audio'"></audio>
 					</div>
 					<div class="media" :class="definirTypeMedia()" v-else>
 						<div class="conteneur-iframe">
@@ -1232,7 +1243,7 @@
 								<span role="button" :tabindex="definirTabIndexModaleDiaporama()" :title="$t('supprimerCommentaire')" @click="afficherSupprimerCommentaire(entreeCommentaire.id)" @keydown.enter="afficherSupprimerCommentaire(entreeCommentaire.id)"><i class="material-icons">delete</i></span>
 							</div>
 							<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
-							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
+							<div class="texte edition" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
 								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
 								<button :tabindex="definirTabIndexModaleDiaporama()" :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
 								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :diaporama="modaleDiaporama" :tabindex="definirTabIndexModaleDiaporama()" @emoji="insererEmoji" />
@@ -1268,7 +1279,7 @@
 								<span role="button" :tabindex="definirTabIndexModaleDiaporama()" :title="$t('supprimerCommentaire')" @click="afficherSupprimerCommentaire(entreeCommentaire.id)" @keydown.enter="afficherSupprimerCommentaire(entreeCommentaire.id)"><i class="material-icons">delete</i></span>
 							</div>
 							<div class="texte" v-if="(commentaireId !== entreeCommentaire.id) || (commentaireId === entreeCommentaire.id && modaleConfirmer)" v-html="entreeCommentaire.texte" />
-							<div class="texte" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
+							<div class="texte edition" v-else-if="editionCommentaire && commentaireId === entreeCommentaire.id">
 								<div id="commentaire-modifie" :class="{'mobile': mobile === true }" />
 								<button :tabindex="definirTabIndexModaleDiaporama()" :title="$t('publier')" @click="modifierCommentaire"><i class="material-icons">edit</i></button>
 								<Emojis v-if="emojis === 'commentaire-modifie'" :type="emojis" :diaporama="modaleDiaporama" :tabindex="definirTabIndexModaleDiaporama()" @emoji="insererEmoji" />
