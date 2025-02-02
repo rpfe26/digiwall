@@ -18,6 +18,10 @@
 	background-repeat: no-repeat;
 }
 
+#mur.fond-personnalise-repete {
+	background-size: contain;
+}
+
 .colonnes #mur {
 	display: flex;
 	min-width: calc(100% - 4rem);
