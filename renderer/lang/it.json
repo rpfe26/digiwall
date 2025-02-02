@@ -426,5 +426,8 @@
 	"transfererMur": "Trasferimento di un muro a un altro account",
 	"erreur": "Oops…",
 	"erreurChargementPage": "Errore nel caricamento della pagina",
-	"retourAccueil": "Torna alla pagina iniziale"
+	"retourAccueil": "Torna alla pagina iniziale",
+	"nombreVues": "Numero di visualizzazioni",
+	"repeterImageFond": "Ripetizione dell'immagine di sfondo",
+	"parametreFondModifie": "Parametro di ripetizione dell'immagine di sfondo modificato."
 }

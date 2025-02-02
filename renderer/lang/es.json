@@ -426,5 +426,8 @@
 	"transfererMur": "Transferir un muro a otra cuenta",
 	"erreur": "Ups…",
 	"erreurChargementPage": "Error al cargar la página",
-	"retourAccueil": "Volver a la página de inicio"
+	"retourAccueil": "Volver a la página de inicio",
+	"nombreVues": "Número de visitas",
+	"repeterImageFond": "Repetir imagen de fondo",
+	"parametreFondModifie": "Parámetro de repetición de imagen de fondo modificado."
 }
