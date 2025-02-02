@@ -3684,7 +3684,7 @@ async function demarrerServeur () {
 							}
 							const edition = objet.edition
 							const date = dayjs().format()
-							if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true) {
+							if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== path.basename(vignette) && definirVignettePersonnalisee(vignette) === true) {
 								vignette = path.basename(vignette)
 							}
 							if (visibilite === 'visible' || visibilite === 'protegee') {
@@ -3725,11 +3725,11 @@ async function demarrerServeur () {
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+								if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
 								}
-								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
+								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
 									await supprimerFichier(mur, path.basename(objet.vignette))
 								}
 								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
@@ -3769,11 +3769,11 @@ async function demarrerServeur () {
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+								if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
 								}
-								if (objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
+								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
 									await supprimerFichier(mur, path.basename(objet.vignette))
 								}
 								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
@@ -3808,11 +3808,11 @@ async function demarrerServeur () {
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && objet.vignette !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+								if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
 								}
-								if (objet.hasOwnProperty('vignette') && definirVignettePersonnalisee(objet.vignette) === true) {
+								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
 									await supprimerFichier(mur, path.basename(objet.vignette))
 								}
 								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
