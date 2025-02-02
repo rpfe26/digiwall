@@ -115,7 +115,7 @@
 				<div class="murs" v-if="murs.length > 0 && requete === ''">
 					<template v-for="(mur, indexMur) in murs">
 						<div :id="'mur-' + mur.id" class="mur liste" v-if="affichage === 'liste'" :key="'mur_liste_' + indexMur">
-							<a class="fond" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)" :class="{'fond-personnalise': mur.fond.substring(1, 9) === 'fichiers'}" :style="definirFond(mur.fond)" />
+							<a class="fond" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" />
 							<a class="meta" :class="{'mur-rejoint': mur.identifiant !== identifiant, 'deplacer': dossiers.length > 0}" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />
 								<span class="titre">{{ mur.titre }}</span>
@@ -143,7 +143,7 @@
 						</div>
 
 						<div :id="'mur-' + mur.id" class="mur mosaique" v-else :key="'mur_mosaique_' + indexMur">
-							<a class="conteneur" :class="{'fond-personnalise': mur.fond.substring(1, 9) === 'fichiers'}" :style="definirFond(mur.fond)" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
+							<a class="conteneur" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<div class="meta">
 									<span class="titre"><span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />{{ mur.titre }}</span>
 									<span class="date">{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
@@ -180,7 +180,7 @@
 				<div class="murs" v-else-if="resultats.length > 0 && requete !== ''">
 					<template v-for="(mur, indexMur) in resultats">
 						<div :id="'mur-' + mur.id" class="mur liste" v-if="affichage === 'liste'" :key="'mur_liste_' + indexMur">
-							<a class="fond" :href="'/w/' + mur.id + '/' + definirSlug(mur.titre)" :class="{'fond-personnalise': mur.fond.substring(1, 9) === 'fichiers'}" :style="definirFond(mur.fond)" />
+							<a class="fond" :href="'/w/' + mur.id + '/' + definirSlug(mur.titre)" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" />
 							<a class="meta" :class="{'mur-rejoint': mur.identifiant !== identifiant, 'deplacer': dossiers.length > 0}" :href="'/w/' + mur.id + '/' + mur.token + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />
 								<span class="titre">{{ mur.titre }}</span>
@@ -208,7 +208,7 @@
 						</div>
 
 						<div :id="'mur-' + mur.id" class="mur mosaique" v-else :key="'mur_mosaique_' + indexMur">
-							<a class="conteneur" :class="{'fond-personnalise': mur.fond.substring(1, 9) === 'fichiers'}" :style="definirFond(mur.fond)" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
+							<a class="conteneur" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<div class="meta">
 									<span class="titre"><span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />{{ mur.titre }}</span>
 									<span class="date">{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
@@ -589,9 +589,17 @@ export default {
 		definirFond (fond) {
 			if (fond.substring(0, 1) === '#') {
 				return { backgroundColor: fond }
-			} else {
+			} else if (fond.includes('/img/')) {
 				return { backgroundImage: 'url(' + fond + ')' }
+			} else {
+				return { backgroundImage: 'url(' + this.definirCheminFichiers() + '/' + id + '/' + this.definirNomLienFichier(fond) + ')' }
 			}
+		},
+		definirNomLienFichier (fichier) {
+			return fichier.split('\\').pop().split('/').pop()
+		},
+		definirCheminFichiers () {
+			return '/fichiers'
 		},
 		definirSlug (titre) {
 			let slug = v.latinise(titre.toLowerCase())
