@@ -2908,25 +2908,33 @@ async function demarrerServeur () {
 					if (mimetype.split('/')[0] === 'image') {
 						const extension = path.parse(fichier.filename).ext
 						if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
-							const buffer = await sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
-								fit: sharp.fit.inside,
-								withoutEnlargement: true
-							}).toBuffer()
-							if (buffer !== null) {
-								await fs.writeFile(chemin, buffer)
-								res.json({ fichier: fichier.filename, mimetype: mimetype })
-							} else {
+							try {
+								const buffer = await sharp(chemin, { failOnError: false }).withMetadata().rotate().jpeg().resize(1200, 1200, {
+									fit: sharp.fit.inside,
+									withoutEnlargement: true
+								}).toBuffer()
+								if (buffer !== null) {
+									await fs.writeFile(chemin, buffer)
+									res.json({ fichier: fichier.filename, mimetype: mimetype })
+								} else {
+									res.send('erreur_televersement')
+								}
+							} catch (e) {
 								res.send('erreur_televersement')
 							}
 						} else if (extension.toLowerCase() !== '.gif') {
-							const buffer = await sharp(chemin).withMetadata().resize(1200, 1200, {
-								fit: sharp.fit.inside,
-								withoutEnlargement: true
-							}).toBuffer()
-							if (buffer !== null) {
-								await fs.writeFile(chemin, buffer)
-								res.json({ fichier: fichier.filename, mimetype: mimetype })
-							} else {
+							try {
+								const buffer = await sharp(chemin, { failOnError: false }).withMetadata().resize(1200, 1200, {
+									fit: sharp.fit.inside,
+									withoutEnlargement: true
+								}).toBuffer()
+								if (buffer !== null) {
+									await fs.writeFile(chemin, buffer)
+									res.json({ fichier: fichier.filename, mimetype: mimetype })
+								} else {
+									res.send('erreur_televersement')
+								}
+							} catch (e) {
 								res.send('erreur_televersement')
 							}
 						} else {
@@ -3026,25 +3034,33 @@ async function demarrerServeur () {
 				const chemin = path.join(__dirname, '..', '/static/temp/' + fichier.filename)
 				const extension = path.parse(fichier.filename).ext
 				if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
-					const buffer = await sharp(chemin).withMetadata().rotate().jpeg().resize(400, 400, {
-						fit: sharp.fit.inside,
-						withoutEnlargement: true
-					}).toBuffer()
-					if (buffer !== null) {
-						await fs.writeFile(chemin, buffer)
-						res.send(fichier.filename)
-					} else {
+					try {
+						const buffer = await sharp(chemin, { failOnError: false }).withMetadata().rotate().jpeg().resize(400, 400, {
+							fit: sharp.fit.inside,
+							withoutEnlargement: true
+						}).toBuffer()
+						if (buffer !== null) {
+							await fs.writeFile(chemin, buffer)
+							res.send(fichier.filename)
+						} else {
+							res.send('erreur_televersement')
+						}
+					} catch (e) {
 						res.send('erreur_televersement')
 					}
 				} else {
-					const buffer = await sharp(chemin).withMetadata().resize(400, 400, {
-						fit: sharp.fit.inside,
-						withoutEnlargement: true
-					}).toBuffer()
-					if (buffer !== null) {
-						await fs.writeFile(chemin, buffer)
-						res.send(fichier.filename)
-					} else {
+					try {
+						const buffer = await sharp(chemin, { failOnError: false }).withMetadata().resize(400, 400, {
+							fit: sharp.fit.inside,
+							withoutEnlargement: true
+						}).toBuffer()
+						if (buffer !== null) {
+							await fs.writeFile(chemin, buffer)
+							res.send(fichier.filename)
+						} else {
+							res.send('erreur_televersement')
+						}
+					} catch (e) {
 						res.send('erreur_televersement')
 					}
 				}
@@ -3064,25 +3080,33 @@ async function demarrerServeur () {
 				const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + fichier.filename)
 				const extension = path.parse(fichier.filename).ext
 				if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
-					const buffer = await sharp(chemin).withMetadata().rotate().jpeg().resize(1200, 1200, {
-						fit: sharp.fit.inside,
-						withoutEnlargement: true
-					}).toBuffer()
-					if (buffer !== null) {
-						await fs.writeFile(chemin, buffer)
-						res.send(fichier.filename)
-					} else {
+					try {
+						const buffer = await sharp(chemin, { failOnError: false }).withMetadata().rotate().jpeg().resize(1200, 1200, {
+							fit: sharp.fit.inside,
+							withoutEnlargement: true
+						}).toBuffer()
+						if (buffer !== null) {
+							await fs.writeFile(chemin, buffer)
+							res.send(fichier.filename)
+						} else {
+							res.send('erreur_televersement')
+						}
+					} catch (e) {
 						res.send('erreur_televersement')
 					}
 				} else {
-					const buffer = await sharp(chemin).withMetadata().resize(1200, 1200, {
-						fit: sharp.fit.inside,
-						withoutEnlargement: true
-					}).toBuffer()
-					if (buffer !== null) {
-						await fs.writeFile(chemin, buffer)
-						res.send(fichier.filename)
-					} else {
+					try {
+						const buffer = await sharp(chemin, { failOnError: false }).withMetadata().resize(1200, 1200, {
+							fit: sharp.fit.inside,
+							withoutEnlargement: true
+						}).toBuffer()
+						if (buffer !== null) {
+							await fs.writeFile(chemin, buffer)
+							res.send(fichier.filename)
+						} else {
+							res.send('erreur_televersement')
+						}
+					} catch (e) {
 						res.send('erreur_televersement')
 					}
 				}
