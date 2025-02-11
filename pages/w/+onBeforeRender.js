@@ -47,16 +47,14 @@ async function onBeforeRender (pageContext) {
 			const nom = pageContext.nom
 			const langue = pageContext.langue
 			const blocsAutorises = pageContext.blocsAutorises
-			let digidrive = pageContext.digidrive
 			const mur = reponse.data.mur
 			const blocs = reponse.data.blocs
 			const activite = reponse.data.activite
 			const titre = mur.titre + ' - Digiwall by La Digitale'
 			if (!admin) {
-				digidrive = []
 				murs = []
 			}
-			pageProps = { params, hote, userAgent, langues, identifiant, nom, langue, statut, murs, blocsAutorises, digidrive, mur, blocs, activite, titre }
+			pageProps = { params, hote, userAgent, langues, identifiant, nom, langue, statut, murs, blocsAutorises, mur, blocs, activite, titre }
 		}
 	}
 	return {
