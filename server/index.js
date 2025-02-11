@@ -206,22 +206,13 @@ async function demarrerServeur () {
 			}
 		})
 	)
-	app.use(function (req, res, next) {
-		onHeaders(res, function () {
-			res.removeHeader('Accept-Ranges')
-		})
-		next()
-	})
-	app.use(bodyParser.json({ limit: '300mb' }))
+	app.use(bodyParser.json({ limit: '500mb' }))
 	app.use(sessionMiddleware)
 	app.use(cors({ 'origin': domainesAutorises }))
 	if (parseInt(process.env.REVERSE_PROXY) !== 1 || !production) {
 		app.use('/fichiers', express.static('static/fichiers'))
 		app.use('/pdfjs', express.static('static/pdfjs'))
 		app.use('/temp', express.static('static/temp'))
-		if (process.env.VITE_NFS_FOLDER && process.env.VITE_NFS_FOLDER !== '') {
-			app.use('/' + process.env.VITE_NFS_FOLDER, express.static('static/' + process.env.VITE_NFS_FOLDER))
-		}
 	}
 
 	if (!production) {
