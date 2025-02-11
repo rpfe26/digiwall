@@ -33,7 +33,7 @@
 			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('commenterCapsule')" @click="$parent.$parent.ouvrirModaleCommentaires(item.bloc, item.titre)" @keydown.enter="$parent.$parent.ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
 			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('epinglerCapsule')" @click="$parent.$parent.epinglerBloc(item.bloc)" @keydown.enter="$parent.$parent.epinglerBloc(item.bloc)" v-if="admin && mur.epinglage === 'active' && item.epinglee === 'non'"><i class="material-icons">push_pin</i></span>
 			<span class="bouton epinglee" role="button" :tabindex="tabindex" :title="$t('desepinglerCapsule')" @click="$parent.$parent.desepinglerBloc(item.bloc)" @keydown.enter="$parent.$parent.desepinglerBloc(item.bloc)" v-else-if="admin && mur.epinglage === 'active' && item.epinglee === 'oui'"><i class="material-icons">push_pin</i></span>
-			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('copierCapsule')" @click="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" @keydown.enter="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('copierCapsule')" @click="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" @keydown.enter="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || viaDigidrive)"><i class="material-icons">send</i></span>
 			<span class="bouton info" role="button" :tabindex="tabindex" :title="$t('informationsCapsule')" :data-description="$parent.$parent.definirDescription(item)"><i class="material-icons">info</i></span>
 			<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ $parent.$parent.definirIconeMedia(item) }}</i></span>
 			<span class="bouton supprimer" role="button" :tabindex="tabindex" :title="$t('supprimerCapsule')" @click="$parent.$parent.afficherSupprimerBloc(item.bloc, item.titre, indexCol)" @keydown.enter="$parent.$parent.afficherSupprimerBloc(item.bloc, item.titre, indexCol)" v-if="(item.identifiant === identifiant && item.edition === 'oui') || admin"><i class="material-icons">delete</i></span>
@@ -67,7 +67,7 @@
 		<div class="action" :style="{'color': item.couleur}" v-if="action !== 'organiser'">
 			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('modifierCapsule')" @click="$parent.$parent.ouvrirModaleBloc('edition', item, indexCol)" @keydown.enter="$parent.$parent.ouvrirModaleBloc('edition', item, indexCol)" v-if="admin"><i class="material-icons">edit</i></span>
 			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('commenterCapsule')" @click="$parent.$parent.ouvrirModaleCommentaires(item.bloc, item.titre)" @keydown.enter="$parent.$parent.ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('copierCapsule')" @click="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" @keydown.enter="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || digidrive)"><i class="material-icons">send</i></span>
+			<span class="bouton" role="button" :tabindex="tabindex" :title="$t('copierCapsule')" @click="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" @keydown.enter="$parent.$parent.afficherEnvoyerBloc(item.bloc, item.titre)" v-if="admin && mur.copieBloc === 'activee' && (statut === 'utilisateur' || viaDigidrive)"><i class="material-icons">send</i></span>
 			<span class="bouton info" role="button" :tabindex="tabindex" :title="$t('informationsCapsule')" :data-description="$parent.$parent.definirDescription(item)"><i class="material-icons">info</i></span>
 			<span class="bouton supprimer"  role="button" :tabindex="tabindex" :title="$t('supprimerCapsule')" @click="$parent.$parent.afficherSupprimerBloc(item.bloc, item.titre, indexCol)" @keydown.enter="$parent.$parent.afficherSupprimerBloc(item.bloc, item.titre, indexCol)" v-if="admin"><i class="material-icons">delete</i></span>
 		</div>
@@ -92,7 +92,7 @@ export default {
 		tabindex: Number,
 		action: String,
 		statut: String,
-		digidrive: Boolean
+		viaDigidrive: Boolean
 	},
 	data () {
 		return {
