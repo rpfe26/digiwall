@@ -155,7 +155,6 @@ export default {
 			langue: this.$pageContext.pageProps.langue,
 			murs: this.$pageContext.pageProps.murs,
 			blocsAutorises: this.$pageContext.pageProps.blocsAutorises,
-			mursDigidrive: this.$pageContext.pageProps.digidrive,
 			mur: this.$pageContext.pageProps.mur,
 			blocs: this.$pageContext.pageProps.blocs,
 			activite: this.$pageContext.pageProps.activite,
@@ -178,8 +177,8 @@ export default {
 				return false
 			}
 		},
-		digidrive () {
-			return this.statut === 'auteur' && this.mursDigidrive.includes(this.mur.id)
+		viaDigidrive () {
+			return this.statut === 'auteur' && parseInt(this.mur.digidrive) === 1
 		},
 		blocsRecherche () {
 			let resultats = []
