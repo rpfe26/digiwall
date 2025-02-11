@@ -3330,6 +3330,21 @@ async function demarrerServeur () {
 					const proprietaire = d.identifiant
 					if (proprietaire === identifiant && motdepasse.trim() !== '' && d.hasOwnProperty('motdepasse') && d.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, d.motdepasse)) {
 						exporterMur(req, res, id, 'erreur')
+					} else if (!d.hasOwnProperty('motdepasse') && proprietaire === identifiant) {
+						const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+						if (resultat === null) { res.send('erreur'); return false }
+						if (resultat === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) { res.send('erreur'); return false }
+							if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+								exporterMur(req, res, id, 'erreur')
+							} else {
+								res.send('non_autorise')
+							}
+						} else {
+							res.send('erreur')
+						}
 					} else {
 						res.send('non_autorise')
 					}
@@ -3341,6 +3356,21 @@ async function demarrerServeur () {
 						const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
 						if (donnees.mur.identifiant === identifiant && motdepasse.trim() !== '' && donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.mur.motdepasse)) {
 							exporterMurPg(res, id)
+						} else if (!donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.identifiant === identifiant) {
+							const resultat = await db.EXISTS('utilisateurs:' + identifiant)
+							if (resultat === null) { res.send('erreur'); return false }
+							if (resultat === 1) {
+								let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+								utilisateur = Object.assign({}, utilisateur)
+								if (utilisateur === null) { res.send('erreur'); return false }
+								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
+									exporterMurPg(res, id)
+								} else {
+									res.send('non_autorise')
+								}
+							} else {
+								res.send('erreur')
+							}
 						} else {
 							res.send('non_autorise')
 						}
