@@ -1,7 +1,6 @@
 import 'dotenv/config'
 import path from 'path'
 import fs from 'fs-extra'
-import onHeaders from 'on-headers'
 import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
@@ -37,7 +36,6 @@ import session from 'express-session'
 import events from 'events'
 import base64 from 'base-64'
 import checkDiskSpace from 'check-disk-space'
-import pg from 'pg'
 import { renderPage } from 'vike/server'
 
 const production = process.env.NODE_ENV === 'production'
@@ -125,34 +123,6 @@ async function demarrerServeur () {
 		domainesAutorises = process.env.AUTHORIZED_DOMAINS.split(',')
 	} else {
 		domainesAutorises = '*'
-	}
-
-	let pgdb = false
-	let pool = null
-	if (production && process.env.PG_DB && parseInt(process.env.PG_DB) === 1) {
-		const { Pool } = pg
-		pgdb = true
-		let maxCon = 240
-		if (cluster === true) {
-			maxCon = 15
-		}
-		pool = new Pool({
-			user: process.env.PG_DB_USER,
-			password: process.env.PG_DB_PWD,
-			host: process.env.PG_DB_HOST,
-			port: process.env.PG_DB_PORT,
-			database: process.env.PG_DB_NAME,
-			max: maxCon,
-			idleTimeoutMillis: 30000,
-			connectionTimeoutMillis: 360000,
-			allowExitOnIdle: true
-		})
-		pool.on('error', function (err) {
-			console.log('pg: ' + err)
-		})
-		const client = await pool.connect()
-		await client.query('CREATE TABLE IF NOT EXISTS murs (id BIGSERIAL PRIMARY KEY, mur INTEGER NOT NULL, donnees TEXT NOT NULL, blocs TEXT NOT NULL, activite TEXT NOT NULL, date TEXT NOT NULL)')
-		client.release()
 	}
 
 	let earlyHints103 = false
@@ -390,14 +360,6 @@ async function demarrerServeur () {
 							const resultat = await db.EXISTS('murs:' + mur)
 							if (resultat === null || resultat === 1) {
 								resolve()
-							} else if (resultat !== 1 && pgdb === true) {
-								const client = await pool.connect()
-								if ((await client.query('SELECT id FROM murs WHERE mur = $1', [parseInt(mur)])).rowCount > 0) {
-									resolve()
-								} else {
-									resolve(parseInt(mur))
-								}
-								client.release()
 							} else {
 								resolve(parseInt(mur))
 							}
@@ -771,17 +733,6 @@ async function demarrerServeur () {
 		mur = Object.assign({}, mur)
 		if (resultat === 1 && mur !== null) {
 			recupererDonneesMur(id, token, identifiant, statut, murs, res)
-		} else if ((resultat !== 1 || mur === null) && pgdb === true) {
-			const client = await pool.connect()
-			const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(id)])
-			client.release()
-			if (Object.keys(donneesQ.rows[0]).length === 3) {
-				const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-				await ajouterMurDansDb(id, donnees)
-				recupererDonneesMur(id, token, identifiant, statut, murs, res)
-			} else {
-				res.send('erreur')
-			}
 		} else {
 			res.send('erreur')
 		}
@@ -1042,90 +993,6 @@ async function demarrerServeur () {
 						} else {
 							res.send('non_autorise')
 						}
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 3) {
-							const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-							const proprietaire = donnees.mur.identifiant
-							if (proprietaire === identifiant) {
-								const date = dayjs().format()
-								const donneesBlocs = []
-								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-									const donneesBloc = new Promise(async function (resolve) {
-										if (Object.keys(bloc).length > 0) {
-											if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true) {
-												bloc.vignette = path.basename(bloc.vignette)
-											}
-											if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
-												const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
-												const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
-												const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
-												axios.get(url)
-												bloc.iframe = etherpad + '/p/' + destinationId
-												bloc.media = etherpad + '/p/' + destinationId
-											}
-											let motdepasse = ''
-											if (bloc.hasOwnProperty('motdepasse')) {
-												motdepasse = bloc.motdepasse
-											}
-											let epinglee = 'non'
-											if (bloc.hasOwnProperty('epinglee')) {
-												epinglee = bloc.epinglee
-											}
-											const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-											await db
-											.multi()
-											.HSET('contenu-blocs:' + id + ':' + blocId, ['id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur])
-											.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
-											.exec()
-											resolve(blocId)
-										} else {
-											resolve({})
-										}
-									})
-									donneesBlocs.push(donneesBloc)
-								}
-								Promise.all(donneesBlocs).then(async function () {
-									const token = Math.random().toString(16).slice(10)
-									const slug = definirSlug(donnees.mur.titre)
-									const code = Math.floor(100000 + Math.random() * 900000)
-									if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
-										donnees.mur.fond = path.basename(donnees.mur.fond)
-									}
-									let epinglage = 'desactive'
-									if (donnees.mur.hasOwnProperty('epinglage')) {
-										epinglage = donnees.mur.epinglage
-									}
-									if (donnees.mur.hasOwnProperty('code')) {
-										await db
-										.multi()
-										.INCR('mur')
-										.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 0])
-										.SADD('murs-crees:' + identifiant, id.toString())
-										.SADD('utilisateurs-murs:' + id, identifiant)
-										.exec()
-									} else {
-										await db
-										.multi()
-										.INCR('mur')
-										.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 0])
-										.SADD('murs-crees:' + identifiant, id.toString())
-										.SADD('utilisateurs-murs:' + id, identifiant)
-										.exec()
-									}
-									if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
-										await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
-									}
-									res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.mur.titre, identifiant: identifiant, fond: donnees.mur.fond, acces: donnees.mur.acces, motdepasseAdmin: donnees.mur.motdepasseAdmin, code: code, contributions: donnees.mur.contributions, affichage: donnees.mur.affichage, registreActivite: donnees.mur.registreActivite, conversation: donnees.mur.conversation, listeUtilisateurs: donnees.mur.listeUtilisateurs, editionNom: donnees.mur.editionNom, fichiers: donnees.mur.fichiers, enregistrements: donnees.mur.enregistrements, liens: donnees.mur.liens, documents: donnees.mur.documents, commentaires: donnees.mur.commentaires, evaluations: donnees.mur.evaluations, verrouillage: donnees.mur.verrouillage, epinglage: epinglage, copieBloc: donnees.mur.copieBloc, ordre: donnees.mur.ordre, largeur: donnees.mur.largeur, date: date, colonnes: donnees.mur.colonnes, affichageColonnes: donnees.mur.affichageColonnes, bloc: donnees.mur.bloc, activite: 0, admins: [], vues: 0 })
-								})
-							} else {
-								res.send('non_autorise')
-							}
-						} else {
-							res.send('erreur_duplication')
-						}
 					}
 				}
 			})
@@ -1151,20 +1018,6 @@ async function demarrerServeur () {
 					exporterMur(req, res, id, 'erreur_export')
 				} else {
 					res.send('non_autorise')
-				}
-			} else if (resultat !== 1 && pgdb === true) {
-				const client = await pool.connect()
-				const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(id)])
-				client.release()
-				if (Object.keys(donneesQ.rows[0]).length === 3) {
-					const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-					if (donnees.mur.identifiant === identifiant || (admin !== '' && admin === motdepasseAdmin)) {
-						exporterMurPg(res, id, donnees)
-					} else {
-						res.send('non_autorise')
-					}
-				} else {
-					res.send('mur_inexistant')
 				}
 			} else {
 				res.send('mur_inexistant')
@@ -1248,7 +1101,7 @@ async function demarrerServeur () {
 													}
 												}
 											}
-											if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+											if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
 											}
 											if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
@@ -1420,7 +1273,7 @@ async function demarrerServeur () {
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
 										}
 										if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
@@ -1538,7 +1391,7 @@ async function demarrerServeur () {
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
 										}
 										if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
@@ -1716,80 +1569,6 @@ async function demarrerServeur () {
 						res.send('mur_supprime')
 					}
 				}
-			} else if (resultat !== 1 && pgdb === true) {
-				const client = await pool.connect()
-				const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-				client.release()
-				if (Object.keys(donneesQ.rows[0]).length === 1) {
-					const donneesMur = JSON.parse(donneesQ.rows[0].donnees)
-					if (donneesMur.identifiant === identifiant) {
-						await db.SREM('murs-crees:' + identifiant, mur.toString())
-						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
-						if (utilisateurs === null) { res.send('erreur_suppression'); return false }
-						for (let j = 0; j < utilisateurs.length; j++) {
-							await db
-							.multi()
-							.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
-							.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
-							.SREM('murs-admins:' + utilisateurs[j], mur.toString())
-							.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
-							.exec()
-						}
-						await db.DEL('utilisateurs-murs:' + mur)
-						if (suppressionFichiers === true) {
-							await fs.remove(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))
-						}
-						const client = await pool.connect()
-						await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						res.send('mur_supprime')
-					} else {
-						let donnees = await db.HGETALL('utilisateurs:' + identifiant)
-						donnees = Object.assign({}, donnees)
-						if (donnees === null) { res.send('erreur_suppression'); return false }
-						if (donnees.hasOwnProperty('dossiers')) {
-							const dossiers = JSON.parse(donnees.dossiers)
-							dossiers.forEach(function (dossier, indexDossier) {
-								if (dossier.murs.includes(mur)) {
-									const indexMur = dossier.murs.indexOf(mur)
-									dossiers[indexDossier].murs.splice(indexMur, 1)
-								}
-							})
-							await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
-						}
-						if (type === 'mur-rejoint') {
-							await db.SREM('murs-rejoints:' + identifiant, mur.toString())
-						}
-						if (type === 'mur-admin') {
-							await db.SREM('murs-rejoints:' + identifiant, mur.toString())
-							await db.SREM('murs-admins:' + identifiant, mur.toString())
-						}
-						await db.SREM('murs-favoris:' + identifiant, mur.toString())
-						// Suppression de l'utilisateur dans la liste des admins du mur
-						if (type === 'mur-admin') {
-							let donnees = await db.HGETALL('murs:' + mur)
-							donnees = Object.assign({}, donnees)
-							if (donnees !== null) {
-								let listeAdmins = []
-								if (donnees.hasOwnProperty('admins')) {
-									listeAdmins = JSON.parse(donnees.admins)
-								}
-								if (listeAdmins.includes(identifiant)) {
-									const index = listeAdmins.indexOf(identifiant)
-									listeAdmins.splice(index, 1)
-								}
-								await db.HSET('murs:' + mur, 'admins', JSON.stringify(listeAdmins))
-								res.send('mur_supprime')
-							} else {
-								res.send('mur_supprime')
-							}
-						} else {
-							res.send('mur_supprime')
-						}
-					}
-				} else {
-					res.send('erreur_suppression')
-				}
 			}
 		} else {
 			res.send('non_connecte')
@@ -1906,16 +1685,6 @@ async function demarrerServeur () {
 				donneesMur = Object.assign({}, donneesMur)
 				if (donneesMur === null) { res.send('erreur'); return false }
 				res.json(donneesMur)
-			} else if (resultat !== 1 && pgdb === true) {
-				const client = await pool.connect()
-				const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-				client.release()
-				if (Object.keys(donneesQ.rows[0]).length === 1) {
-					const donnees = JSON.parse(donneesQ.rows[0].donnees)
-					res.json(donnees)
-				} else {
-					res.send('mur_inexistant')
-				}
 			} else {
 				res.send('mur_inexistant')
 			}
@@ -1959,23 +1728,6 @@ async function demarrerServeur () {
 					await db.HSET('murs:' + mur, champ, valeur)
 				}
 				res.send('donnees_modifiees')
-			} else if (resultat !== 1 && pgdb === true) {
-				const client = await pool.connect()
-				const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
-				client.release()
-				if (Object.keys(donneesQ.rows[0]).length === 3) {
-					const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-					await ajouterMurDansDb(mur, donnees)
-					if (champ === 'motdepasse') {
-						const hash = await bcrypt.hash(valeur, 10)
-						await db.HSET('murs:' + mur, champ, hash)
-					} else {
-						await db.HSET('murs:' + mur, champ, valeur)
-					}
-					res.send('donnees_modifiees')
-				} else {
-					res.send('erreur')
-				}
 			} else {
 				res.send('mur_inexistant')
 			}
@@ -2011,30 +1763,6 @@ async function demarrerServeur () {
 						res.send('mur_transfere')
 					} else {
 						res.send('mur_cree_avec_compte')
-					}
-				} else if (reponse !== 1 && pgdb === true) {
-					const client = await pool.connect()
-					const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
-					client.release()
-					if (Object.keys(donneesQ.rows[0]).length === 3) {
-						const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-						if (donnees.mur.hasOwnProperty('motdepasse')) {
-							await ajouterMurDansDb(mur, donnees)
-							await db
-							.multi()
-							.SADD('murs-crees:' + identifiant, mur.toString())
-							.SADD('utilisateurs-murs:' + mur, identifiant)
-							.HSET('murs:' + mur, 'identifiant', identifiant)
-							.HDEL('murs:' + mur, 'motdepasse')
-							.SREM('murs-rejoints:' + identifiant, mur.toString())
-							.SREM('murs-utilisateurs:' + identifiant, mur.toString())
-							.exec()
-							res.send('mur_transfere')
-						} else {
-							res.send('mur_cree_avec_compte')
-						}
-					} else {
-						res.send('erreur')
 					}
 				} else {
 					res.send('mur_inexistant')
@@ -2074,29 +1802,6 @@ async function demarrerServeur () {
 					.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
 					.exec()
 					res.send('mur_transfere')
-				} else if (reponse !== 1 && pgdb === true) {
-					const client = await pool.connect()
-					const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
-					client.release()
-					if (Object.keys(donneesQ.rows[0]).length === 3) {
-						const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-						await ajouterMurDansDb(mur, donnees)
-						const identifiant = donnees.mur.identifiant
-						await db
-						.multi()
-						.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
-						.SREM('murs-crees:' + identifiant, mur.toString())
-						.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
-						.SREM('utilisateurs-murs:' + mur, identifiant)
-						.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
-						.SREM('murs-admins:' + nouvelIdentifiant, mur.toString())
-						.SREM('murs-rejoints:' + nouvelIdentifiant, mur.toString())
-						.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
-						.exec()
-						res.send('mur_transfere')
-					} else {
-						res.send('erreur')
-					}
 				} else {
 					res.send('mur_inexistant')
 				}
@@ -2139,28 +1844,6 @@ async function demarrerServeur () {
 								.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
 								.exec()
 								resolve('mur_transfere')
-							} else if (r !== 1 && pgdb === true) {
-								const client = await pool.connect()
-								const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
-								client.release()
-								if (Object.keys(donneesQ.rows[0]).length === 3) {
-									const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-									await ajouterMurDansDb(mur, donnees)
-									await db
-									.multi()
-									.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
-									.SREM('murs-crees:' + identifiant, mur.toString())
-									.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
-									.SREM('utilisateurs-murs:' + mur, identifiant)
-									.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
-									.SREM('murs-admins:' + nouvelIdentifiant, mur.toString())
-									.SREM('murs-rejoints:' + nouvelIdentifiant, mur.toString())
-									.SREM('murs-utilisateurs:' + nouvelIdentifiant, mur.toString())
-									.exec()
-									resolve('mur_transfere')
-								} else {
-									resolve('erreur')
-								}
 							} else {
 								resolve('mur_inexistant')
 							}
@@ -2234,29 +1917,6 @@ async function demarrerServeur () {
 						const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 						await fs.remove(chemin)
 						resolve(mur)
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						if ((await client.query('SELECT id FROM murs WHERE mur = $1', [parseInt(mur)])).rowCount > 0) {
-							const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
-							if (utilisateurs === null) { resolve(); return false }
-							for (let j = 0; j < utilisateurs.length; j++) {
-								await db
-								.multi()
-								.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
-								.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
-								.SREM('murs-admins:' + utilisateurs[j], mur.toString())
-								.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
-								.exec()
-							}
-							await db.DEL('utilisateurs-murs:' + mur)
-							await fs.remove(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))
-							await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(pad)])
-							client.release()
-							resolve(mur)
-						} else {
-							client.release()
-							resolve()
-						}
 					} else {
 						resolve()
 					}
@@ -2281,7 +1941,7 @@ async function demarrerServeur () {
 								donnees = Object.assign({}, donnees)
 								if (donnees === null) { resolve(); return false }
 								if (donnees.identifiant === identifiant) {
-									if (donnees.hasOwnProperty('media') && donnees.media !== '' && donnees.type !== 'embed') {
+									if (donnees.hasOwnProperty('media') && donnees.media !== '' && donnees.type !== 'embed' && donnees.type !== 'lien') {
 										await supprimerFichier(mur, donnees.media)
 									}
 									if (donnees.hasOwnProperty('mediaExtra') && donnees.mediaExtra !== '') {
@@ -2362,92 +2022,6 @@ async function demarrerServeur () {
 							}
 						})
 						donneesEvaluations.push(donneesEvaluation)
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 3) {
-							const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-							const blocs = donnees.blocs
-							const entrees = donnees.activite
-							const donneesBloc = new Promise(async function (resolve) {
-								for (let i = 0; i < blocs.length; i++) {
-									if (blocs[i].hasOwnProperty('identifiant') && blocs[i].identifiant === identifiant) {
-										if (blocs[i].hasOwnProperty('media') && blocs[i].media !== '' && blocs[i].type !== 'embed') {
-											await supprimerFichier(mur, blocs[i].media)
-										}
-										if (blocs[i].hasOwnProperty('mediaExtra') && blocs[i].mediaExtra !== '') {
-											await supprimerFichier(mur, blocs[i].mediaExtra)
-										}
-										if (blocs[i].hasOwnProperty('medias')) {
-											const medias = JSON.parse(blocs[i].medias)
-											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].hasOwnProperty('fichier')) {
-													await supprimerFichier(mur, medias[i].fichier)
-												}
-											}
-										}
-										if (blocs[i].hasOwnProperty('vignette') && definirVignettePersonnalisee(blocs[i].vignette) === true) {
-											await supprimerFichier(mur, path.basename(blocs[i].vignette))
-										}
-										await db
-										.multi()
-										.DEL('contenu-blocs:' + mur + ':' + blocs[i].bloc)
-										.ZREM('blocs:' + mur, blocs[i].bloc)
-										.DEL('commentaires:' + blocs[i].bloc)
-										.DEL('evaluations:' + blocs[i].bloc)
-										.exec()
-										resolve(blocs[i].bloc)
-									} else {
-										resolve(blocs[i].bloc)
-									}
-								}
-							})
-							donneesBlocs.push(donneesBloc)
-							const donneesActivite = new Promise(async function (resolve) {
-								for (let i = 0; i < entrees.length; i++) {
-									if (entrees[i].identifiant === identifiant) {
-										await db.ZREMRANGEBYSCORE('activite:' + mur, entrees[i].id, entrees[i].id)
-										resolve(entrees[i].id)
-									} else {
-										resolve(entrees[i].id)
-									}
-								}
-							})
-							donneesActivites.push(donneesActivite)
-							const donneesCommentaire = new Promise(async function (resolve) {
-								for (let i = 0; i < blocs.length; i++) {
-									const commentaires = await db.ZRANGE('commentaires:' + blocs[i].bloc, 0, -1)
-									if (commentaires === null) { resolve(); return false }
-									for (let j = 0; j < commentaires.length; j++) {
-										const commentaire = JSON.parse(commentaires[j])
-										if (commentaire.identifiant === identifiant) {
-											await db.ZREMRANGEBYSCORE('commentaires:' + blocs[i].bloc, commentaire.id, commentaire.id)
-											resolve(commentaire.id)
-										} else {
-											resolve(commentaire.id)
-										}
-									}
-								}
-							})
-							donneesCommentaires.push(donneesCommentaire)
-							const donneesEvaluation = new Promise(async function (resolve) {
-								for (let i = 0; i < blocs.length; i++) {
-									const evaluations = await db.ZRANGE('evaluations:' + blocs[i].bloc, 0, -1)
-									if (evaluations === null) { resolve(); return false }
-									for (let j = 0; j < evaluations.length; j++) {
-										const evaluation = JSON.parse(evaluations[j])
-										if (evaluation.identifiant === identifiant) {
-											await db.ZREMRANGEBYSCORE('evaluations:' + blocs[i].bloc, evaluation.id, evaluation.id)
-											resolve(evaluation.id)
-										} else {
-											resolve(evaluation.id)
-										}
-									}
-								}
-							})
-							donneesEvaluations.push(donneesEvaluation)
-						}
 					}
 				}
 				Promise.all([donneesBlocs, donneesActivites, donneesCommentaires, donneesEvaluations]).then(async function () {
@@ -2981,18 +2555,6 @@ async function demarrerServeur () {
 					await db.HSET('murs:' + mur, 'titre', titre)
 					const slug = definirSlug(titre)
 					res.send(slug)
-				} else if (resultat !== 1 && pgdb === true) {
-					const client = await pool.connect()
-					const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-					if (Object.keys(donneesQ.rows[0]).length === 1) {
-						await client.query('UPDATE murs SET titre = $1 WHERE mur = $2', [titre, parseInt(mur)])
-						client.release()
-						const slug = definirSlug(titre)
-						res.send(slug)
-					} else {
-						client.release()
-						res.send('erreur')
-					}
 				} else {
 					res.send('contenu_inexistant')
 				}
@@ -3015,26 +2577,6 @@ async function demarrerServeur () {
 						res.send(slug)
 					} else {
 						res.send('non_autorise')
-					}
-				} else if (resultat !== 1 && pgdb === true) {
-					const client = await pool.connect()
-					const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-					if (Object.keys(donneesQ.rows[0]).length === 1) {
-						const donneesMur = JSON.parse(donneesQ.rows[0].donnees)
-						if (ancienmotdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(ancienmotdepasse, donneesMur.motdepasse)) {
-							const motdepasse = req.body.motdepasse
-							const hash = await bcrypt.hash(motdepasse, 10)
-							await client.query('UPDATE murs SET titre = $1, motdepasse = $2 WHERE mur = $3', [titre, hash, parseInt(mur)])
-							client.release()
-							const slug = definirSlug(titre)
-							res.send(slug)
-						} else {
-							client.release()
-							res.send('non_autorise')
-						}
-					} else {
-						client.release()
-						res.send('erreur')
 					}
 				} else {
 					res.send('contenu_inexistant')
@@ -3081,51 +2623,6 @@ async function demarrerServeur () {
 						}
 					} else {
 						res.send('non_autorise')
-					}
-				} else if (resultat !== 1 && pgdb === true) {
-					const client = await pool.connect()
-					const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-					if (Object.keys(donneesQ.rows[0]).length === 1) {
-						const donneesMur = JSON.parse(donneesQ.rows[0].donnees)
-						if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donneesMur.motdepasse) && token === donneesMur.token) {
-							const date = dayjs().format()
-							let langue = 'fr'
-							if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
-								langue = req.session.langue
-							}
-							await db.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'date', date, 'nom', nom, 'langue', langue])
-							donneesMur.identifiant = identifiant
-							donneesMur.digidrive = 1
-							await client.query('UPDATE murs SET donnees = $1 WHERE mur = $2', [JSON.stringify(donneesMur), parseInt(mur)])
-							client.release()
-							res.send(donneesMur.titre)
-						} else if (!donneesMur.hasOwnProperty('motdepasse') && token === donneesMur.token) {
-							const reponse = await db.EXISTS('utilisateurs:' + donneesMur.identifiant)
-							if (reponse === null) { res.send('erreur'); return false }
-							if (reponse === 1) {
-								let utilisateur = await db.HGETALL('utilisateurs:' + donneesMur.identifiant)
-								utilisateur = Object.assign({}, utilisateur)
-								if (utilisateur === null) { res.send('erreur'); return false }
-								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-									donneesMur.digidrive = 1
-									await client.query('UPDATE murs SET donnees = $1 WHERE mur = $2', [JSON.stringify(donneesMur), parseInt(mur)])
-									client.release()
-									res.json({ titre: donneesMur.titre, identifiant: donneesMur.identifiant })
-								} else {
-									client.release()
-									res.send('non_autorise')
-								}
-							} else {
-								client.release()
-								res.send('erreur')
-							}
-						} else {
-							client.release()
-							res.send('non_autorise')
-						}
-					} else {
-						client.release()
-						res.send('erreur')
 					}
 				} else {
 					res.send('contenu_inexistant')
@@ -3259,123 +2756,6 @@ async function demarrerServeur () {
 							} else {
 								res.send('non_autorise')
 							}
-						} else if (resultat !== 1 && pgdb === true) {
-							const client = await pool.connect()
-							const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(mur)])
-							client.release()
-							if (Object.keys(donneesQ.rows[0]).length === 3) {
-								const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-								let autorisation = false
-								let avecCompte = false
-								const proprietaire = donnees.mur.identifiant
-								if (proprietaire === identifiant && motdepasse.trim() !== '' && donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.mur.motdepasse)) {
-									autorisation = true
-								} else if (!donnees.mur.hasOwnProperty('motdepasse') && proprietaire === identifiant) {
-									const resultat = await db.EXISTS('utilisateurs:' + identifiant)
-									if (resultat === null) { res.send('erreur'); return false }
-									if (resultat === 1) {
-										let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-										utilisateur = Object.assign({}, utilisateur)
-										if (utilisateur === null) { res.send('erreur'); return false }
-										if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-											autorisation = true
-											avecCompte = true
-										}
-									}
-								}
-								if (autorisation === true) {
-									const date = dayjs().format()
-									const donneesBlocs = []
-									for (const [indexBloc, bloc] of donnees.blocs.entries()) {
-										const donneesBloc = new Promise(async function (resolve) {
-											if (Object.keys(bloc).length > 0) {
-												if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true) {
-													bloc.vignette = path.basename(bloc.vignette)
-												}
-												if (bloc.hasOwnProperty('iframe') && bloc.iframe !== '' && bloc.iframe.includes(etherpad)) {
-													const etherpadId = bloc.iframe.replace(etherpad + '/p/', '')
-													const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
-													const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
-													axios.get(url)
-													bloc.iframe = etherpad + '/p/' + destinationId
-													bloc.media = etherpad + '/p/' + destinationId
-												}
-												let motdepasse = ''
-												if (bloc.hasOwnProperty('motdepasse')) {
-													motdepasse = bloc.motdepasse
-												}
-												let epinglee = 'non'
-												if (bloc.hasOwnProperty('epinglee')) {
-													epinglee = bloc.epinglee
-												}
-												const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-												await db
-												.multi()
-												.HSET('contenu-blocs:' + id + ':' + blocId, ['id', bloc.id, 'bloc', blocId, 'typeBloc', bloc.typeBloc, 'titre', bloc.titre, 'texte', bloc.texte, 'media', bloc.media, 'iframe', bloc.iframe, 'type', bloc.type, 'source', bloc.source, 'vignette', bloc.vignette, 'vignetteActivee', bloc.vignetteActivee, 'mediaExtra', bloc.mediaExtra, 'medias', bloc.medias, 'edition', bloc.edition, 'date', date, 'identifiant', bloc.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', bloc.colonne, 'visibilite', bloc.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', bloc.couleur])
-												.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
-												.exec()
-												resolve(blocId)
-											} else {
-												resolve({})
-											}
-										})
-										donneesBlocs.push(donneesBloc)
-									}
-									Promise.all(donneesBlocs).then(async function () {
-										const token = Math.random().toString(16).slice(10)
-										const slug = definirSlug(donnees.mur.titre)
-										const nouveaumotdepasse = req.body.nouveaumotdepasse
-										const hash = await bcrypt.hash(nouveaumotdepasse, 10)
-										const code = Math.floor(100000 + Math.random() * 900000)
-										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '') {
-											donnees.mur.fond = path.basename(donnees.mur.fond)
-										}
-										let epinglage = 'desactive'
-										if (donnees.mur.hasOwnProperty('epinglage')) {
-											epinglage = donnees.mur.epinglage
-										}
-										if (donnees.mur.hasOwnProperty('code') && avecCompte === false) {
-											await db
-											.multi()
-											.INCR('mur')
-											.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'motdepasse', hash, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 1])
-											.SADD('murs-crees:' + identifiant, id.toString())
-											.exec()
-										} else if (donnees.mur.hasOwnProperty('code') && avecCompte === true) {
-											await db
-											.multi()
-											.INCR('mur')
-											.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 1])
-											.SADD('murs-crees:' + identifiant, id.toString())
-											.SADD('utilisateurs-murs:' + id, identifiant)
-											.exec()
-										} else if (!donnees.mur.hasOwnProperty('code') && avecCompte === false) {
-											await db
-											.multi()
-											.INCR('mur')
-											.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'motdepasse', hash, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 1])
-											.SADD('murs-crees:' + identifiant, id.toString())
-											.exec()
-										} else if (!donnees.mur.hasOwnProperty('code') && avecCompte === true) {
-											await db
-											.multi()
-											.INCR('mur')
-											.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.mur.titre, 'identifiant', identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 1])
-											.SADD('murs-crees:' + identifiant, id.toString())
-											.SADD('utilisateurs-murs:' + id, identifiant)
-											.exec()
-										}
-										if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
-											await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
-										}
-										res.send(id + '/' + token + '/' + slug)
-									})
-								} else {
-									res.send('non_autorise')
-								}
-							} else {
-								res.send('erreur')
-							}
 						}
 					}
 				})
@@ -3409,35 +2789,6 @@ async function demarrerServeur () {
 						}
 					} else {
 						res.send('non_autorise')
-					}
-				} else if (resultat !== 1 && pgdb === true) {
-					const client = await pool.connect()
-					const donneesQ = await client.query('SELECT donnees, blocs, activite FROM murs WHERE mur = $1', [parseInt(id)])
-					client.release()
-					if (Object.keys(donneesQ.rows[0]).length === 3) {
-						const donnees = { mur: JSON.parse(donneesQ.rows[0].donnees), blocs: JSON.parse(donneesQ.rows[0].blocs), activite: JSON.parse(donneesQ.rows[0].activite) }
-						if (donnees.mur.identifiant === identifiant && motdepasse.trim() !== '' && donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.mur.motdepasse)) {
-							exporterMurPg(res, id, donnees)
-						} else if (!donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.identifiant === identifiant) {
-							const resultat = await db.EXISTS('utilisateurs:' + identifiant)
-							if (resultat === null) { res.send('erreur'); return false }
-							if (resultat === 1) {
-								let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-								utilisateur = Object.assign({}, utilisateur)
-								if (utilisateur === null) { res.send('erreur'); return false }
-								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-									exporterMurPg(res, id, donnees)
-								} else {
-									res.send('non_autorise')
-								}
-							} else {
-								res.send('erreur')
-							}
-						} else {
-							res.send('non_autorise')
-						}
-					} else {
-						res.send('contenu_inexistant')
 					}
 				} else {
 					res.send('contenu_inexistant')
@@ -3535,86 +2886,6 @@ async function demarrerServeur () {
 						}
 					} else {
 						res.send('non_autorise')
-					}
-				} else if (resultat !== 1 && pgdb === true) {
-					const client = await pool.connect()
-					const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-					if (Object.keys(donneesQ.rows[0]).length === 1) {
-						const donneesMur = JSON.parse(donneesQ.rows[0].donnees)
-						if (motdepasse.trim() !== '' && donneesMur.hasOwnProperty('motdepasse') && donneesMur.motdepasse.trim() !== '' && donneesMur.identifiant === identifiant && await bcrypt.compare(motdepasse, donneesMur.motdepasse)) {
-							await db.SREM('murs-crees:' + identifiant, mur.toString())
-							const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
-							if (utilisateurs === null) { res.send('erreur'); return false }
-							for (let j = 0; j < utilisateurs.length; j++) {
-								await db
-								.multi()
-								.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
-								.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
-								.SREM('murs-admins:' + utilisateurs[j], mur.toString())
-								.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
-								.exec()
-							}
-							await db.DEL('utilisateurs-murs:' + mur)
-							await fs.remove(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))
-							await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(mur)])
-							client.release()
-							res.send('contenu_supprime')
-						} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
-							const resultat = await db.EXISTS('utilisateurs:' + identifiant)
-							if (resultat === null) { res.send('erreur'); return false }
-							if (resultat === 1) {
-								let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-								utilisateur = Object.assign({}, utilisateur)
-								if (utilisateur === null) { res.send('erreur'); return false }
-								if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-									const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
-									if (blocs === null) { res.send('erreur'); return false }
-									for (let i = 0; i < blocs.length; i++) {
-										await db
-										.multi()
-										.DEL('commentaires:' + blocs[i])
-										.DEL('evaluations:' + blocs[i])
-										.DEL('contenu-blocs:' + mur + ':' + blocs[i])
-										.exec()
-									}
-									await db
-									.multi()
-									.DEL('blocs:' + mur)
-									.DEL('murs:' + mur)
-									.DEL('activite:' + mur)
-									.DEL('dates-murs:' + mur)
-									.SREM('murs-crees:' + identifiant, mur.toString())
-									.exec()
-									const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
-									if (utilisateurs === null) { res.send('erreur'); return false }
-									for (let j = 0; j < utilisateurs.length; j++) {
-										await db
-										.multi()
-										.SREM('murs-rejoints:' + utilisateurs[j], mur.toString())
-										.SREM('murs-utilisateurs:' + utilisateurs[j], mur.toString())
-										.SREM('murs-admins:' + utilisateurs[j], mur.toString())
-										.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
-										.exec()
-									}
-									await db.DEL('utilisateurs-murs:' + mur)
-									const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
-									await fs.remove(chemin)
-									res.send('contenu_supprime')
-								} else {
-									client.release()
-									res.send('non_autorise')
-								}
-							} else {
-								client.release()
-								res.send('erreur')
-							}
-						} else {
-							client.release()
-							res.send('non_autorise')
-						}
-					} else {
-						client.release()
-						res.send('erreur')
 					}
 				} else {
 					res.send('contenu_supprime')
@@ -3715,7 +2986,7 @@ async function demarrerServeur () {
 														}
 													}
 												}
-												if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+												if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 													await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
 												}
 												if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
@@ -3960,7 +3231,7 @@ async function demarrerServeur () {
 						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }) }])
 						.exec()
 					}
-					if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+					if (media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 						await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 						await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 					}
@@ -4047,11 +3318,11 @@ async function demarrerServeur () {
 								.HINCRBY('murs:' + mur, 'activite', 1)
 								.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }) }])
 								.exec()
-								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 								}
-								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 									await supprimerFichier(mur, objet.media)
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
@@ -4091,11 +3362,11 @@ async function demarrerServeur () {
 								.HSET('contenu-blocs:' + mur + ':' + bloc, ['typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur])
 								.HSET('dates-murs:' + mur, 'date', date)
 								.exec()
-								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 								}
-								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 									await supprimerFichier(mur, objet.media)
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
@@ -4130,11 +3401,11 @@ async function demarrerServeur () {
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
 							} else {
-								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
 								}
-								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed') {
+								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 									await supprimerFichier(mur, objet.media)
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
@@ -4222,7 +3493,7 @@ async function demarrerServeur () {
 						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }) }])
 						.exec()
 					}
-					if (media !== '' && type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media))) {
+					if (media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media))) {
 						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 					}
 					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + mediaExtra))) {
@@ -4500,7 +3771,7 @@ async function demarrerServeur () {
 							admins = JSON.parse(donnees.admins)
 						}
 						if (objet.identifiant === identifiant || admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-							if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
+							if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 								await supprimerFichier(mur, objet.media)
 							}
 							if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
@@ -5719,7 +4990,7 @@ async function demarrerServeur () {
 									let objet = await db.HGETALL('contenu-blocs:' + mur + ':' + blocSupprime)
 									objet = Object.assign({}, objet)
 									if (objet === null) { resolve(); return false }
-									if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed') {
+									if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 										await supprimerFichier(mur, objet.media)
 									}
 									if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== '') {
@@ -6081,65 +5352,6 @@ async function demarrerServeur () {
 		}
 	}
 
-	async function ajouterMurDansDb (id, donnees) {
-		return new Promise(function (resolveMain) {
-			const donneesBlocs = []
-			for (const [indexItem, item] of donnees.blocs.entries()) {
-				const donneesBloc = new Promise(async function (resolve) {
-					await db
-					.multi()
-					.HSET('contenu-blocs:' + id + ':' + item.bloc, ['id', item.id, 'bloc', item.bloc, 'typeBloc', item.typeBloc, 'titre', item.titre, 'texte', item.texte, 'media', item.media, 'iframe', item.iframe, 'type', item.type, 'source', item.source, 'vignette', item.vignette, 'vignetteActivee', item.vignetteActivee, 'mediaExtra', item.mediaExtra, 'medias', item.medias, 'edition', item.edition, 'date', item.date, 'identifiant', item.identifiant, 'commentaires', item.commentaires, 'evaluations', item.evaluations, 'colonne', item.colonne, 'visibilite', item.visibilite, 'motdepasse', item.motdepasse, 'epinglee', item.epinglee, 'couleur', item.couleur])
-					.ZADD('blocs:' + id, [{ score: indexItem, value: item.bloc }])
-					.exec()
-					for (const commentaire of item.listeCommentaires) {
-						if (commentaire.hasOwnProperty('id') && commentaire.hasOwnProperty('identifiant') && commentaire.hasOwnProperty('date') && commentaire.hasOwnProperty('texte')) {
-							await db.ZADD('commentaires:' + item.bloc, [{ score: commentaire.id, value: JSON.stringify(commentaire) }])
-						}
-					}
-					for (const evaluation of item.listeEvaluations) {
-						if (evaluation.hasOwnProperty('id') && evaluation.hasOwnProperty('identifiant') && evaluation.hasOwnProperty('date') && evaluation.hasOwnProperty('etoiles')) {
-							await db.ZADD('evaluations:' + item.bloc, [{ score: evaluation.id, value: JSON.stringify(evaluation) }])
-						}
-					}
-					resolve()
-				})
-				donneesBlocs.push(donneesBloc)
-			}
-			Promise.all(donneesBlocs).then(async function () {
-				let epinglage = 'desactive'
-				if (donnees.mur.hasOwnProperty('epinglage')) {
-					epinglage = donnees.mur.epinglage
-				}
-				let digidrive = 0
-				if (donnees.mur.hasOwnProperty('digidrive')) {
-					digidrive = donnees.mur.digidrive
-				}
-				if (donnees.mur.hasOwnProperty('motdepasse') && donnees.mur.hasOwnProperty('code')) {
-					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues, 'digidrive', digidrive])
-				} else if (donnees.mur.hasOwnProperty('motdepasse') && !donnees.mur.hasOwnProperty('code')) {
-					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasse', donnees.mur.motdepasse, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues, 'digidrive', digidrive])
-				} else if (donnees.mur.hasOwnProperty('code')) {
-					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'code', donnees.mur.code, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues, 'digidrive', digidrive])
-				} else {
-					await db.HSET('murs:' + id, ['id', id, 'token', donnees.mur.token, 'titre', donnees.mur.titre, 'identifiant', donnees.mur.identifiant, 'fond', donnees.mur.fond, 'acces', donnees.mur.acces, 'motdepasseAdmin', donnees.mur.motdepasseAdmin, 'contributions', donnees.mur.contributions, 'affichage', donnees.mur.affichage, 'registreActivite', donnees.mur.registreActivite, 'conversation', donnees.mur.conversation, 'listeUtilisateurs', donnees.mur.listeUtilisateurs, 'editionNom', donnees.mur.editionNom, 'fichiers', donnees.mur.fichiers, 'enregistrements', donnees.mur.enregistrements, 'liens', donnees.mur.liens, 'documents', donnees.mur.documents, 'commentaires', donnees.mur.commentaires, 'evaluations', donnees.mur.evaluations, 'verrouillage', donnees.mur.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.mur.copieBloc, 'ordre', donnees.mur.ordre, 'largeur', donnees.mur.largeur, 'date', donnees.mur.date, 'colonnes', donnees.mur.colonnes, 'affichageColonnes', donnees.mur.affichageColonnes, 'bloc', donnees.mur.bloc, 'activite', donnees.mur.activite, 'admins', donnees.mur.admins, 'vues', donnees.mur.vues, 'digidrive', digidrive])
-				}
-				for (const activite of donnees.activite) {
-					if (activite.hasOwnProperty('bloc') && activite.hasOwnProperty('identifiant') && activite.hasOwnProperty('titre') && activite.hasOwnProperty('date') && activite.hasOwnProperty('type') && activite.hasOwnProperty('id')) {
-						await db.ZADD('activite:' + id, [{ score: activite.id, value: JSON.stringify(activite) }])
-					}
-				}
-				if (pgdb === true) {
-					const client = await pool.connect()
-					await client.query('DELETE FROM murs WHERE mur = $1', [parseInt(id)])
-					client.release()
-					resolveMain('mur_ajoute_dans_db')
-				} else {
-					resolveMain('')
-				}
-			})
-		})
-	}
-
 	function recupererDonneesUtilisateur (identifiant) {
 		// Murs créés
 		const donneesMursCrees = new Promise(async function (resolveMain) {
@@ -6176,42 +5388,6 @@ async function demarrerServeur () {
 						} else {
 							donnees.nom = donnees.identifiant
 							resolve(donnees)
-						}
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 1) {
-							const donnees = JSON.parse(donneesQ.rows[0].donnees)
-							if (donnees.hasOwnProperty('identifiant')) {
-								// Pour compatibilité avec les anciens chemins
-								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
-									donnees.fond = path.basename(donnees.fond)
-								}
-								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
-								if (reponse === 1) {
-									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
-									utilisateur = Object.assign({}, utilisateur)
-									if (utilisateur === null) {
-										donnees.nom = donnees.identifiant
-										resolve(donnees)
-										return false
-									}
-									if (utilisateur.nom === '') {
-										donnees.nom = donnees.identifiant
-									} else {
-										donnees.nom = utilisateur.nom
-									}
-									resolve(donnees)
-								} else {
-									donnees.nom = donnees.identifiant
-									resolve(donnees)
-								}
-							} else {
-								resolve({})
-							}
-						} else {
-							resolve({})
 						}
 					} else {
 						resolve({})
@@ -6259,42 +5435,6 @@ async function demarrerServeur () {
 							donnees.nom = donnees.identifiant
 							resolve(donnees)
 						}
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 1) {
-							const donnees = JSON.parse(donneesQ.rows[0].donnees)
-							if (donnees.hasOwnProperty('identifiant')) {
-								// Pour compatibilité avec les anciens chemins
-								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
-									donnees.fond = path.basename(donnees.fond)
-								}
-								const reponse = db.EXISTS('utilisateurs:' + donnees.identifiant)
-								if (reponse === 1) {
-									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
-									utilisateur = Object.assign({}, utilisateur)
-									if (utilisateur === null) {
-										donnees.nom = donnees.identifiant
-										resolve(donnees)
-										return false
-									}
-									if (utilisateur.nom === '') {
-										donnees.nom = donnees.identifiant
-									} else {
-										donnees.nom = utilisateur.nom
-									}
-									resolve(donnees)
-								} else {
-									donnees.nom = donnees.identifiant
-									resolve(donnees)
-								}
-							} else {
-								resolve({})
-							}
-						} else {
-							resolve({})
-						}
 					} else {
 						resolve({})
 					}
@@ -6340,42 +5480,6 @@ async function demarrerServeur () {
 						} else {
 							donnees.nom = donnees.identifiant
 							resolve(donnees)
-						}
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 1) {
-							const donnees = JSON.parse(donneesQ.rows[0].donnees)
-							if (donnees.hasOwnProperty('identifiant')) {
-								// Pour compatibilité avec les anciens chemins
-								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
-									donnees.fond = path.basename(donnees.fond)
-								}
-								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
-								if (reponse === 1) {
-									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
-									utilisateur = Object.assign({}, utilisateur)
-									if (utilisateur === null) {
-										donnees.nom = donnees.identifiant
-										resolve(donnees)
-										return false
-									}
-									if (utilisateur.nom === '') {
-										donnees.nom = donnees.identifiant
-									} else {
-										donnees.nom = utilisateur.nom
-									}
-									resolve(donnees)
-								} else {
-									donnees.nom = donnees.identifiant
-									resolve(donnees)
-								}
-							} else {
-								resolve({})
-							}
-						} else {
-							resolve({})
 						}
 					} else {
 						resolve({})
@@ -6423,42 +5527,6 @@ async function demarrerServeur () {
 							donnees.nom = donnees.identifiant
 							resolve(donnees)
 						}
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 1) {
-							const donnees = JSON.parse(donneesQ.rows[0].donnees)
-							if (donnees.hasOwnProperty('identifiant')) {
-								// Pour compatibilité avec les anciens chemins
-								if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
-									donnees.fond = path.basename(donnees.fond)
-								}
-								const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
-								if (reponse === 1) {
-									let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
-									utilisateur = Object.assign({}, utilisateur)
-									if (utilisateur === null) {
-										donnees.nom = donnees.identifiant
-										resolve(donnees)
-										return false
-									}
-									if (utilisateur.nom === '') {
-										donnees.nom = donnees.identifiant
-									} else {
-										donnees.nom = utilisateur.nom
-									}
-									resolve(donnees)
-								} else {
-									donnees.nom = donnees.identifiant
-									resolve(donnees)
-								}
-							} else {
-								resolve({})
-							}
-						} else {
-							resolve({})
-						}
 					} else {
 						resolve({})
 					}
@@ -6487,20 +5555,6 @@ async function demarrerServeur () {
 						donnees = Object.assign({}, donnees)
 						if (donnees === null) { resolve({}); return false }
 						resolve(donnees)
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 1) {
-							const donnees = JSON.parse(donneesQ.rows[0].donnees)
-							if (donnees.hasOwnProperty('identifiant')) {
-								resolve(donnees)
-							} else {
-								resolve({})
-							}
-						} else {
-							resolve({})
-						}
 					} else {
 						resolve({})
 					}
@@ -6525,20 +5579,6 @@ async function demarrerServeur () {
 						donnees = Object.assign({}, donnees)
 						if (donnees === null) { resolve({}); return false }
 						resolve(donnees)
-					} else if (resultat !== 1 && pgdb === true) {
-						const client = await pool.connect()
-						const donneesQ = await client.query('SELECT donnees FROM murs WHERE mur = $1', [parseInt(mur)])
-						client.release()
-						if (Object.keys(donneesQ.rows[0]).length === 1) {
-							const donnees = JSON.parse(donneesQ.rows[0].donnees)
-							if (donnees.hasOwnProperty('identifiant')) {
-								resolve(donnees)
-							} else {
-								resolve({})
-							}
-						} else {
-							resolve({})
-						}
 					} else {
 						resolve({})
 					}
@@ -7172,7 +6212,7 @@ async function demarrerServeur () {
 				await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
 				await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
 				for (const bloc of parametres.blocs) {
-					if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media))) {
+					if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media))) {
 						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
 					}
 					if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra))) {
@@ -7213,68 +6253,6 @@ async function demarrerServeur () {
 				res.send(erreur)
 			}
 		})
-	}
-
-	async function exporterMurPg (res, id, donnees) {
-		const html = genererHTML(donnees.mur, donnees.blocs)
-		const chemin = path.join(__dirname, '..', '/static/temp')
-		await fs.mkdirp(path.normalize(chemin + '/' + id))
-		await fs.mkdirp(path.normalize(chemin + '/' + id + '/fichiers'))
-		await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
-		await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(donnees, '', 4), 'utf8')
-		await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
-		if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + donnees.mur.fond))) {
-			await fs.copy(path.join(__dirname, '..', '/static' + donnees.mur.fond), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(donnees.mur.fond), { overwrite: true }))
-		} else if (donnees.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + donnees.mur.fond))) {
-			await fs.copy(path.join(__dirname, '..', '/public' + donnees.mur.fond), path.normalize(chemin + '/' + id + '/static' + donnees.mur.fond, { overwrite: true }))
-		}
-		if (await fs.pathExists(path.join(__dirname, '..', '/static/export/css'))) {
-			await fs.copy(path.join(__dirname, '..', '/static/export/css'), path.normalize(chemin + '/' + id + '/static/css'))
-		}
-		if (await fs.pathExists(path.join(__dirname, '..', '/static/export/js'))) {
-			await fs.copy(path.join(__dirname, '..', '/static/export/js'), path.normalize(chemin + '/' + id + '/static/js'))
-		}
-		await fs.copy(path.join(__dirname, '..', '/public/fonts/MaterialIcons-Regular.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/MaterialIcons-Regular.woff2'))
-		await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
-		await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
-		for (const bloc of donnees.blocs) {
-			if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media))) {
-				await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
-			}
-			if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra))) {
-				await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
-			}
-			if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('medias')) {
-				const medias = JSON.parse(bloc.medias)
-				for (let i = 0; i < medias.length; i++) {
-					if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier))) {
-						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
-					}
-				}
-			}
-			if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('vignette') && bloc.vignette !== '') {
-				if (typeof bloc.vignette === 'string' && bloc.vignette.includes('/img/') && !verifierURL(bloc.vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/public' + bloc.vignette))) {
-					await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
-				} else if (typeof bloc.vignette === 'string' && !verifierURL(bloc.vignette, ['https', 'http'])) {
-					const fichierVignette = path.basename(bloc.vignette)
-					if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette))) {
-						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
-					}
-				}
-			}
-		}
-		const archiveId = Math.floor((Math.random() * 100000) + 1)
-		const sortie = fs.createWriteStream(path.normalize(chemin + '/mur-' + id + '_' + archiveId + '.zip'))
-		const archive = archiver('zip', {
-			zlib: { level: 9 }
-		})
-		sortie.on('finish', async function () {
-			await fs.remove(path.normalize(chemin + '/' + id))
-			res.send('mur-' + id + '_' + archiveId + '.zip')
-		})
-		archive.pipe(sortie)
-		archive.directory(path.normalize(chemin + '/' + id), false)
-		archive.finalize()
 	}
 
 	function genererMotDePasse (longueur) {
