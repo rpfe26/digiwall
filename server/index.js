@@ -5884,6 +5884,10 @@ async function demarrerServeur () {
 							if (parseInt(donnees.colonne) >= nombreColonnes) {
 								donnees.colonne = nombreColonnes - 1
 							}
+							// Pour compatibilité avec les anciens chemins
+							if (donnees.hasOwnProperty('vignette') && definirVignettePersonnalisee(donnees.vignette) === true) {
+								donnees.vignette = path.basename(donnees.vignette)
+							}
 							donnees.medias = JSON.parse(donnees.medias)
 							if (!donnees.hasOwnProperty('motdepasse')) {
 								donnees.motdepasse = ''
