@@ -586,13 +586,13 @@ export default {
 		definirTabIndexModale () {
 			return this.message === '' && this.modaleConfirmation === '' ? 0 : -1
 		},
-		definirFond (fond) {
+		definirFond (fond, id) {
 			if (fond.substring(0, 1) === '#') {
 				return { backgroundColor: fond }
 			} else if (fond.includes('/img/')) {
 				return { backgroundImage: 'url(' + fond + ')' }
 			} else {
-				return { backgroundImage: 'url(' + this.definirCheminFichiers() + '/' + this.mur.id + '/' + this.definirNomLienFichier(fond) + ')' }
+				return { backgroundImage: 'url(' + this.definirCheminFichiers() + '/' + id + '/' + this.definirNomLienFichier(fond) + ')' }
 			}
 		},
 		definirNomLienFichier (fichier) {
