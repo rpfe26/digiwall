@@ -36,6 +36,7 @@ import session from 'express-session'
 import events from 'events'
 import base64 from 'base-64'
 import checkDiskSpace from 'check-disk-space'
+import DOMPurify from 'isomorphic-dompurify'
 import { renderPage } from 'vike/server'
 
 const production = process.env.NODE_ENV === 'production'
@@ -5814,6 +5815,13 @@ async function demarrerServeur () {
 						blocsEpingles.push(item)
 						blocs.splice(index, 1)
 					}
+					// Filtrer HTML
+					let html = item.texte
+					html = v.stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
+					html = html.replace(/style=".*?"/mg, '')
+					html = html.replace(/class=".*?"/mg, '')
+					html = DOMPurify.sanitize(html)
+					item.texte = html
 				})
 				blocs.unshift(...blocsEpingles)
 				// Ajouter nombre de vues
@@ -6022,6 +6030,13 @@ async function demarrerServeur () {
 						blocsEpingles.push(item)
 						blocs.splice(index, 1)
 					}
+					// Filtrer HTML
+					let html = item.texte
+					html = v.stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
+					html = html.replace(/style=".*?"/mg, '')
+					html = html.replace(/class=".*?"/mg, '')
+					html = DOMPurify.sanitize(html)
+					item.texte = html
 				})
 				blocs.unshift(...blocsEpingles)
 				// Vérifier notification mise à jour mur
