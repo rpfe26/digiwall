@@ -592,7 +592,7 @@ export default {
 			} else if (fond.includes('/img/')) {
 				return { backgroundImage: 'url(' + fond + ')' }
 			} else {
-				return { backgroundImage: 'url(' + this.definirCheminFichiers() + '/' + id + '/' + this.definirNomLienFichier(fond) + ')' }
+				return { backgroundImage: 'url(' + this.definirCheminFichiers() + '/' + this.id + '/' + this.definirNomLienFichier(fond) + ')' }
 			}
 		},
 		definirNomLienFichier (fichier) {
