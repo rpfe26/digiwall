@@ -1,6 +1,6 @@
 {
   "name": "digiwall",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "homepage": "https://digiwall.app",
   "repository": {
     "type": "git",
@@ -51,6 +51,7 @@
     "gm": "^1.25.0",
     "helmet": "^7.0.0",
     "imagesloaded": "^5.0.0",
+    "isomorphic-dompurify": "^2.24.0",
     "lamejs": "github:zhuker/lamejs",
     "libreoffice-convert": "^1.4.1",
     "linkify-html": "^4.1.1",
