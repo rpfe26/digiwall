@@ -259,12 +259,12 @@ export default {
 	},
 	watch: {
 		affichage: function (affichage) {
-			if (affichage === 'colonnes') {
+			if (!this.mobile && affichage === 'colonnes') {
 				this.definirColonnes(this.blocs)
 				this.$nextTick(function () {
 					this.activerDefilementHorizontal()
 				}.bind(this))
-			} else {
+			} else if (!this.mobile) {
 				this.desactiverDefilementHorizontal()
 			}
 		},
@@ -403,7 +403,7 @@ export default {
 				window.addEventListener('resize', this.redimensionner, false)
 				window.addEventListener('message', this.ecouterMessage, false)
 
-				if (this.mur.affichage === 'colonnes') {
+				if (!this.mobile && this.mur.affichage === 'colonnes') {
 					this.activerDefilementHorizontal()
 				}
 
@@ -413,26 +413,7 @@ export default {
 					this.chargementPage = false
 				}.bind(this), 300)
 
-				if (this.mobile) {
-					document.querySelector('#mur').addEventListener('touchstart', function (event) {
-						if (((event.target.closest('.titre') !== null && event.target.textContent !== '') || (event.target.closest('.texte') !== null && event.target.textContent !== '')) && this.mur.affichage === 'colonnes') {
-							this.desactiverDefilementHorizontal()
-						} else {
-							const selection = document.getSelection()
-							if (selection) {
-								selection.removeAllRanges()
-							}
-						}
-					}.bind(this))
-
-					document.querySelector('#mur').addEventListener('touchend', function () {
-						if (this.mur.affichage === 'colonnes') {
-							setTimeout(function () {
-								this.activerDefilementHorizontal()
-							}.bind(this), 500)
-						}
-					}.bind(this))
-				} else {
+				if (!this.mobile) {
 					document.querySelector('#mur').addEventListener('mousedown', function (event) {
 						if (((event.target.closest('.titre') !== null && event.target.textContent !== '') || (event.target.closest('.texte') !== null && event.target.textContent !== '')) && this.mur.affichage === 'colonnes') {
 							this.desactiverDefilementHorizontal()
@@ -441,11 +422,16 @@ export default {
 							if (selection) {
 								selection.removeAllRanges()
 							}
+							const mur = document.querySelector('#mur')
+							this.defilementHorizontalDebut(event)
+							mur.addEventListener('mouseleave', this.defilementHorizontalFin)
+							mur.addEventListener('mouseup', this.defilementHorizontalFin)
+							mur.addEventListener('mousemove', this.defilementHorizontalEnCours)
 						}
 					}.bind(this))
 
-					document.querySelector('#mur').addEventListener('mouseup', function () {
-						if (this.mur.affichage === 'colonnes') {
+					document.querySelector('#mur').addEventListener('mouseup', function (event) {
+						if (event.target.closest('.titre') === null && event.target.closest('.texte') === null && this.mur.affichage === 'colonnes') {
 							setTimeout(function () {
 								this.activerDefilementHorizontal()
 							}.bind(this), 500)
@@ -965,7 +951,7 @@ export default {
 					event.stopPropagation()
 					let html = event.clipboardData.getData('text/html')
 					if (html !== '') {
-						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol'])
+						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 						html = html.replace(/style=".*?"/mg, '')
 						html = html.replace(/class=".*?"/mg, '')
 						pell.exec('insertHTML', html)
@@ -2746,7 +2732,7 @@ export default {
 					event.stopPropagation()
 					let html = event.clipboardData.getData('text/html')
 					if (html !== '') {
-						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol'])
+						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 						html = html.replace(/style=".*?"/mg, '')
 						html = html.replace(/class=".*?"/mg, '')
 						pell.exec('insertHTML', html)
@@ -2821,7 +2807,7 @@ export default {
 					event.stopPropagation()
 					let html = event.clipboardData.getData('text/html')
 					if (html !== '') {
-						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol'])
+						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 						html = html.replace(/style=".*?"/mg, '')
 						html = html.replace(/class=".*?"/mg, '')
 						pell.exec('insertHTML', html)
@@ -2953,7 +2939,7 @@ export default {
 			this.gererFocus()
 		},
 		demarrerDeplacerBloc () {
-			if (this.mur.affichage === 'colonnes') {
+			if (!this.mobile && this.mur.affichage === 'colonnes') {
 				this.desactiverDefilementHorizontal()
 				this.defilement = false
 				this.depart = 0
@@ -2965,7 +2951,7 @@ export default {
 		},
 		arreterDeplacerBloc (event) {
 			this.chargement = true
-			if (this.mur.affichage === 'colonnes') {
+			if (!this.mobile && this.mur.affichage === 'colonnes') {
 				this.activerDefilementHorizontal()
 				const blocs = []
 				this.colonnes.forEach(function (colonne, indexColonne) {
@@ -3256,7 +3242,7 @@ export default {
 						this.mur.affichage = donnees.mur.affichage
 						this.mur.colonnes = donnees.mur.colonnes
 						this.mur.affichageColonnes = donnees.mur.affichageColonnes
-						if (this.mur.affichage === 'colonnes') {
+						if (!this.mobile && this.mur.affichage === 'colonnes') {
 							this.definirColonnes(this.blocs)
 							this.$nextTick(function () {
 								this.activerDefilementHorizontal()
@@ -4050,7 +4036,7 @@ export default {
 					this.activite = donnees.activite
 					this.mur.colonnes = donnees.mur.colonnes
 					this.mur.affichageColonnes = donnees.mur.affichageColonnes
-					if (this.mur.affichage === 'colonnes') {
+					if (!this.mobile && this.mur.affichage === 'colonnes') {
 						this.definirColonnes(this.blocs)
 						this.$nextTick(function () {
 							this.activerDefilementHorizontal()
@@ -4959,14 +4945,14 @@ export default {
 				this.langue = donnees.langue
 				this.statut = 'auteur'
 				this.murs = murs
-				if (donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite') && donnees.hasOwnProperty('mur')) { 
+				if (donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite') && donnees.hasOwnProperty('mur')) {
 					this.blocs = donnees.blocs
 					this.activite = donnees.activite
 					this.mur.code = donnees.mur.code
 					this.mur.motdepasseAdmin = donnees.mur.motdepasseAdmin
 					this.mur.colonnes = donnees.mur.colonnes
 					this.mur.affichageColonnes = donnees.mur.affichageColonnes
-					if (this.mur.affichage === 'colonnes') {
+					if (!this.mobile && this.mur.affichage === 'colonnes') {
 						this.definirColonnes(this.blocs)
 						this.$nextTick(function () {
 							this.activerDefilementHorizontal()
