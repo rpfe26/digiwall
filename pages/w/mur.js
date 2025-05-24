@@ -259,12 +259,14 @@ export default {
 	},
 	watch: {
 		affichage: function (affichage) {
-			if (!this.mobile && affichage === 'colonnes') {
+			if (affichage === 'colonnes') {
 				this.definirColonnes(this.blocs)
-				this.$nextTick(function () {
-					this.activerDefilementHorizontal()
-				}.bind(this))
-			} else if (!this.mobile) {
+				if (!this.mobile) {
+					this.$nextTick(function () {
+						this.activerDefilementHorizontal()
+					}.bind(this))
+				}
+			} else if (affichage !== 'colonnes' && !this.mobile) {
 				this.desactiverDefilementHorizontal()
 			}
 		},
@@ -2951,8 +2953,10 @@ export default {
 		},
 		arreterDeplacerBloc (event) {
 			this.chargement = true
-			if (!this.mobile && this.mur.affichage === 'colonnes') {
-				this.activerDefilementHorizontal()
+			if (this.mur.affichage === 'colonnes') {
+				if (!this.mobile) {
+					this.activerDefilementHorizontal()
+				}
 				const blocs = []
 				this.colonnes.forEach(function (colonne, indexColonne) {
 					colonne.forEach(function (bloc, indexBloc) {
@@ -3242,11 +3246,13 @@ export default {
 						this.mur.affichage = donnees.mur.affichage
 						this.mur.colonnes = donnees.mur.colonnes
 						this.mur.affichageColonnes = donnees.mur.affichageColonnes
-						if (!this.mobile && this.mur.affichage === 'colonnes') {
+						if (this.mur.affichage === 'colonnes') {
 							this.definirColonnes(this.blocs)
-							this.$nextTick(function () {
-								this.activerDefilementHorizontal()
-							}.bind(this))
+							if (!this.mobile) {
+								this.$nextTick(function () {
+									this.activerDefilementHorizontal()
+								}.bind(this))
+							}
 						}
 						this.$socket.emit('connexion', { mur: this.mur.id, identifiant: this.identifiant, nom: this.nom })
 						this.fermerModaleCodeAcces()
@@ -4036,11 +4042,13 @@ export default {
 					this.activite = donnees.activite
 					this.mur.colonnes = donnees.mur.colonnes
 					this.mur.affichageColonnes = donnees.mur.affichageColonnes
-					if (!this.mobile && this.mur.affichage === 'colonnes') {
+					if (this.mur.affichage === 'colonnes') {
 						this.definirColonnes(this.blocs)
-						this.$nextTick(function () {
-							this.activerDefilementHorizontal()
-						}.bind(this))
+						if (!this.mobile) {
+							this.$nextTick(function () {
+								this.activerDefilementHorizontal()
+							}.bind(this))
+						}
 					}
 					this.$socket.emit('connexion', { mur: this.mur.id, identifiant: this.identifiant, nom: this.nom })
 				} else {
@@ -4952,11 +4960,13 @@ export default {
 					this.mur.motdepasseAdmin = donnees.mur.motdepasseAdmin
 					this.mur.colonnes = donnees.mur.colonnes
 					this.mur.affichageColonnes = donnees.mur.affichageColonnes
-					if (!this.mobile && this.mur.affichage === 'colonnes') {
+					if (this.mur.affichage === 'colonnes') {
 						this.definirColonnes(this.blocs)
-						this.$nextTick(function () {
-							this.activerDefilementHorizontal()
-						}.bind(this))
+						if (!this.mobile) {
+							this.$nextTick(function () {
+								this.activerDefilementHorizontal()
+							}.bind(this))
+						}
 					}
 				}
 				this.notification = this.$t('murDebloque')
