@@ -5,7 +5,7 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { createAdapter } from '@socket.io/cluster-adapter'
-// import eiows from 'eiows'
+import eiows from 'eiows'
 import compression from 'compression'
 import axios from 'axios'
 import cors from 'cors'
@@ -37,7 +37,7 @@ import events from 'events'
 import base64 from 'base-64'
 import checkDiskSpace from 'check-disk-space'
 import DOMPurify from 'isomorphic-dompurify'
-import { renderPage } from 'vike/server'
+import { renderPage, createDevMiddleware } from 'vike/server'
 
 const production = process.env.NODE_ENV === 'production'
 let cluster = false
@@ -187,14 +187,10 @@ async function demarrerServeur () {
 	}
 
 	if (!production) {
-		const vite = await import('vite')
-    	const viteDevMiddleware = (
-      		await vite.createServer({
-        		root,
-        		server: { middlewareMode: true }
-			})
-    	).middlewares
-    	app.use(viteDevMiddleware)
+		const { devMiddleware } = (
+      		await createDevMiddleware({ root })
+    	)
+    	app.use(devMiddleware)
   	} else if (production && parseInt(process.env.REVERSE_PROXY) !== 1) {
 		const sirv = (await import('sirv')).default
 		app.use(sirv(`${root}/dist/client`))
@@ -3088,7 +3084,7 @@ async function demarrerServeur () {
 	httpServer.listen(port)
 
 	const io = new Server(httpServer, {
-		// wsEngine: eiows.Server,
+		wsEngine: eiows.Server,
 		pingInterval: 95000,
     	pingTimeout: 100000,
     	maxHttpBufferSize: 1e8,
