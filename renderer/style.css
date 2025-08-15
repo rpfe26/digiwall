@@ -137,8 +137,8 @@ iframe {
 }
 
 ::-webkit-scrollbar {
-	width: 5px;
-	height: 10px;
+	width: 7px;
+	height: 15px;
 }
 
 ::-webkit-scrollbar-track {
