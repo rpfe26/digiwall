@@ -11,6 +11,14 @@ async function render (pageContext) {
 	if (pageContext && pageContext.hasOwnProperty('pageProps') && pageContext.pageProps.hasOwnProperty('hote')) {
 		hote = pageContext.pageProps.hote
 	}
+	let url = hote
+	if (pageContext && pageContext.hasOwnProperty('pageProps') && pageContext.pageProps.hasOwnProperty('urlOriginal')) {
+		url = hote + pageContext.pageProps.urlOriginal
+	}
+	let robots = 'index,no-follow'
+	if (url !== hote) {
+		robots = 'noindex'
+	}
 	const documentHtml = escapeInject`<!DOCTYPE html>
 		<html lang="fr">
 			<head>
@@ -21,12 +29,12 @@ async function render (pageContext) {
 				<meta name="HandheldFriendly" content="true">
 				<meta name="keywords" content="ladigitale, collaborative, education, openedtech, free software">
 				<meta name="description" content="Une application en ligne pour créer des murs multimédias collaboratifs proposée par La Digitale">
-				<meta name="robots" content="index, no-follow" />
+				<meta name="robots" content="${robots}" />
 				<meta name="theme-color" content="#00ced1">
 				<meta property="og:title" content="${titre}">
 				<meta property="og:description" content="Une application en ligne pour créer des murs multimédias collaboratifs proposée par La Digitale">
 				<meta property="og:type" content="website" />
-				<meta property="og:url" content="${hote}" />
+				<meta property="og:url" content="${url}" />
 				<meta property="og:image" content="${hote}/img/digiwall.png" />
 				<meta property="og:locale" content="fr_FR" />
 				<title>${titre}</title>

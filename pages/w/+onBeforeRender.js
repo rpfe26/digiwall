@@ -40,6 +40,7 @@ async function onBeforeRender (pageContext) {
 		} else if (!admin && reponse.data.mur.acces === 'prive' && statut !== 'utilisateur') {
 			pageProps = { redirection }
 		} else {
+			const urlOriginal = pageContext.urlOriginal
 			const params = pageContext.params
 			const hote = pageContext.hote
 			const userAgent = pageContext.userAgent
@@ -54,7 +55,7 @@ async function onBeforeRender (pageContext) {
 			if (!admin) {
 				murs = []
 			}
-			pageProps = { params, hote, userAgent, langues, identifiant, nom, langue, statut, murs, blocsAutorises, mur, blocs, activite, titre }
+			pageProps = { urlOriginal, params, hote, userAgent, langues, identifiant, nom, langue, statut, murs, blocsAutorises, mur, blocs, activite, titre }
 		}
 	}
 	return {
