@@ -31,7 +31,7 @@ import * as cheerio from 'cheerio'
 import libre from 'libreoffice-convert'
 import util from 'util'
 libre.convertAsync = util.promisify(libre.convert)
-import RedisStore from 'connect-redis'
+import { RedisStore } from 'connect-redis'
 import session from 'express-session'
 import events from 'events'
 import base64 from 'base-64'
@@ -6341,7 +6341,9 @@ async function demarrerServeur () {
 	async function supprimerFichier (mur, fichier) {
 		return new Promise(async function (resolve) {
 			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + fichier)
-			await fs.remove(chemin)
+			if (await fs.pathExists(chemin) && fichier !== '') {
+				await fs.remove(chemin)
+			}
 			resolve()
 		})
 	}

@@ -6,7 +6,6 @@ import escapeHtml from 'voca/escape_html'
 import stripTags from 'voca/strip_tags'
 import fileSaver from 'file-saver'
 const { saveAs } = fileSaver
-import Panzoom from '@panzoom/panzoom'
 import ClipboardJS from 'clipboard'
 import lamejs from 'lamejs'
 import ChargementPage from '#root/components/chargement-page.vue'

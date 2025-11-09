@@ -48,6 +48,7 @@ async function render (pageContext) {
 				<script src="/js/qrcode.js"></script>
 				<script src="/js/jspanel.js"></script>
 				<script src="/js/flex-images.js"></script>
+				<script src="/js/panzoom.js"></script>
 			</body>
 		</html>`
   	return {
