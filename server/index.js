@@ -14,6 +14,7 @@ import bodyParser from 'body-parser'
 import helmet from 'helmet'
 import v from 'voca'
 import multer from 'multer'
+import Busboy from 'busboy'
 import sharp from 'sharp'
 import gm from 'gm'
 import archiver from 'archiver'
@@ -36,6 +37,7 @@ import session from 'express-session'
 import events from 'events'
 import base64 from 'base-64'
 import checkDiskSpace from 'check-disk-space'
+import { S3Client, CopyObjectCommand, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import DOMPurify from 'isomorphic-dompurify'
 import { renderPage, createDevMiddleware } from 'vike/server'
 
@@ -46,6 +48,19 @@ if (production) {
 }
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = `${__dirname}/..`
+
+planifierCollecteDechets()
+
+function planifierCollecteDechets () {
+	if (!global.gc) {
+		return false
+	}
+	const prochainAppel = 30 + (Math.random() * 15)
+	setTimeout(function () {
+		global.gc()
+		planifierCollecteDechets()
+	}, prochainAppel * 1000)
+}
 
 demarrerServeur()
 
@@ -60,11 +75,34 @@ async function demarrerServeur () {
 	} else if (process.env.PORT) {
 		hote = 'http://localhost:' + process.env.PORT
 	}
-	let db
-	let db_port = 6379
-	if (process.env.DB_PORT) {
-		db_port = process.env.DB_PORT
+	const hoteTeleversement = process.env.UPLOAD_HOST || hote
+	let stockage = 'fs'
+	const lienPublicS3 = process.env.VITE_S3_PUBLIC_LINK
+	let s3Client = ''
+	let bucket = ''
+	if (process.env.VITE_STORAGE && process.env.VITE_STORAGE === 's3' && lienPublicS3 !== null && lienPublicS3 !== '') {
+		stockage = 's3'
+		bucket = process.env.S3_BUCKET
 	}
+	if (stockage === 's3') {
+		const s3ServerType = process.env.S3_SERVER_TYPE || 'aws'
+		const maxSockets = process.env.S3_MAX_SOCKETS || 500
+		s3Client = new S3Client({
+			endpoint: process.env.S3_ENDPOINT,
+			region: process.env.S3_REGION,
+			credentials: {
+				accessKeyId: process.env.S3_ACCESS_KEY,
+				secretAccessKey: process.env.S3_SECRET_KEY
+			},
+			forcePathStyle: s3ServerType === 'minio' ? true : false,
+			requestHandler: {
+				requestTimeout: 30_000,
+				httpsAgent: { maxSockets: maxSockets }
+			}
+		})
+	}
+	let db
+	const db_port = process.env.DB_PORT || 6379
 	if (production) {
 		db = await createClient({
 			url: 'redis://default:' + process.env.DB_PWD  + '@' + process.env.DB_HOST + ':' + db_port
@@ -78,7 +116,7 @@ async function demarrerServeur () {
 			console.log('redis: ' + err)
 		}).connect()
 	}
-	let storeOptions, cookie, dureeSession, dateCron, domainesAutorises, minimumEspaceDisque
+	let storeOptions, cookie, domainesAutorises
 	let maintenance = false
 	if (production) {
 		storeOptions = {
@@ -113,14 +151,10 @@ async function demarrerServeur () {
 		saveUninitialized: false,
 		cookie: cookie
 	}
-	if (process.env.SESSION_DURATION) {
-		dureeSession = parseInt(process.env.SESSION_DURATION)
-	} else {
-		dureeSession = 864000000 //3600 * 24 * 10 * 1000
-	}
+	const dureeSession = parseInt(process.env.SESSION_DURATION) || 864000000 //3600 * 24 * 10 * 1000
 	const sessionMiddleware = session(sessionOptions)
 
-	if (production && process.env.AUTHORIZED_DOMAINS) {
+	if (production && process.env.AUTHORIZED_DOMAINS && process.env.AUTHORIZED_DOMAINS !== null && process.env.AUTHORIZED_DOMAINS !== '') {
 		domainesAutorises = process.env.AUTHORIZED_DOMAINS.split(',')
 	} else {
 		domainesAutorises = '*'
@@ -141,19 +175,12 @@ async function demarrerServeur () {
 		}
 	})
 
-	if (process.env.CRON_TASK_DATE) {
-		dateCron = process.env.CRON_TASK_DATE
-	} else {
-		dateCron = '59 23 * * Saturday' // tous les samedis à 23h59
-	}
+	const dateCron = process.env.CRON_TASK_DATE || '59 23 * * Saturday' // tous les samedis à 23h59
 	cron.schedule(dateCron, async function () {
 		await fs.emptyDir(path.join(__dirname, '..', '/static/temp'))
 	})
 
-	minimumEspaceDisque = 10
-	if (process.env.ALERT_AVAILABLE_SPACE) {
-		minimumEspaceDisque = process.env.ALERT_AVAILABLE_SPACE
-	}
+	const minimumEspaceDisque = process.env.ALERT_AVAILABLE_SPACE || 10
 
 	// Charger plugin dayjs
 	dayjs.extend(localizedFormat)
@@ -170,7 +197,7 @@ async function demarrerServeur () {
 			directives: {
 				"default-src": ["'self'", "https:", "ws:"],
 				"script-src": ["'self'", process.env.VITE_MATOMO, "'unsafe-inline'", "'unsafe-eval'"],
-				"media-src": ["'self'", "data:", "blob:"],
+				"media-src": ["'self'", "https:", "data:", "blob:"],
 				"img-src": ["'self'", "https:", "data:"],
 				"frame-ancestors": ["*"],
 				"frame-src": ["*", "blob:"]
@@ -464,6 +491,7 @@ async function demarrerServeur () {
 			urlOriginal: req.originalUrl,
 			params: req.query,
 			hote: hote,
+			hoteTeleversement: hoteTeleversement,
 			userAgent: userAgent,
 			langues: ['fr', 'es', 'it', 'de', 'en'],
 			identifiant: req.session.identifiant,
@@ -904,7 +932,7 @@ async function demarrerServeur () {
 			const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 			checkDiskSpace(dossier).then(async function (diskSpace) {
 				const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
-				if (espace < minimumEspaceDisque) {
+				if (stockage === 'fs' && espace < minimumEspaceDisque) {
 					res.send('erreur_espace_disque')
 				} else {
 					const resultat = await db.EXISTS('murs:' + mur)
@@ -982,8 +1010,15 @@ async function demarrerServeur () {
 									.SADD('utilisateurs-murs:' + id, identifiant)
 									.exec()
 								}
-								if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
+								if (stockage === 'fs' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
 									await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
+								} else if (stockage === 's3') {
+									const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
+									if (liste.hasOwnProperty('Contents')) {
+										for (let i = 0; i < liste.Contents.length; i++) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: id + '/' + liste.Contents[i].Key.replace(mur + '/', ''), CopySource: '/' + bucket + '/' + liste.Contents[i].Key, ACL: 'public-read' }))
+										}
+									}
 								}
 								res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
 							})
@@ -1049,12 +1084,14 @@ async function demarrerServeur () {
 						const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 						checkDiskSpace(dossier).then(async function (diskSpace) {
 							const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
-							if (espace < minimumEspaceDisque) {
+							if (stockage === 'fs' && espace < minimumEspaceDisque) {
 								res.send('erreur_espace_disque')
 							} else {
 								const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 								const donneesBlocs = []
-								await fs.mkdirp(chemin)
+								if (stockage === 'fs') {
+									await fs.mkdirp(chemin)
+								}
 								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 									const donneesBloc = new Promise(async function (resolve) {
 										if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
@@ -1098,22 +1135,34 @@ async function demarrerServeur () {
 													}
 												}
 											}
-											if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+											if (stockage === 'fs' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+											} else if (stockage === 's3' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+												const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.media))
+												await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.media, Body: buffer, ACL: 'public-read' }))
 											}
-											if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+											if (stockage === 'fs' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
 												await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+											} else if (stockage === 's3' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+												const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))
+												await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.mediaExtra, Body: buffer, ACL: 'public-read' }))
 											}
 											if (bloc.hasOwnProperty('medias')) {
 												const medias = JSON.parse(bloc.medias)
 												for (let i = 0; i < medias.length; i++) {
-													if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+													if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
 														await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+													} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+														const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + medias[i].fichier))
+														await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + medias[i].fichier, Body: buffer, ACL: 'public-read' }))
 													}
 												}
 											}
-											if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+											if (stockage === 'fs' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 												await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+											} else if (stockage === 's3' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+												const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))
+												await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + path.basename(bloc.vignette), Body: buffer, ACL: 'public-read' }))
 											}
 											resolve({ bloc: bloc.bloc, blocId: blocId })
 										} else {
@@ -1517,9 +1566,16 @@ async function demarrerServeur () {
 						.exec()
 					}
 					await db.DEL('utilisateurs-murs:' + mur)
-					const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
-					if (suppressionFichiers === true) {
+					if (stockage === 'fs' && suppressionFichiers === true) {
+						const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 						await fs.remove(chemin)
+					} else if (stockage === 's3' && suppressionFichiers === true) {
+						const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
+						if (liste.hasOwnProperty('Contents')) {
+							for (let i = 0; i < liste.Contents.length; i++) {
+								await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
+							}
+						}
 					}
 					res.send('mur_supprime')
 				} else {
@@ -1911,8 +1967,17 @@ async function demarrerServeur () {
 							.exec()
 						}
 						await db.DEL('utilisateurs-murs:' + mur)
-						const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
-						await fs.remove(chemin)
+						if (stockage === 'fs') {
+							const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
+							await fs.remove(chemin)
+						} else if (stockage === 's3') {
+							const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
+							if (liste.hasOwnProperty('Contents')) {
+								for (let i = 0; i < liste.Contents.length; i++) {
+									await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
+								}
+							}
+						}
 						resolve(mur)
 					} else {
 						resolve()
@@ -2238,9 +2303,127 @@ async function demarrerServeur () {
 		const identifiant = req.session.identifiant
 		if (!identifiant) {
 			res.send('non_connecte')
+		} else if (stockage === 's3') {
+			const buffers = []
+			let nom
+			let mimetype
+			const busboy = Busboy({ headers: req.headers })
+			busboy.on('file', function (champ, fichier, meta) {
+				mimetype = meta.mimeType
+				nom = definirNomFichier(meta.filename)
+				fichier.on('data', function (donnees) {
+					buffers.push(donnees)
+				})
+			})
+			busboy.on('finish', async function () {
+				const bufferFichier = Buffer.concat(buffers)
+				if (bufferFichier !== null && nom !== null && mimetype !== null) {
+					if (mimetype.split('/')[0] === 'image') {
+						const extension = path.parse(nom).ext
+						if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
+							try {
+								const buffer = await sharp(bufferFichier, { failOnError: false }).withMetadata().rotate().jpeg().resize(1200, 1200, {
+									fit: sharp.fit.inside,
+									withoutEnlargement: true
+								}).toBuffer()
+								if (buffer !== null) {
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: buffer, ACL: 'public-read' }))
+									res.json({ fichier: nom, mimetype: mimetype })
+								} else {
+									res.send('erreur_televersement')
+								}
+							} catch (e) {
+								res.send('erreur_televersement')
+							}
+						} else if (extension.toLowerCase() !== '.gif') {
+							try {
+								const buffer = await sharp(bufferFichier, { failOnError: false }).withMetadata().resize(1200, 1200, {
+									fit: sharp.fit.inside,
+									withoutEnlargement: true
+								}).toBuffer()
+								if (buffer !== null) {
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: buffer, ACL: 'public-read' }))
+									res.json({ fichier: nom, mimetype: mimetype })
+								} else {
+									res.send('erreur_televersement')
+								}
+							} catch (e) {
+								res.send('erreur_televersement')
+							}
+						} else {
+							await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+							res.json({ fichier: nom, mimetype: mimetype })
+						}
+					} else if (mimetype === 'application/pdf') {
+						gm(bufferFichier).setFormat('jpg').resize(450).quality(80).toBuffer(async function (erreur, buffer) {
+							if (erreur) {
+								await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + path.parse(nom).name + '.pdf', Body: bufferFichier, ACL: 'public-read' }))
+								res.json({ fichier: nom, mimetype: 'pdf', vignetteGeneree: false })
+							} else {
+								await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + path.parse(nom).name + '.pdf', Body: bufferFichier, ACL: 'public-read' }))
+								await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + path.parse(nom).name + '.jpg', Body: buffer, ACL: 'public-read' }))
+								res.json({ fichier: nom, mimetype: 'pdf', vignetteGeneree: true })
+							}
+						})
+					} else if (mimetype === 'application/vnd.oasis.opendocument.presentation' || mimetype === 'application/vnd.oasis.opendocument.text' || mimetype === 'application/vnd.oasis.opendocument.spreadsheet') {
+						mimetype = 'document'
+						let pdfBuffer
+						try {
+							pdfBuffer = await libre.convertAsync(bufferFichier, '.pdf', undefined)
+						} catch (err) {
+							pdfBuffer = 'erreur'
+						}
+						if (pdfBuffer && pdfBuffer !== 'erreur') {
+							gm(pdfBuffer).setFormat('jpg').resize(450).quality(80).toBuffer(async function (erreur, buffer) {
+								if (erreur) {
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+									res.json({ fichier: nom, mimetype: mimetype, vignetteGeneree: false })
+								} else {
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + path.parse(nom).name + '.jpg', Body: buffer, ACL: 'public-read' }))
+									res.json({ fichier: nom, mimetype: mimetype, vignetteGeneree: true })
+								}
+							})
+						} else {
+							await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+							res.json({ fichier: nom, mimetype: mimetype, vignetteGeneree: false })
+						}
+					} else if (mimetype === 'application/msword' || mimetype === 'application/vnd.ms-powerpoint' || mimetype === 'application/vnd.ms-excel' || mimetype.includes('officedocument') === true) {
+						mimetype = 'office'
+						let pdfBuffer
+						try {
+							pdfBuffer = await libre.convertAsync(bufferFichier, '.pdf', undefined)
+						} catch (err) {
+							pdfBuffer = 'erreur'
+						}
+						if (pdfBuffer && pdfBuffer !== 'erreur') {
+							gm(pdfBuffer).setFormat('jpg').resize(450).quality(80).toBuffer(async function (erreur, buffer) {
+								if (erreur) {
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+									res.json({ fichier: nom, mimetype: mimetype, vignetteGeneree: false })
+								} else {
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + path.parse(nom).name + '.jpg', Body: buffer, ACL: 'public-read' }))
+									res.json({ fichier: nom, mimetype: mimetype, vignetteGeneree: true })
+								}
+							})
+						} else {
+							await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+							res.json({ fichier: nom, mimetype: mimetype, vignetteGeneree: false })
+						}
+					} else {
+						await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+						res.json({ fichier: nom, mimetype: mimetype })
+					}
+				} else {
+					res.send('erreur_televersement')
+				}
+			})
+			req.pipe(busboy)
 		} else {
 			televerserTemp(req, res, async function (err) {
-				if (err) { res.send('erreur_televersement'); return false }
+				if (err === 'erreur_espace_disque') { res.send('erreur_espace_disque'); return false }
+				else if (err) { res.send('erreur_televersement'); return false }
 				const fichier = req.file
 				if (fichier.hasOwnProperty('mimetype') && fichier.hasOwnProperty('filename')) {
 					let mimetype = fichier.mimetype
@@ -2356,9 +2539,35 @@ async function demarrerServeur () {
 		const identifiant = req.session.identifiant
 		if (!identifiant) {
 			res.send('non_connecte')
+		} else if (stockage === 's3') {
+			const buffers = []
+			let nom
+			const formData = new Map()
+			const busboy = Busboy({ headers: req.headers })
+			busboy.on('field', function (champ, valeur) {
+				formData.set(champ, valeur)
+			})
+			busboy.on('file', function (champ, fichier, meta) {
+				nom = definirNomFichier(meta.filename)
+				fichier.on('data', function (donnees) {
+					buffers.push(donnees)
+				})
+			})
+			busboy.on('finish', async function () {
+				const bufferFichier = Buffer.concat(buffers)
+				if (bufferFichier !== null && nom !== null) {
+					const mur = formData.get('mur')
+					await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: mur + '/' + nom, Body: bufferFichier, ACL: 'public-read' }))
+					res.send(nom)
+				} else {
+					res.send('erreur_televersement')
+				}
+			})
+			req.pipe(busboy)
 		} else {
 			televerser(req, res, function (err) {
-				if (err) { res.send('erreur_televersement'); return false }
+				if (err === 'erreur_espace_disque') { res.send('erreur_espace_disque'); return false }
+				else if (err) { res.send('erreur_televersement'); return false }
 				const fichier = req.file
 				res.send(fichier.filename)
 			})
@@ -2369,9 +2578,60 @@ async function demarrerServeur () {
 		const identifiant = req.session.identifiant
 		if (!identifiant) {
 			res.send('non_connecte')
+		} else if (stockage === 's3') {
+			const buffers = []
+			let nom
+			const busboy = Busboy({ headers: req.headers })
+			busboy.on('file', function (champ, fichier, meta) {
+				nom = definirNomFichier(meta.filename)
+				fichier.on('data', function (donnees) {
+					buffers.push(donnees)
+				})
+			})
+			busboy.on('finish', async function () {
+				const bufferFichier = Buffer.concat(buffers)
+				if (bufferFichier !== null && nom !== null) {
+					const extension = path.parse(nom).ext
+					if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
+						try {
+							const buffer = await sharp(bufferFichier, { failOnError: false }).withMetadata().rotate().jpeg().resize(400, 400, {
+								fit: sharp.fit.inside,
+								withoutEnlargement: true
+							}).toBuffer()
+							if (buffer !== null) {
+								await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: buffer, ACL: 'public-read' }))
+								res.send(nom)
+							} else {
+								res.send('erreur_televersement')
+							}
+						} catch (e) {
+							res.send('erreur_televersement')
+						}
+					} else {
+						try {
+							const buffer = await sharp(bufferFichier, { failOnError: false }).withMetadata().resize(400, 400, {
+								fit: sharp.fit.inside,
+								withoutEnlargement: true
+							}).toBuffer()
+							if (buffer !== null) {
+								await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: 'temp/' + nom, Body: buffer, ACL: 'public-read' }))
+								res.send(nom)
+							} else {
+								res.send('erreur_televersement')
+							}
+						} catch (e) {
+							res.send('erreur_televersement')
+						}
+					}
+				} else {
+					res.send('erreur_televersement')
+				}
+			})
+			req.pipe(busboy)
 		} else {
 			televerserTemp(req, res, async function (err) {
-				if (err) { res.send('erreur_televersement'); return false }
+				if (err === 'erreur_espace_disque') { res.send('erreur_espace_disque'); return false }
+				else if (err) { res.send('erreur_televersement'); return false }
 				const fichier = req.file
 				const chemin = path.join(__dirname, '..', '/static/temp/' + fichier.filename)
 				const extension = path.parse(fichier.filename).ext
@@ -2414,9 +2674,65 @@ async function demarrerServeur () {
 		const identifiant = req.session.identifiant
 		if (!identifiant) {
 			res.send('non_connecte')
+		} else if (stockage === 's3') {
+			const buffers = []
+			let nom
+			const formData = new Map()
+			const busboy = Busboy({ headers: req.headers })
+			busboy.on('field', function (champ, valeur) {
+				formData.set(champ, valeur)
+			})
+			busboy.on('file', async function (champ, fichier, meta) {
+				nom = definirNomFichier(meta.filename)
+				fichier.on('data', function (donnees) {
+					buffers.push(donnees)
+				})
+			})
+			busboy.on('finish', async function () {
+				const bufferFichier = Buffer.concat(buffers)
+				if (bufferFichier !== null && nom !== null) {
+					const mur = formData.get('mur')
+					const extension = path.parse(nom).ext
+					if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
+						try {
+							const buffer = await sharp(bufferFichier, { failOnError: false }).withMetadata().rotate().jpeg().resize(1200, 1200, {
+								fit: sharp.fit.inside,
+								withoutEnlargement: true
+							}).toBuffer()
+							if (buffer !== null) {
+								await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: mur + '/' + nom, Body: buffer, ACL: 'public-read' }))
+								res.send(nom)
+							} else {
+								res.send('erreur_televersement')
+							}
+						} catch (e) {
+							res.send('erreur_televersement')
+						}
+					} else {
+						try {
+							const buffer = await sharp(bufferFichier, { failOnError: false }).withMetadata().resize(1200, 1200, {
+								fit: sharp.fit.inside,
+								withoutEnlargement: true
+							}).toBuffer()
+							if (buffer !== null) {
+								await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: mur + '/' + nom, Body: buffer, ACL: 'public-read' }))
+								res.send(nom)
+							} else {
+								res.send('erreur_televersement')
+							}
+						} catch (e) {
+							res.send('erreur_televersement')
+						}
+					}
+				} else {
+					res.send('erreur_televersement')
+				}
+			})
+			req.pipe(busboy)	
 		} else {
 			televerser(req, res, async function (err) {
-				if (err) { res.send('erreur_televersement'); return false }
+				if (err === 'erreur_espace_disque') { res.send('erreur_espace_disque'); return false }
+				else if (err) { res.send('erreur_televersement'); return false }
 				const fichier = req.file
 				const mur = req.body.mur
 				const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + fichier.filename)
@@ -2634,7 +2950,7 @@ async function demarrerServeur () {
 				const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 				checkDiskSpace(dossier).then(async function (diskSpace) {
 					const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
-					if (espace < minimumEspaceDisque) {
+					if (stockage === 'fs' && espace < minimumEspaceDisque) {
 						res.send('erreur')
 					} else {
 						const resultat = await db.EXISTS('murs:' + mur)
@@ -2745,8 +3061,15 @@ async function demarrerServeur () {
 										.SADD('utilisateurs-murs:' + id, identifiant)
 										.exec()
 									}
-									if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
+									if (stockage === 'fs' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
 										await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
+									} else if (stockage === 's3') {
+										const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
+										if (liste.hasOwnProperty('Contents')) {
+											for (let i = 0; i < liste.Contents.length; i++) {
+												await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: id + '/' + liste.Contents[i].Key.replace(mur + '/', ''), CopySource: '/' + bucket + '/' + liste.Contents[i].Key, ACL: 'public-read' }))
+											}
+										}
 									}
 									res.send(id + '/' + token + '/' + slug)
 								})
@@ -2831,8 +3154,17 @@ async function demarrerServeur () {
 							.exec()
 						}
 						await db.DEL('utilisateurs-murs:' + mur)
-						const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
-						await fs.remove(chemin)
+						if (stockage === 'fs') {
+							const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
+							await fs.remove(chemin)
+						} else if (stockage === 's3') {
+							const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
+							if (liste.hasOwnProperty('Contents')) {
+								for (let i = 0; i < liste.Contents.length; i++) {
+									await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
+								}
+							}
+						}
 						res.send('contenu_supprime')
 					} else if (!donneesMur.hasOwnProperty('motdepasse') && donneesMur.identifiant === identifiant) {
 						const resultat = await db.EXISTS('utilisateurs:' + identifiant)
@@ -2872,8 +3204,17 @@ async function demarrerServeur () {
 									.exec()
 								}
 								await db.DEL('utilisateurs-murs:' + mur)
-								const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
-								await fs.remove(chemin)
+								if (stockage === 'fs') {
+									const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
+									await fs.remove(chemin)
+								} else if (stockage === 's3') {
+									const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
+									if (liste.hasOwnProperty('Contents')) {
+										for (let i = 0; i < liste.Contents.length; i++) {
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
+										}
+									}
+								}
 								res.send('contenu_supprime')
 							} else {
 								res.send('non_autorise')
@@ -2934,12 +3275,14 @@ async function demarrerServeur () {
 							const dossier = path.join(__dirname, '..', '/static' + definirCheminFichiers())
 							checkDiskSpace(dossier).then(async function (diskSpace) {
 								const espace = Math.round((diskSpace.free / diskSpace.size) * 100)
-								if (espace < minimumEspaceDisque) {
+								if (stockage === 'fs' && espace < minimumEspaceDisque) {
 									res.send('erreur')
 								} else {
 									const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 									const donneesBlocs = []
-									await fs.mkdirp(chemin)
+									if (stockage === 'fs') {
+										await fs.mkdirp(chemin)
+									}
 									for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 										const donneesBloc = new Promise(async function (resolve) {
 											if (bloc.hasOwnProperty('id') && bloc.hasOwnProperty('bloc') && bloc.hasOwnProperty('typeBloc') && bloc.hasOwnProperty('titre') && bloc.hasOwnProperty('texte') && bloc.hasOwnProperty('media') && bloc.hasOwnProperty('iframe') && bloc.hasOwnProperty('type') && bloc.hasOwnProperty('source') && bloc.hasOwnProperty('vignette') && bloc.hasOwnProperty('vignetteActivee') && bloc.hasOwnProperty('mediaExtra') && bloc.hasOwnProperty('medias') && bloc.hasOwnProperty('edition') && bloc.hasOwnProperty('identifiant') && bloc.hasOwnProperty('commentaires') && bloc.hasOwnProperty('evaluations') && bloc.hasOwnProperty('colonne') && bloc.hasOwnProperty('visibilite') && bloc.hasOwnProperty('couleur') && bloc.hasOwnProperty('listeCommentaires') && bloc.hasOwnProperty('listeEvaluations')) {
@@ -2983,22 +3326,34 @@ async function demarrerServeur () {
 														}
 													}
 												}
-												if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+												if (stockage === 'fs' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 													await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+												} else if (stockage === 's3' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+													const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.media))
+													await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.media, Body: buffer, ACL: 'public-read' }))
 												}
-												if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+												if (stockage === 'fs' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
 													await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+												} else if (stockage === 's3' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+													const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))
+													await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.mediaExtra, Body: buffer, ACL: 'public-read' }))
 												}
 												if (bloc.hasOwnProperty('medias')) {
 													const medias = JSON.parse(bloc.medias)
 													for (let i = 0; i < medias.length; i++) {
-														if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+														if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
 															await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+														} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+															const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + medias[i].fichier))
+															await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + medias[i].fichier, Body: buffer, ACL: 'public-read' }))
 														}
 													}
 												}
-												if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+												if (stockage === 'fs' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 													await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+												} else if (stockage === 's3' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+													const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))
+													await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + path.basename(bloc.vignette), Body: buffer, ACL: 'public-read' }))
 												}
 												resolve({ bloc: bloc.bloc, blocId: blocId })
 											} else {
@@ -3016,8 +3371,11 @@ async function demarrerServeur () {
 										if (parametres.activite === true) {
 											activiteId = donnees.mur.activite
 										}
-										if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+										if (stockage === 'fs' && !donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
+										} else if (stockage === 's3' && !donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+											const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))
+											await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + path.basename(donnees.mur.fond), Body: buffer, ACL: 'public-read' }))
 										}
 										let epinglage = 'desactive'
 										if (donnees.mur.hasOwnProperty('epinglage')) {
@@ -3232,23 +3590,55 @@ async function demarrerServeur () {
 						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }) }])
 						.exec()
 					}
-					if (media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+					if (stockage === 'fs' && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 						await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 						await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+					} else if (stockage === 's3' && media !== '' && type !== 'embed' && type !== 'lien') {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
+								await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+							}
+						} catch (e) {}
 					}
-					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+					if (stockage === 'fs' && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
 						await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 						await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+					} else if (stockage === 's3' && mediaExtra !== '') {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
+								await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+							}
+						} catch (e) {}
 					}
 					for (let i = 0; i < medias.length; i++) {
-						if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+						if (stockage === 'fs' && medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
 							await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 							await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+						} else if (stockage === 's3' && medias[i].fichier !== '') {
+							try {
+								const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+								if (fichierMeta.hasOwnProperty('ContentLength')) {
+									await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
+									await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+								}
+							} catch (e) {}
 						}
 					}
-					if (vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+					if (stockage === 'fs' && vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
 						await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 						await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
+					} else if (stockage === 's3' && vignette && definirVignettePersonnalisee(vignette) === true) {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
+								await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+							}
+						} catch (e) {}
 					}
 					io.to('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -3319,16 +3709,32 @@ async function demarrerServeur () {
 								.HINCRBY('murs:' + mur, 'activite', 1)
 								.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }) }])
 								.exec()
-								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+								if (stockage === 'fs' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+								} else if (stockage === 's3' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien') {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 									await supprimerFichier(mur, objet.media)
 								}
-								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+								if (stockage === 'fs' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+								} else if (stockage === 's3' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '') {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
 									await supprimerFichier(mur, objet.mediaExtra)
@@ -3336,9 +3742,17 @@ async function demarrerServeur () {
 								if (objet.hasOwnProperty('medias')) {
 									const mediasActuels = JSON.parse(objet.medias)
 									for (let i = 0; i < medias.length; i++) {
-										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+										if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
 											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+										} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier)) {
+											try {
+												const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+												if (fichierMeta.hasOwnProperty('ContentLength')) {
+													await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
+													await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+												}
+											} catch (e) {}
 										}
 									}
 									mediasActuels.forEach(async function (mediaActuel) {
@@ -3347,9 +3761,17 @@ async function demarrerServeur () {
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+								if (stockage === 'fs' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
+								} else if (stockage === 's3' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true) {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
 									await supprimerFichier(mur, path.basename(objet.vignette))
@@ -3363,16 +3785,32 @@ async function demarrerServeur () {
 								.HSET('contenu-blocs:' + mur + ':' + bloc, ['typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur])
 								.HSET('dates-murs:' + mur, 'date', date)
 								.exec()
-								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+								if (stockage === 'fs' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+								} else if (stockage === 's3' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien') {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 									await supprimerFichier(mur, objet.media)
 								}
-								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+								if (stockage === 'fs' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+								} else if (stockage === 's3' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '') {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
 									await supprimerFichier(mur, objet.mediaExtra)
@@ -3380,9 +3818,17 @@ async function demarrerServeur () {
 								if (objet.hasOwnProperty('medias')) {
 									const mediasActuels = JSON.parse(objet.medias)
 									for (let i = 0; i < medias.length; i++) {
-										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+										if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
 											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+										} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier)) {
+											try {
+												const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+												if (fichierMeta.hasOwnProperty('ContentLength')) {
+													await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
+													await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+												}
+											} catch (e) {}
 										}
 									}
 									mediasActuels.forEach(async function (mediaActuel) {
@@ -3391,9 +3837,17 @@ async function demarrerServeur () {
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+								if (stockage === 'fs' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
+								} else if (stockage === 's3' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true) {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
 									await supprimerFichier(mur, path.basename(objet.vignette))
@@ -3402,16 +3856,32 @@ async function demarrerServeur () {
 								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 								socket.request.session.save()
 							} else {
-								if (objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+								if (stockage === 'fs' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+								} else if (stockage === 's3' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien') {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 									await supprimerFichier(mur, objet.media)
 								}
-								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+								if (stockage === 'fs' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+								} else if (stockage === 's3' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '') {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
 									await supprimerFichier(mur, objet.mediaExtra)
@@ -3419,9 +3889,17 @@ async function demarrerServeur () {
 								if (objet.hasOwnProperty('medias')) {
 									const mediasActuels = JSON.parse(objet.medias)
 									for (let i = 0; i < medias.length; i++) {
-										if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+										if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
 											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
 											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+										} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier)) {
+											try {
+												const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+												if (fichierMeta.hasOwnProperty('ContentLength')) {
+													await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
+													await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+												}
+											} catch (e) {}
 										}
 									}
 									mediasActuels.forEach(async function (mediaActuel) {
@@ -3430,9 +3908,17 @@ async function demarrerServeur () {
 										}
 									})
 								}
-								if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+								if (stockage === 'fs' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
 									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
 									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
+								} else if (stockage === 's3' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true) {
+									try {
+										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+										if (fichierMeta.hasOwnProperty('ContentLength')) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
+											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+										}
+									} catch (e) {}
 								}
 								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
 									await supprimerFichier(mur, path.basename(objet.vignette))
@@ -3494,19 +3980,47 @@ async function demarrerServeur () {
 						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-ajoute' }) }])
 						.exec()
 					}
-					if (media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media))) {
+					if (stockage === 'fs' && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media))) {
 						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
+					} else if (stockage === 's3' && media !== '' && type !== 'embed' && type !== 'lien') {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: murOrigine + '/' + media }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/' + murOrigine + '/' + media, ACL: 'public-read' }))
+							}
+						} catch (e) {}
 					}
-					if (mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + mediaExtra))) {
+					if (stockage === 'fs' && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + mediaExtra))) {
 						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
+					} else if (stockage === 's3' && mediaExtra !== '') {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: murOrigine + '/' + mediaExtra }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/' + murOrigine + '/' + mediaExtra, ACL: 'public-read' }))
+							}
+						} catch (e) {}
 					}
 					for (let i = 0; i < medias.length; i++) {
-						if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + medias[i].fichier))) {
+						if (stockage === 'fs' && medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + medias[i].fichier))) {
 							await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
+						} else if (stockage === 's3' && medias[i].fichier !== '') {
+							try {
+								const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: murOrigine + '/' + medias[i].fichier }))
+								if (fichierMeta.hasOwnProperty('ContentLength')) {
+									await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/' + murOrigine + '/' + medias[i].fichier, ACL: 'public-read' }))
+								}
+							} catch (e) {}
 						}
 					}
-					if (vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + vignette))) {
+					if (stockage === 'fs' && vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http']) && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + vignette))) {
 						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + murOrigine + '/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
+					} else if (stockage === 's3' && vignette && vignette !== '' && !String(vignette).includes('/img/') && !verifierURL(vignette, ['https', 'http'])) {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: murOrigine + '/' + vignette }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/' + murOrigine + '/' + vignette, ACL: 'public-read' }))
+							}
+						} catch (e) {}
 					}
 					io.to('mur-' + mur).emit('ajouterbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: 'oui', identifiant: identifiant, nom: nom, date: date, couleur: couleur, commentaires: 0, evaluations: [], colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, epinglee: 'non', activiteId: activiteId })
 					socket.emit('copierbloc')
@@ -5318,8 +5832,10 @@ async function demarrerServeur () {
 		.SADD('utilisateurs-murs:' + id, identifiant)
 		.HSET('dates-murs:' + id, 'date', date)
 		.exec()
-		const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
-		await fs.mkdirp(chemin)
+		if (stockage === 'fs') {
+			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
+			await fs.mkdirp(chemin)
+		}
 		res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', epinglage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
 	}
 
@@ -5341,8 +5857,10 @@ async function demarrerServeur () {
 		if (type === 'api') {
 			await db.SADD('murs-crees:' + identifiant, id.toString())
 		}
-		const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
-		await fs.mkdirp(chemin)
+		if (stockage === 'fs') {
+			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
+			await fs.mkdirp(chemin)
+		}
 		if (type === 'api') {
 			res.send(id + '/' + token + '/' + slug)
 		} else {
@@ -6216,8 +6734,18 @@ async function demarrerServeur () {
 				await fs.mkdirp(path.normalize(chemin + '/' + id + '/static'))
 				await fs.writeFile(path.normalize(chemin + '/' + id + '/donnees.json'), JSON.stringify(parametres, '', 4), 'utf8')
 				await fs.writeFile(path.normalize(chemin + '/' + id + '/index.html'), html, 'utf8')
-				if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + path.basename(parametres.mur.fond)))) {
-					await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + path.basename(parametres.mur.fond)), path.normalize(chemin + '/' + id + '/fichiers/' + path.basename(parametres.mur.fond), { overwrite: true }))
+				if (!parametres.mur.fond.includes('/img/') && parametres.mur.fond.substring(0, 1) !== '#' && parametres.mur.fond !== '') {
+					const fichierFond = path.basename(parametres.mur.fond)
+					if (stockage === 'fs' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierFond))) {
+						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + path.basename(parametres.mur.fond)), path.normalize(chemin + '/' + id + '/fichiers/' + fichierFond, { overwrite: true }))
+					} else if (stockage === 's3') {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: id + '/' + fichierFond }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await telechargerFichierS3(id + '/' + fichierFond, path.normalize(chemin + '/' + id + '/fichiers/' + fichierFond))
+							}
+						} catch (e) {}
+					}
 				} else if (parametres.mur.fond.includes('/img/') && await fs.pathExists(path.join(__dirname, '..', '/public' + parametres.mur.fond))) {
 					await fs.copy(path.join(__dirname, '..', '/public' + parametres.mur.fond), path.normalize(chemin + '/' + id + '/static' + parametres.mur.fond, { overwrite: true }))
 				}
@@ -6231,17 +6759,38 @@ async function demarrerServeur () {
 				await fs.copy(path.join(__dirname, '..', '/public/fonts/Roboto-Slab-Medium.woff2'), path.normalize(chemin + '/' + id + '/static/fonts/Roboto-Slab-Medium.woff2'))
 				await fs.copy(path.join(__dirname, '..', '/public/img/favicon.png'), path.normalize(chemin + '/' + id + '/static/img/favicon.png'))
 				for (const bloc of parametres.blocs) {
-					if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media))) {
+					if (stockage === 'fs' && Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media))) {
 						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.media), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media, { overwrite: true }))
+					} else if (stockage === 's3' && Object.keys(bloc).length > 0 && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien') {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.media }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await telechargerFichierS3(id + '/' + bloc.media, path.normalize(chemin + '/' + id + '/fichiers/' + bloc.media))
+							}
+						} catch (e) {}
 					}
-					if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra))) {
+					if (stockage === 'fs' && Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra))) {
 						await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + bloc.mediaExtra), path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra, { overwrite: true }))
+					} else if (stockage === 's3' && Object.keys(bloc).length > 0 && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '') {
+						try {
+							const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.mediaExtra }))
+							if (fichierMeta.hasOwnProperty('ContentLength')) {
+								await telechargerFichierS3(id + '/' + bloc.mediaExtra, path.normalize(chemin + '/' + id + '/fichiers/' + bloc.mediaExtra))
+							}
+						} catch (e) {}
 					}
 					if (Object.keys(bloc).length > 0 && bloc.hasOwnProperty('medias')) {
 						const medias = JSON.parse(bloc.medias)
 						for (let i = 0; i < medias.length; i++) {
-							if (medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier))) {
+							if (stockage === 'fs' && medias[i].fichier !== '' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier))) {
 								await fs.copyFile(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + medias[i].fichier), path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier, { overwrite: true }))
+							} else if (stockage === 's3' && medias[i].fichier !== '') {
+								try {
+									const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: id + '/' + medias[i].fichier }))
+									if (fichierMeta.hasOwnProperty('ContentLength')) {
+										await telechargerFichierS3(id + '/' + medias[i].fichier, path.normalize(chemin + '/' + id + '/fichiers/' + medias[i].fichier))
+									}
+								} catch (e) {}
 							}
 						}
 					}
@@ -6250,8 +6799,15 @@ async function demarrerServeur () {
 							await fs.copy(path.join(__dirname, '..', '/public' + bloc.vignette), path.normalize(chemin + '/' + id + '/static' + bloc.vignette, { overwrite: true }))
 						} else if (typeof bloc.vignette === 'string' && !verifierURL(bloc.vignette, ['https', 'http'])) {
 							const fichierVignette = path.basename(bloc.vignette)
-							if (await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette))) {
+							if (stockage === 'fs' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette))) {
 								await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id + '/' + fichierVignette), path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette, { overwrite: true }))
+							} else if (stockage === 's3') {
+								try {
+									const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: id + '/' + fichierVignette }))
+									if (fichierMeta.hasOwnProperty('ContentLength')) {
+										await telechargerFichierS3(id + '/' + fichierVignette, path.normalize(chemin + '/' + id + '/fichiers/' + fichierVignette))
+									}
+								} catch (e) {}
 							}
 						}
 					}
@@ -6328,7 +6884,11 @@ async function demarrerServeur () {
 	}
 
 	function definirCheminFichiers () {
-		return '/fichiers'
+		if (process.env.VITE_STORAGE && process.env.VITE_STORAGE === 's3' && process.env.VITE_S3_PUBLIC_LINK && process.env.VITE_S3_PUBLIC_LINK !== '') {
+			return process.env.VITE_S3_PUBLIC_LINK
+		} else {
+			return '/fichiers'
+		}
 	}
 
 	function definirSlug (titre) {
@@ -6338,11 +6898,29 @@ async function demarrerServeur () {
 		return slug
 	}
 
+	async function telechargerFichierS3 (cle, fichier) {
+		return new Promise(async function (resolve) {
+			const donnees = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: cle }))
+			const writeStream = fs.createWriteStream(fichier)
+			donnees.Body.pipe(writeStream)
+			writeStream.on('finish', function () {
+				resolve('termine')
+			})
+			writeStream.on('error', function () {
+				resolve('erreur')
+			})
+		})
+	}
+
 	async function supprimerFichier (mur, fichier) {
 		return new Promise(async function (resolve) {
-			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + fichier)
-			if (await fs.pathExists(chemin) && fichier !== '') {
-				await fs.remove(chemin)
+			if (stockage === 'fs' && fichier !== '') {
+				const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + fichier)
+				if (await fs.pathExists(chemin)) {
+					await fs.remove(chemin)
+				}
+			} else if (stockage === 's3' && fichier !== '') {
+				await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: mur + '/' + fichier }))
 			}
 			resolve()
 		})

@@ -146,6 +146,7 @@ export default {
 			progressionImport: 0,
 			elementPrecedent: null,
 			hote: this.$pageContext.pageProps.hote,
+			hoteTeleversement: this.$pageContext.pageProps.hoteTeleversement,
 			userAgent: this.$pageContext.pageProps.userAgent,
 			langues: this.$pageContext.pageProps.langues,
 			identifiant: this.$pageContext.pageProps.identifiant,
@@ -162,6 +163,8 @@ export default {
 			pixabayApi: import.meta.env.VITE_PIXABAY_API_KEY,
 			limite: parseFloat(import.meta.env.VITE_UPLOAD_LIMIT),
 			fichiersAutorises: import.meta.env.VITE_UPLOAD_FILE_TYPES,
+			stockage: import.meta.env.VITE_STORAGE,
+			lienPublicS3: import.meta.env.VITE_S3_PUBLIC_LINK,
 			visionneuseDocx: import.meta.env.VITE_DOCX_VIEWER
 		}
 	},
@@ -635,7 +638,7 @@ export default {
 			if (item.hasOwnProperty('vignetteGeneree')) {
 				vignetteGeneree = item.vignetteGeneree
 			}
-			if (item.vignette && item.vignette !== '' && typeof item.vignette === 'string' && (item.vignette.substring(0, 5) === '/img/' || this.verifierURL(item.vignette) === true)) {
+			if (item.vignette && item.vignette !== '' && typeof item.vignette === 'string' && (item.vignette.substring(0, 5) === '/img/' || (this.verifierURL(item.vignette) === true && !item.vignette.includes(this.lienPublicS3)))) {
 				vignette = item.vignette
 			} else if (item.vignette && item.vignette !== '' && typeof item.vignette === 'string') {
 				vignette = this.definirCheminFichiers() + '/' + this.mur.id + '/' + this.definirNomLienFichier(item.vignette)
@@ -985,7 +988,7 @@ export default {
 				const fichier = champ.files[0]
 				const formulaire = new FormData()
 				formulaire.append('fichier', fichier)
-				axios.post(this.hote + '/api/televerser-fichier', formulaire, {
+				axios.post(this.hoteTeleversement + '/api/televerser-fichier', formulaire, {
 					headers: {
 						'Content-Type': 'multipart/form-data'
 					},
@@ -1316,7 +1319,7 @@ export default {
 			const formulaire = new FormData()
 			formulaire.append('mur', this.mur.id)
 			formulaire.append('fichier', blob, 'enregistrement.mp3')
-			axios.post(this.hote + '/api/televerser-audio', formulaire, {
+			axios.post(this.hoteTeleversement + '/api/televerser-audio', formulaire, {
 				headers: {
 					'Content-Type': 'multipart/form-data'
 				},
@@ -1538,7 +1541,7 @@ export default {
 									const url = new URL(this.lien)
 									const domaine = url.hostname
 									const protocole = url.protocol
-									axios.post(this.hote + '/api/recuperer-icone', {
+									axios.post(this.hoteTeleversement + '/api/recuperer-icone', {
 										domaine: domaine,
 										protocole: protocole
 									}).then(async function (reponse) {
@@ -1729,7 +1732,7 @@ export default {
 				const fichier = champ.files[0]
 				const formulaire = new FormData()
 				formulaire.append('fichier', fichier)
-				axios.post(this.hote + '/api/televerser-vignette', formulaire, {
+				axios.post(this.hoteTeleversement + '/api/televerser-vignette', formulaire, {
 					headers: {
 						'Content-Type': 'multipart/form-data'
 					},
@@ -3314,7 +3317,7 @@ export default {
 				const formulaire = new FormData()
 				formulaire.append('mur', this.mur.id)
 				formulaire.append('fichier', fichier)
-				axios.post(this.hote + '/api/televerser-fond', formulaire, {
+				axios.post(this.hoteTeleversement + '/api/televerser-fond', formulaire, {
 					headers: {
 						'Content-Type': 'multipart/form-data'
 					},
@@ -3808,46 +3811,86 @@ export default {
 		},
 		definirLienFichier (id, media) {
 			if (this.mode === 'creation' || (this.mode === 'edition' && this.donneesBloc.media !== media)) {
-				return '/temp/' + media
+				if (this.stockage === 'fs') {
+					return '/temp/' + media
+				} else {
+					return this.definirCheminFichiers() + '/temp/' + media
+				}
 			} else if (this.mode === 'edition' && this.donneesBloc.media === media) {
 				return this.definirCheminFichiers() + '/' + id + '/' + media
 			}
 		},
 		definirLienFichierHote (id, media) {
 			if (this.mode === 'creation' || (this.mode === 'edition' && this.donneesBloc.media !== media)) {
-				return this.hote + '/temp/' + media
+				if (this.stockage === 'fs') {
+					return this.hote + '/temp/' + media
+				} else {
+					return this.definirCheminFichiers() + '/temp/' + media
+				}
 			} else if (this.mode === 'edition' && this.donneesBloc.media === media) {
-				return this.hote + '/fichiers/' + id + '/' + media
+				if (this.stockage === 'fs') {
+					return this.hote + '/fichiers/' + id + '/' + media
+				} else {
+					return this.definirCheminFichiers() + '/' + id + '/' + media
+				}
 			}
 		},
 		definirLienFichierExtra (id, mediaExtra) {
 			if (this.mode === 'creation' || (this.mode === 'edition' && this.donneesBloc.mediaExtra !== mediaExtra)) {
-				return '/temp/' + mediaExtra
+				if (this.stockage === 'fs') {
+					return '/temp/' + mediaExtra
+				} else {
+					return this.definirCheminFichiers() + '/temp/' + mediaExtra
+				}
 			} else if (this.mode === 'edition' && this.donneesBloc.mediaExtra === mediaExtra) {
-				return this.definirCheminFichiers() + '/' + id + '/' + mediaExtra
+				if (this.stockage === 'fs') {
+					return '/fichiers/' + id + '/' + mediaExtra
+				} else {
+					return this.definirCheminFichiers() + '/' + id + '/' + mediaExtra
+				}
 			}
 		},
 		definirLienFichierGalerie (id, media) {
 			if (this.mode === 'creation' || (this.mode === 'edition' && !this.donneesBloc.medias.map(function (e) { return e.fichier }).includes(media))) {
-				return '/temp/' + media
+				if (this.stockage === 'fs') {
+					return '/temp/' + media
+				} else {
+					return this.definirCheminFichiers() + '/temp/' + media
+				}
 			} else if (this.mode === 'edition' && this.donneesBloc.medias.map(function (e) { return e.fichier }).includes(media)) {
-				return this.definirCheminFichiers() + '/' + id + '/' + media
+				if (this.stockage === 'fs') {
+					return '/fichiers/' + id + '/' + media
+				} else {
+					return this.definirCheminFichiers() + '/' + id + '/' + media
+				}
 			}
 		},
 		definirLienVignette (id, vignette) {
-			if (vignette.substring(0, 5) === '/img/' || this.verifierURL(vignette) === true) {
+			if (vignette.substring(0, 5) === '/img/' || (this.verifierURL(vignette) === true && !vignette.includes(this.lienPublicS3))) {
 				return vignette
 			} else if ((this.mode === 'creation') || (this.mode === 'edition' && this.definirNomLienFichier(this.donneesBloc.vignette) !== this.definirNomLienFichier(vignette))) {
-				return '/temp/' + vignette
+				if (this.stockage === 'fs') {
+					return '/temp/' + vignette
+				} else {
+					return this.definirCheminFichiers() + '/temp/' + vignette
+				}
 			} else if ((this.mode === 'edition' || this.modaleDiaporama) && this.definirNomLienFichier(this.donneesBloc.vignette) === this.definirNomLienFichier(vignette)) {
 				return this.definirCheminFichiers() + '/' + id + '/' + vignette
 			}
 		},
 		definirCheminFichiers () {
-			return '/fichiers'
+			if (this.stockage === 's3' && this.lienPublicS3 && this.lienPublicS3 !== '') {
+				return this.lienPublicS3
+			} else {
+				return '/fichiers'
+			}
 		},
 		definirCheminFichiersHote () {
-			return this.hote + '/fichiers'
+			if (this.stockage === 's3' && this.lienPublicS3 && this.lienPublicS3 !== '') {
+				return this.lienPublicS3
+			} else {
+				return this.hote + '/fichiers'
+			}
 		},
 		quitterPage () {
 			this.$socket.emit('sortie', this.mur.id, this.identifiant)

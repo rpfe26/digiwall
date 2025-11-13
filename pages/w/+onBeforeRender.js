@@ -43,6 +43,7 @@ async function onBeforeRender (pageContext) {
 			const urlOriginal = pageContext.urlOriginal
 			const params = pageContext.params
 			const hote = pageContext.hote
+			const hoteTeleversement = pageContext.hoteTeleversement
 			const userAgent = pageContext.userAgent
 			const langues = pageContext.langues
 			const nom = pageContext.nom
@@ -55,7 +56,7 @@ async function onBeforeRender (pageContext) {
 			if (!admin) {
 				murs = []
 			}
-			pageProps = { urlOriginal, params, hote, userAgent, langues, identifiant, nom, langue, statut, murs, blocsAutorises, mur, blocs, activite, titre }
+			pageProps = { urlOriginal, params, hote, hoteTeleversement, userAgent, langues, identifiant, nom, langue, statut, murs, blocsAutorises, mur, blocs, activite, titre }
 		}
 	}
 	return {

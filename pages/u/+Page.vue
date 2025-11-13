@@ -483,7 +483,9 @@ export default {
 			mursRejoints: this.$pageContext.pageProps.mursRejoints,
 			mursAdmins: this.$pageContext.pageProps.mursAdmins,
 			mursFavoris: this.$pageContext.pageProps.mursFavoris,
-			dossiers: this.$pageContext.pageProps.dossiers
+			dossiers: this.$pageContext.pageProps.dossiers,
+			stockage: import.meta.env.VITE_STORAGE,
+			lienPublicS3: import.meta.env.VITE_S3_PUBLIC_LINK
 		}
 	},
 	watch: {
@@ -599,7 +601,11 @@ export default {
 			return fichier.split('\\').pop().split('/').pop()
 		},
 		definirCheminFichiers () {
-			return '/fichiers'
+			if (this.stockage === 's3' && this.lienPublicS3 && this.lienPublicS3 !== '') {
+				return this.lienPublicS3
+			} else {
+				return '/fichiers'
+			}
 		},
 		definirSlug (titre) {
 			let slug = v.latinise(titre.toLowerCase())
