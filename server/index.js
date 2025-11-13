@@ -1180,8 +1180,11 @@ async function demarrerServeur () {
 									if (parametres.activite === true) {
 										activiteId = donnees.mur.activite
 									}
-									if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+									if (stockage === 'fs' && !donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
 										await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
+									} else if (stockage === 's3' && !donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+										const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))
+										await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + path.basename(donnees.mur.fond), Body: buffer, ACL: 'public-read' }))
 									}
 									let epinglage = 'desactive'
 									if (donnees.mur.hasOwnProperty('epinglage')) {
@@ -1319,22 +1322,34 @@ async function demarrerServeur () {
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+										if (stockage === 'fs' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+										} else if (stockage === 's3' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+											const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.media))
+											await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.media, Body: buffer, ACL: 'public-read' }))
 										}
-										if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+										if (stockage === 'fs' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+										} else if (stockage === 's3' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+											const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))
+											await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.mediaExtra, Body: buffer, ACL: 'public-read' }))
 										}
 										if (bloc.hasOwnProperty('medias')) {
 											const medias = JSON.parse(bloc.medias)
 											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+												if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
 													await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+												} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+													const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + medias[i].fichier))
+													await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + medias[i].fichier, Body: buffer, ACL: 'public-read' }))
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+										if (stockage === 'fs' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+										} else if (stockage === 's3' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+											const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))
+											await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + path.basename(bloc.vignette), Body: buffer, ACL: 'public-read' }))
 										}
 										resolve({ bloc: bloc.bloc, blocId: blocId })
 									} else {
@@ -1351,8 +1366,11 @@ async function demarrerServeur () {
 								if (parametres.activite === true) {
 									activiteId = donnees.mur.activite
 								}
-								if (!donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+								if (stockage === 'fs' && !donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
 									await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)), path.normalize(chemin + '/' + path.basename(donnees.mur.fond), { overwrite: true }))
+								} else if (stockage === 's3' && !donnees.mur.fond.includes('/img/') && donnees.mur.fond.substring(0, 1) !== '#' && donnees.mur.fond !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))) {
+									const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + path.basename(donnees.mur.fond)))
+									await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + path.basename(donnees.mur.fond), Body: buffer, ACL: 'public-read' }))
 								}
 								let epinglage = 'desactive'
 								if (donnees.mur.hasOwnProperty('epinglage')) {
@@ -1437,22 +1455,34 @@ async function demarrerServeur () {
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+										if (stockage === 'fs' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.media), path.normalize(chemin + '/' + bloc.media, { overwrite: true }))
+										} else if (stockage === 's3' && bloc.hasOwnProperty('media') && bloc.media !== '' && bloc.type !== 'embed' && bloc.type !== 'lien' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.media))) {
+											const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.media))
+											await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.media, Body: buffer, ACL: 'public-read' }))
 										}
-										if (bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+										if (stockage === 'fs' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + bloc.mediaExtra), path.normalize(chemin + '/' + bloc.mediaExtra, { overwrite: true }))
+										} else if (stockage === 's3' && bloc.hasOwnProperty('mediaExtra') && bloc.mediaExtra !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))) {
+											const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + bloc.mediaExtra))
+											await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + bloc.mediaExtra, Body: buffer, ACL: 'public-read' }))
 										}
 										if (bloc.hasOwnProperty('medias')) {
 											const medias = JSON.parse(bloc.medias)
 											for (let i = 0; i < medias.length; i++) {
-												if (medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+												if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
 													await fs.copy(path.normalize(cible + '/fichiers/' + medias[i].fichier), path.normalize(chemin + '/' + medias[i].fichier, { overwrite: true }))
+												} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && await fs.pathExists(path.normalize(cible + '/fichiers/' + medias[i].fichier))) {
+													const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + medias[i].fichier))
+													await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + medias[i].fichier, Body: buffer, ACL: 'public-read' }))
 												}
 											}
 										}
-										if (bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+										if (stockage === 'fs' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
 											await fs.copy(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)), path.normalize(chemin + '/' + path.basename(bloc.vignette), { overwrite: true }))
+										} else if (stockage === 's3' && bloc.hasOwnProperty('vignette') && definirVignettePersonnalisee(bloc.vignette) === true && await fs.pathExists(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))) {
+											const buffer = await fs.readFile(path.normalize(cible + '/fichiers/' + path.basename(bloc.vignette)))
+											await s3Client.send(new PutObjectCommand({ Bucket: bucket, Key: id + '/' + path.basename(bloc.vignette), Body: buffer, ACL: 'public-read' }))
 										}
 										resolve({ bloc: bloc.bloc, blocId: blocId })
 									} else {
