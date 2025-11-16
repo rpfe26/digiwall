@@ -51,6 +51,12 @@
 							<span class="bouton supprimer" role="button" :tabindex="definirTabIndex()" :title="$t('supprimerEntree')" @click="supprimerActivite(entree.id)" @keydown.enter="supprimerActivite(entree.id)"><i class="material-icons">delete</i></span>
 						</div>
 					</li>
+					<li v-else-if="entree.type === 'bloc-valide'" :data-bloc="entree.bloc" :key="'activite_' + indexEntree">
+						<div class="conteneur-entree"><span>{{ definirNom(entree) }}</span> <span v-if="entree.titre !== ''" v-html="$t('aValideCapsule', { titre: entree.titre })" /><span v-else v-html="$t('aValideUneCapsule')" /> {{ $formaterDateRelative(entree.date, langue) }}.</div>
+						<div class="menu-entree" v-if="admin">
+							<span class="bouton supprimer" role="button" :tabindex="definirTabIndex()" :title="$t('supprimerEntree')" @click="supprimerActivite(entree.id)" @keydown.enter="supprimerActivite(entree.id)"><i class="material-icons">delete</i></span>
+						</div>
+					</li>
 					<li v-else-if="entree.type === 'bloc-supprime'" :data-bloc="entree.bloc" :key="'activite_' + indexEntree">
 						<div class="conteneur-entree"><span>{{ definirNom(entree) }}</span> <span v-if="entree.titre !== ''" v-html="$t('aSupprimeCapsule', { titre: entree.titre })" /><span v-else v-html="$t('aSupprimeUneCapsule')" /> {{ $formaterDateRelative(entree.date, langue) }}.</div>
 						<div class="menu-entree" v-if="admin">
@@ -1299,6 +1305,38 @@
 		</div>
 		<span id="precedent" role="button" :tabindex="definirTabIndexModaleDiaporama()" v-if="blocs.length > 1" @click="afficherBlocPrecedent" @keydown.enter="afficherBlocPrecedent"><i class="material-icons">arrow_back</i></span>
 		<span id="suivant" role="button" :tabindex="definirTabIndexModaleDiaporama()" v-if="blocs.length > 1" @click="afficherBlocSuivant" @keydown.enter="afficherBlocSuivant"><i class="material-icons">arrow_forward</i></span>
+	</div>
+
+	<div class="conteneur-modale" v-if="modale === 'evaluations'">
+		<div class="modale" role="dialog">
+			<div class="en-tete">
+				<span class="titre">{{ $t('evaluerCapsule') }}</span>
+				<span class="fermer" role="button" :tabindex="definirTabIndexModale()" @click="fermerModaleEvaluations" @keydown.enter="fermerModaleEvaluations"><i class="material-icons">close</i></span>
+			</div>
+			<div class="conteneur">
+				<div class="contenu">
+					<label>{{ $t('monEvaluation') }}</label>
+					<div class="section-etoiles">
+						<span class="etoiles" v-if="evaluation === 0">
+							<i class="material-icons" role="button" :tabindex="definirTabIndexModale()" @click="evaluation = 1" @keydown.enter="evaluation = 1">star_outline</i>
+							<i class="material-icons" role="button" :tabindex="definirTabIndexModale()" @click="evaluation = 2" @keydown.enter="evaluation = 2">star_outline</i>
+							<i class="material-icons" role="button" :tabindex="definirTabIndexModale()" @click="evaluation = 3" @keydown.enter="evaluation = 3">star_outline</i>
+							<i class="material-icons" role="button" :tabindex="definirTabIndexModale()" @click="evaluation = 4" @keydown.enter="evaluation = 4">star_outline</i>
+							<i class="material-icons" role="button" :tabindex="definirTabIndexModale()" @click="evaluation = 5" @keydown.enter="evaluation = 5">star_outline</i>
+						</span>
+						<span class="etoiles" v-else>
+							<i class="material-icons selectionne" role="button" :tabindex="definirTabIndexModale()" v-for="etoile in evaluation" @click="evaluation = etoile" @keydown.enter="evaluation = etoile" :key="'etoilepleine_' + etoile">star</i>
+							<i class="material-icons" role="button" :tabindex="definirTabIndexModale()" v-for="etoile in (5 - evaluation)" @click="evaluation = (evaluation + etoile)" @keydown.enter="evaluation = (evaluation + etoile)" :key="'etoilevide_' + etoile">star_outline</i>
+						</span>
+						<i class="material-icons annuler" @click="evaluation = 0" @keydown.enter="evaluation = 0" v-if="evaluation > 0">delete_forever</i>
+					</div>
+					<div class="actions">
+						<span class="bouton" role="button" :tabindex="definirTabIndexModale()" @click="envoyerEvaluation" @keydown.enter="envoyerEvaluation" v-if="evaluations.map(function (e) { return e.identifiant }).indexOf(identifiant) === -1">{{ $t('valider') }}</span>
+						<span class="bouton" role="button" :tabindex="definirTabIndexModale()" @click="modifierEvaluation" @keydown.enter="modifierEvaluation" v-else>{{ $t('modifier') }}</span>
+					</div>
+				</div>
+			</div>
+		</div>
 	</div>
 
 	<div class="conteneur-modale" v-if="transcodage || progressionEnregistrement">

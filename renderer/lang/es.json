@@ -429,5 +429,7 @@
 	"retourAccueil": "Volver a la página de inicio",
 	"nombreVues": "Número de visitas",
 	"repeterImageFond": "Repetir imagen de fondo",
-	"parametreFondModifie": "Parámetro de repetición de imagen de fondo modificado."
+	"parametreFondModifie": "Parámetro de repetición de imagen de fondo modificado.",
+	"aValideCapsule": "ha aprobado la cápsula «{titre}»",
+	"aValideUneCapsule": "ha aprobado una cápsula"
 }

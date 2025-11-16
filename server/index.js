@@ -34,11 +34,10 @@ import util from 'util'
 libre.convertAsync = util.promisify(libre.convert)
 import { RedisStore } from 'connect-redis'
 import session from 'express-session'
-import events from 'events'
+import { EventEmitter } from 'events'
 import base64 from 'base-64'
 import checkDiskSpace from 'check-disk-space'
 import { S3Client, CopyObjectCommand, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import DOMPurify from 'isomorphic-dompurify'
 import { renderPage, createDevMiddleware } from 'vike/server'
 
 const production = process.env.NODE_ENV === 'production'
@@ -48,19 +47,6 @@ if (production) {
 }
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = `${__dirname}/..`
-
-planifierCollecteDechets()
-
-function planifierCollecteDechets () {
-	if (!global.gc) {
-		return false
-	}
-	const prochainAppel = 30 + (Math.random() * 15)
-	setTimeout(function () {
-		global.gc()
-		planifierCollecteDechets()
-	}, prochainAppel * 1000)
-}
 
 demarrerServeur()
 
@@ -189,7 +175,7 @@ async function demarrerServeur () {
 	const etherpadApi = process.env.VITE_ETHERPAD_API_KEY
 
 	// Augmenter nombre de tâches asynchrones par défaut
-	events.EventEmitter.defaultMaxListeners = 100
+	EventEmitter.defaultMaxListeners = 20
 
 	app.set('trust proxy', true)
 	app.use(
@@ -666,7 +652,7 @@ async function demarrerServeur () {
 			const emails = []
 			for (const identifiant of identifiants) {
 				const emailEnvoye = new Promise(function (resolve) {
-					const motdepasse = genererMotDePasse(7)
+					const motdepasse = genererMotDePasse(8)
 					const message = {
 						from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
 						to: '"Moi" <' + email + '>',
@@ -828,7 +814,7 @@ async function demarrerServeur () {
 		if (resultat === 1) {
 			const reponse = await db.GET('mur')
 			if (reponse === null) { res.send('erreur_creation'); return false }
-			const id = parseInt(resultat) + 1
+			const id = parseInt(reponse) + 1
 			creerMurSansCompte(req, res, id, token, slug, titre, hash, date, identifiant, nom, langue, '')
 		} else {
 			creerMurSansCompte(req, res, 1, token, slug, titre, hash, date, identifiant, nom, langue, '')
@@ -1014,7 +1000,7 @@ async function demarrerServeur () {
 									await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
 								} else if (stockage === 's3') {
 									const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
-									if (liste.hasOwnProperty('Contents')) {
+									if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
 										for (let i = 0; i < liste.Contents.length; i++) {
 											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: id + '/' + liste.Contents[i].Key.replace(mur + '/', ''), CopySource: '/' + bucket + '/' + liste.Contents[i].Key, ACL: 'public-read' }))
 										}
@@ -1265,16 +1251,16 @@ async function demarrerServeur () {
 							for (let i = 0; i < blocs.length; i++) {
 								await db
 								.multi()
-								.DEL('commentaires:' + blocs[i])
-								.DEL('evaluations:' + blocs[i])
-								.DEL('contenu-blocs:' + id + ':' + blocs[i])
+								.UNLINK('commentaires:' + blocs[i])
+								.UNLINK('evaluations:' + blocs[i])
+								.UNLINK('contenu-blocs:' + id + ':' + blocs[i])
 								.exec()
 							}
 							await db
 							.multi()
-							.DEL('blocs:' + id)
-							.DEL('activite:' + id)
-							.DEL('dates-murs:' + id)
+							.UNLINK('blocs:' + id)
+							.UNLINK('activite:' + id)
+							.UNLINK('dates-murs:' + id)
 							.exec()
 							const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 							await fs.emptyDir(chemin)
@@ -1571,17 +1557,17 @@ async function demarrerServeur () {
 					for (let i = 0; i < blocs.length; i++) {
 						await db
 						.multi()
-						.DEL('commentaires:' + blocs[i])
-						.DEL('evaluations:' + blocs[i])
-						.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+						.UNLINK('commentaires:' + blocs[i])
+						.UNLINK('evaluations:' + blocs[i])
+						.UNLINK('contenu-blocs:' + mur + ':' + blocs[i])
 						.exec()
 					}
 					await db
 					.multi()
-					.DEL('blocs:' + mur)
-					.DEL('murs:' + mur)
-					.DEL('activite:' + mur)
-					.DEL('dates-murs:' + mur)
+					.UNLINK('blocs:' + mur)
+					.UNLINK('murs:' + mur)
+					.UNLINK('activite:' + mur)
+					.UNLINK('dates-murs:' + mur)
 					.SREM('murs-crees:' + identifiant, mur.toString())
 					.exec()
 					const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
@@ -1595,13 +1581,13 @@ async function demarrerServeur () {
 						.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
 						.exec()
 					}
-					await db.DEL('utilisateurs-murs:' + mur)
+					await db.UNLINK('utilisateurs-murs:' + mur)
 					if (stockage === 'fs' && suppressionFichiers === true) {
 						const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 						await fs.remove(chemin)
 					} else if (stockage === 's3' && suppressionFichiers === true) {
 						const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
-						if (liste.hasOwnProperty('Contents')) {
+						if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
 							for (let i = 0; i < liste.Contents.length; i++) {
 								await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
 							}
@@ -1973,17 +1959,17 @@ async function demarrerServeur () {
 						for (let i = 0; i < blocs.length; i++) {
 							await db
 							.multi()
-							.DEL('commentaires:' + blocs[i])
-							.DEL('evaluations:' + blocs[i])
-							.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+							.UNLINK('commentaires:' + blocs[i])
+							.UNLINK('evaluations:' + blocs[i])
+							.UNLINK('contenu-blocs:' + mur + ':' + blocs[i])
 							.exec()
 						}
 						await db
 						.multi()
-						.DEL('blocs:' + mur)
-						.DEL('murs:' + mur)
-						.DEL('activite:' + mur)
-						.DEL('dates-murs:' + mur)
+						.UNLINK('blocs:' + mur)
+						.UNLINK('murs:' + mur)
+						.UNLINK('activite:' + mur)
+						.UNLINK('dates-murs:' + mur)
 						.exec()
 						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
 						if (utilisateurs === null) { resolve(); return false }
@@ -1996,13 +1982,13 @@ async function demarrerServeur () {
 							.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
 							.exec()
 						}
-						await db.DEL('utilisateurs-murs:' + mur)
+						await db.UNLINK('utilisateurs-murs:' + mur)
 						if (stockage === 'fs') {
 							const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 							await fs.remove(chemin)
 						} else if (stockage === 's3') {
 							const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
-							if (liste.hasOwnProperty('Contents')) {
+							if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
 								for (let i = 0; i < liste.Contents.length; i++) {
 									await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
 								}
@@ -2052,10 +2038,10 @@ async function demarrerServeur () {
 									}
 									await db
 									.multi()
-									.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+									.UNLINK('contenu-blocs:' + mur + ':' + blocs[i])
 									.ZREM('blocs:' + mur, blocs[i])
-									.DEL('commentaires:' + blocs[i])
-									.DEL('evaluations:' + blocs[i])
+									.UNLINK('commentaires:' + blocs[i])
+									.UNLINK('evaluations:' + blocs[i])
 									.exec()
 									resolve(blocs[i])
 								} else {
@@ -2119,13 +2105,13 @@ async function demarrerServeur () {
 				Promise.all([donneesBlocs, donneesActivites, donneesCommentaires, donneesEvaluations]).then(async function () {
 					await db
 					.multi()
-					.DEL('murs-crees:' + identifiant)
-					.DEL('murs-rejoints:' + identifiant)
-					.DEL('murs-favoris:' + identifiant)
-					.DEL('murs-admins:' + identifiant)
-					.DEL('murs-utilisateurs:' + identifiant)
-					.DEL('utilisateurs:' + identifiant)
-					.DEL('noms:' + identifiant)
+					.UNLINK('murs-crees:' + identifiant)
+					.UNLINK('murs-rejoints:' + identifiant)
+					.UNLINK('murs-favoris:' + identifiant)
+					.UNLINK('murs-admins:' + identifiant)
+					.UNLINK('murs-utilisateurs:' + identifiant)
+					.UNLINK('utilisateurs:' + identifiant)
+					.UNLINK('noms:' + identifiant)
 					.exec()
 					if (type === 'utilisateur') {
 						req.session.identifiant = ''
@@ -2160,7 +2146,7 @@ async function demarrerServeur () {
 									}
 								})
 								if (sessionId !== '') {
-									await db.DEL('sessions:' + sessionId)
+									await db.UNLINK('sessions:' + sessionId)
 								}
 								res.send('compte_supprime')
 							})
@@ -3095,7 +3081,7 @@ async function demarrerServeur () {
 										await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
 									} else if (stockage === 's3') {
 										const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
-										if (liste.hasOwnProperty('Contents')) {
+										if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
 											for (let i = 0; i < liste.Contents.length; i++) {
 												await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: id + '/' + liste.Contents[i].Key.replace(mur + '/', ''), CopySource: '/' + bucket + '/' + liste.Contents[i].Key, ACL: 'public-read' }))
 											}
@@ -3159,17 +3145,17 @@ async function demarrerServeur () {
 						for (let i = 0; i < blocs.length; i++) {
 							await db
 							.multi()
-							.DEL('commentaires:' + blocs[i])
-							.DEL('evaluations:' + blocs[i])
-							.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+							.UNLINK('commentaires:' + blocs[i])
+							.UNLINK('evaluations:' + blocs[i])
+							.UNLINK('contenu-blocs:' + mur + ':' + blocs[i])
 							.exec()
 						}
 						await db
 						.multi()
-						.DEL('blocs:' + mur)
-						.DEL('murs:' + mur)
-						.DEL('activite:' + mur)
-						.DEL('dates-murs:' + mur)
+						.UNLINK('blocs:' + mur)
+						.UNLINK('murs:' + mur)
+						.UNLINK('activite:' + mur)
+						.UNLINK('dates-murs:' + mur)
 						.SREM('murs-crees:' + identifiant, mur.toString())
 						.exec()
 						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
@@ -3183,13 +3169,13 @@ async function demarrerServeur () {
 							.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
 							.exec()
 						}
-						await db.DEL('utilisateurs-murs:' + mur)
+						await db.UNLINK('utilisateurs-murs:' + mur)
 						if (stockage === 'fs') {
 							const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 							await fs.remove(chemin)
 						} else if (stockage === 's3') {
 							const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
-							if (liste.hasOwnProperty('Contents')) {
+							if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
 								for (let i = 0; i < liste.Contents.length; i++) {
 									await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
 								}
@@ -3209,17 +3195,17 @@ async function demarrerServeur () {
 								for (let i = 0; i < blocs.length; i++) {
 									await db
 									.multi()
-									.DEL('commentaires:' + blocs[i])
-									.DEL('evaluations:' + blocs[i])
-									.DEL('contenu-blocs:' + mur + ':' + blocs[i])
+									.UNLINK('commentaires:' + blocs[i])
+									.UNLINK('evaluations:' + blocs[i])
+									.UNLINK('contenu-blocs:' + mur + ':' + blocs[i])
 									.exec()
 								}
 								await db
 								.multi()
-								.DEL('blocs:' + mur)
-								.DEL('murs:' + mur)
-								.DEL('activite:' + mur)
-								.DEL('dates-murs:' + mur)
+								.UNLINK('blocs:' + mur)
+								.UNLINK('murs:' + mur)
+								.UNLINK('activite:' + mur)
+								.UNLINK('dates-murs:' + mur)
 								.SREM('murs-crees:' + identifiant, mur.toString())
 								.exec()
 								const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
@@ -3233,13 +3219,13 @@ async function demarrerServeur () {
 									.SREM('murs-favoris:' + utilisateurs[j], mur.toString())
 									.exec()
 								}
-								await db.DEL('utilisateurs-murs:' + mur)
+								await db.UNLINK('utilisateurs-murs:' + mur)
 								if (stockage === 'fs') {
 									const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur)
 									await fs.remove(chemin)
 								} else if (stockage === 's3') {
 									const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
-									if (liste.hasOwnProperty('Contents')) {
+									if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
 										for (let i = 0; i < liste.Contents.length; i++) {
 											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: liste.Contents[i].Key }))
 										}
@@ -3494,10 +3480,12 @@ async function demarrerServeur () {
 			socket.data.identifiant = identifiant
 			socket.data.nom = nom
 			socket.join(room)
-			const clients = await io.to(room).fetchSockets()
+			const clients = await fetchSockets(room)
 			const utilisateurs = []
-			for (let i = 0; i < clients.length; i++) {
-				utilisateurs.push({ identifiant: clients[i].data.identifiant, nom: clients[i].data.nom })
+			if (clients !== null && clients instanceof Array) {
+				for (let i = 0; i < clients.length; i++) {
+					utilisateurs.push({ identifiant: clients[i].data.identifiant, nom: clients[i].data.nom })
+				}
 			}
 			const utilisateursConnectes = utilisateurs.filter((v, i, a) => a.findIndex(t => (t.identifiant === v.identifiant)) === i)
 			io.to(room).emit('connexion', utilisateursConnectes)
@@ -3729,234 +3717,92 @@ async function demarrerServeur () {
 							if (vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== path.basename(vignette) && definirVignettePersonnalisee(vignette) === true) {
 								vignette = path.basename(vignette)
 							}
-							if (visibilite === 'visible' || visibilite === 'protegee') {
+							const activiteId = parseInt(donnees.activite) + 1
+							if (visibilite === 'visible' || visibilite === 'protegee' || visibilite === 'privee' || visibilite === 'masquee') {
 								// Enregistrer entrée du registre d'activité
-								const activiteId = parseInt(donnees.activite) + 1
-								await db
-								.multi()
-								.HSET('contenu-blocs:' + mur + ':' + bloc, ['typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur])
-								.HSET('dates-murs:' + mur, 'date', date)
-								.HINCRBY('murs:' + mur, 'activite', 1)
-								.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }) }])
-								.exec()
-								if (stockage === 'fs' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
-								} else if (stockage === 's3' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien') {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
-										}
-									} catch (e) {}
+								if (visibilite === 'visible' || visibilite === 'masquee') {
+									await db
+									.multi()
+									.HINCRBY('murs:' + mur, 'activite', 1)
+									.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: bloc, identifiant: identifiant, titre: titre, date: date, type: 'bloc-modifie' }) }])
+									.exec()
 								}
-								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
-									await supprimerFichier(mur, objet.media)
-								}
-								if (stockage === 'fs' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
-								} else if (stockage === 's3' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '') {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-									await supprimerFichier(mur, objet.mediaExtra)
-								}
-								if (objet.hasOwnProperty('medias')) {
-									const mediasActuels = JSON.parse(objet.medias)
-									for (let i = 0; i < medias.length; i++) {
-										if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
-											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
-										} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier)) {
-											try {
-												const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
-												if (fichierMeta.hasOwnProperty('ContentLength')) {
-													await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
-													await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
-												}
-											} catch (e) {}
-										}
-									}
-									mediasActuels.forEach(async function (mediaActuel) {
-										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-											await supprimerFichier(mur, mediaActuel.fichier)
-										}
-									})
-								}
-								if (stockage === 'fs' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
-								} else if (stockage === 's3' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true) {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
-									await supprimerFichier(mur, path.basename(objet.vignette))
-								}
-								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							} else if (visibilite === 'privee' || visibilite === 'masquee') {
 								await db
 								.multi()
 								.HSET('contenu-blocs:' + mur + ':' + bloc, ['typeBloc', typeBloc, 'titre', titre, 'texte', texte, 'media', media, 'iframe', iframe, 'type', type, 'source', source, 'vignette', vignette, 'vignetteActivee', vignetteActivee, 'mediaExtra', mediaExtra, 'medias', JSON.stringify(medias), 'visibilite', visibilite, 'motdepasse', motdepasse, 'modifie', date, 'couleur', couleur])
 								.HSET('dates-murs:' + mur, 'date', date)
 								.exec()
-								if (stockage === 'fs' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
-								} else if (stockage === 's3' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien') {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
-									await supprimerFichier(mur, objet.media)
-								}
-								if (stockage === 'fs' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
-								} else if (stockage === 's3' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '') {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-									await supprimerFichier(mur, objet.mediaExtra)
-								}
-								if (objet.hasOwnProperty('medias')) {
-									const mediasActuels = JSON.parse(objet.medias)
-									for (let i = 0; i < medias.length; i++) {
-										if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
-											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
-										} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier)) {
-											try {
-												const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
-												if (fichierMeta.hasOwnProperty('ContentLength')) {
-													await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
-													await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
-												}
-											} catch (e) {}
-										}
-									}
-									mediasActuels.forEach(async function (mediaActuel) {
-										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-											await supprimerFichier(mur, mediaActuel.fichier)
-										}
-									})
-								}
-								if (stockage === 'fs' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
-								} else if (stockage === 's3' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true) {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
-									await supprimerFichier(mur, path.basename(objet.vignette))
-								}
-								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
-							} else {
-								if (stockage === 'fs' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
-								} else if (stockage === 's3' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien') {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
-									await supprimerFichier(mur, objet.media)
-								}
-								if (stockage === 'fs' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
-								} else if (stockage === 's3' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '') {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
-									await supprimerFichier(mur, objet.mediaExtra)
-								}
-								if (objet.hasOwnProperty('medias')) {
-									const mediasActuels = JSON.parse(objet.medias)
-									for (let i = 0; i < medias.length; i++) {
-										if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
-											await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
-											await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
-										} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier)) {
-											try {
-												const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
-												if (fichierMeta.hasOwnProperty('ContentLength')) {
-													await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
-													await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
-												}
-											} catch (e) {}
-										}
-									}
-									mediasActuels.forEach(async function (mediaActuel) {
-										if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
-											await supprimerFichier(mur, mediaActuel.fichier)
-										}
-									})
-								}
-								if (stockage === 'fs' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
-									await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
-									await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
-								} else if (stockage === 's3' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true) {
-									try {
-										const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
-										if (fichierMeta.hasOwnProperty('ContentLength')) {
-											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
-											await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
-										}
-									} catch (e) {}
-								}
-								if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
-									await supprimerFichier(mur, path.basename(objet.vignette))
-								}
-								io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse })
-								socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
-								socket.request.session.save()
 							}
+							if (stockage === 'fs' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + media))) {
+								await fs.copy(path.join(__dirname, '..', '/static/temp/' + media), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + media))
+								await fs.remove(path.join(__dirname, '..', '/static/temp/' + media))
+							} else if (stockage === 's3' && objet.hasOwnProperty('media') && objet.media !== media && media !== '' && type !== 'embed' && type !== 'lien') {
+								try {
+									const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+									if (fichierMeta.hasOwnProperty('ContentLength')) {
+										await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + media, CopySource: '/' + bucket + '/temp/' + media, ACL: 'public-read' }))
+										await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + media }))
+									}
+								} catch (e) {}
+							}
+							if (objet.hasOwnProperty('media') && objet.media !== media && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
+								await supprimerFichier(mur, objet.media)
+							}
+							if (stockage === 'fs' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '' && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + mediaExtra))) {
+								await fs.copy(path.join(__dirname, '..', '/static/temp/' + mediaExtra), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + mediaExtra))
+								await fs.remove(path.join(__dirname, '..', '/static/temp/' + mediaExtra))
+							} else if (stockage === 's3' && objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && mediaExtra !== '') {
+								try {
+									const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+									if (fichierMeta.hasOwnProperty('ContentLength')) {
+										await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + mediaExtra, CopySource: '/' + bucket + '/temp/' + mediaExtra, ACL: 'public-read' }))
+										await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + mediaExtra }))
+									}
+								} catch (e) {}
+							}
+							if (objet.hasOwnProperty('mediaExtra') && objet.mediaExtra !== mediaExtra && objet.mediaExtra !== '') {
+								await supprimerFichier(mur, objet.mediaExtra)
+							}
+							if (objet.hasOwnProperty('medias')) {
+								const mediasActuels = JSON.parse(objet.medias)
+								for (let i = 0; i < medias.length; i++) {
+									if (stockage === 'fs' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier) && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))) {
+										await fs.copy(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + medias[i].fichier))
+										await fs.remove(path.join(__dirname, '..', '/static/temp/' + medias[i].fichier))
+									} else if (stockage === 's3' && medias[i].hasOwnProperty('fichier') && medias[i].fichier !== '' && !mediasActuels.map(function (e) { return e.fichier }).includes(medias[i].fichier)) {
+										try {
+											const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+											if (fichierMeta.hasOwnProperty('ContentLength')) {
+												await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + medias[i].fichier, CopySource: '/' + bucket + '/temp/' + medias[i].fichier, ACL: 'public-read' }))
+												await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + medias[i].fichier }))
+											}
+										} catch (e) {}
+									}
+								}
+								mediasActuels.forEach(async function (mediaActuel) {
+									if (mediaActuel.hasOwnProperty('fichier') && !medias.map(function (e) { return e.fichier }).includes(mediaActuel.fichier)) {
+										await supprimerFichier(mur, mediaActuel.fichier)
+									}
+								})
+							}
+							if (stockage === 'fs' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true && await fs.pathExists(path.join(__dirname, '..', '/static/temp/' + vignette))) {
+								await fs.copy(path.join(__dirname, '..', '/static/temp/' + vignette), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur + '/' + vignette))
+								await fs.remove(path.join(__dirname, '..', '/static/temp/' + vignette))
+							} else if (stockage === 's3' && vignette && objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(vignette) === true) {
+								try {
+									const fichierMeta = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+									if (fichierMeta.hasOwnProperty('ContentLength')) {
+										await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: mur + '/' + vignette, CopySource: '/' + bucket + '/temp/' + vignette, ACL: 'public-read' }))
+										await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: 'temp/' + vignette }))
+									}
+								} catch (e) {}
+							}
+							if (objet.hasOwnProperty('vignette') && path.basename(objet.vignette) !== vignette && definirVignettePersonnalisee(objet.vignette) === true) {
+								await supprimerFichier(mur, path.basename(objet.vignette))
+							}
+							io.to('mur-' + mur).emit('modifierbloc', { bloc: bloc, typeBloc: typeBloc, titre: titre, texte: texte, media: media, iframe: iframe, type: type, source: source, vignette: vignette, vignetteActivee: vignetteActivee, mediaExtra: mediaExtra, medias: medias, edition: edition, identifiant: identifiant, nom: nom, modifie: date, couleur: couleur, colonne: colonne, visibilite: visibilite, motdepasse: motdepasse, activiteId: activiteId })
+							socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
+							socket.request.session.save()
 						} else {
 							socket.emit('nonautorise')
 						}
@@ -4188,7 +4034,7 @@ async function demarrerServeur () {
 			}
 		})
 
-		socket.on('autoriserbloc', async function (mur, token, item, indexBloc, indexBlocColonne, moderation, identifiant) {
+		socket.on('autoriserbloc', async function (mur, token, item, indexBloc, indexBlocColonne, moderation, identifiant, nom) {
 			if (maintenance === true) {
 				socket.emit('maintenance')
 				return false
@@ -4211,15 +4057,28 @@ async function demarrerServeur () {
 						if (item.hasOwnProperty('modifie')) {
 							await db.HDEL('contenu-blocs:' + mur + ':' + item.bloc, 'modifie')
 						}
-						await db
-						.multi()
-						.HSET('contenu-blocs:' + mur + ':' + item.bloc, ['visibilite', 'visible', 'date', date])
-						.HSET('dates-murs:' + mur, 'date', date)
-						// Enregistrer entrée du registre d'activité
-						.HINCRBY('murs:' + mur, 'activite', 1)
-						.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: item.bloc, identifiant: item.identifiant, titre: item.titre, date: date, type: 'bloc-ajoute' }) }])
-						.exec()
-						io.to('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: item.nom, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', motdepasse: item.motdepasse, epinglee: item.epinglee, activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
+						let nomUtilisateur
+						if (moderation === 'privee') {
+							await db
+							.multi()
+							.HSET('contenu-blocs:' + mur + ':' + item.bloc, ['visibilite', 'visible', 'date', date])
+							.HSET('dates-murs:' + mur, 'date', date)
+							// Enregistrer entrée du registre d'activité
+							.HINCRBY('murs:' + mur, 'activite', 1)
+							.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: item.bloc, identifiant: item.identifiant, titre: item.titre, date: date, type: 'bloc-ajoute' }) }])
+							.exec()
+							nomUtilisateur = item.nom
+						} else {
+							await db
+							.multi()
+							.HSET('contenu-blocs:' + mur + ':' + item.bloc, 'visibilite', 'visible')
+							// Enregistrer entrée du registre d'activité
+							.HINCRBY('murs:' + mur, 'activite', 1)
+							.ZADD('activite:' + mur, [{ score: activiteId, value: JSON.stringify({ id: activiteId, bloc: item.bloc, identifiant: identifiant, titre: item.titre, date: date, type: 'bloc-valide' }) }])
+							.exec()
+							nomUtilisateur = nom
+						}
+						io.to('mur-' + mur).emit('autoriserbloc', { bloc: item.bloc, typeBloc: item.typeBloc, titre: item.titre, texte: item.texte, media: item.media, iframe: item.iframe, type: item.type, source: item.source, vignette: item.vignette, vignetteActivee: item.vignetteActivee, mediaExtra: item.mediaExtra, medias: item.medias, edition: item.edition, identifiant: item.identifiant, nom: nomUtilisateur, date: date, couleur: item.couleur, commentaires: 0, evaluations: [], colonne: item.colonne, visibilite: 'visible', motdepasse: item.motdepasse, epinglee: item.epinglee, activiteId: activiteId, moderation: moderation, admin: identifiant, indexBloc: indexBloc, indexBlocColonne: indexBlocColonne })
 						socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 						socket.request.session.save()
 					}
@@ -4345,10 +4204,10 @@ async function demarrerServeur () {
 								const activiteId = parseInt(donnees.activite) + 1
 								await db
 								.multi()
-								.DEL('contenu-blocs:' + mur + ':' + bloc)
+								.UNLINK('contenu-blocs:' + mur + ':' + bloc)
 								.ZREM('blocs:' + mur, bloc)
-								.DEL('commentaires:' + bloc)
-								.DEL('evaluations:' + bloc)
+								.UNLINK('commentaires:' + bloc)
+								.UNLINK('evaluations:' + bloc)
 								.HSET('dates-murs:' + mur, 'date', date)
 								// Enregistrer entrée du registre d'activité
 								.HINCRBY('murs:' + mur, 'activite', 1)
@@ -5358,7 +5217,7 @@ async function demarrerServeur () {
 					admins = JSON.parse(donnees.admins)
 				}
 				if (admins.includes(identifiant) || proprietaire === identifiant || (socket.request.session.statut === 'auteur' && socket.request.session.murs.includes(mur))) {
-					await db.DEL('activite:' + mur)
+					await db.UNLINK('activite:' + mur)
 					io.to('mur-' + mur).emit('reinitialiseractivite', identifiant)
 					socket.request.session.cookie.expires = new Date(Date.now() + dureeSession)
 					socket.request.session.save()
@@ -5555,10 +5414,10 @@ async function demarrerServeur () {
 									if (objet.hasOwnProperty('bloc') && objet.bloc === blocSupprime) {
 										await db
 										.multi()
-										.DEL('contenu-blocs:' + mur + ':' + blocSupprime)
+										.UNLINK('contenu-blocs:' + mur + ':' + blocSupprime)
 										.ZREM('blocs:' + mur, blocSupprime)
-										.DEL('commentaires:' + blocSupprime)
-										.DEL('evaluations:' + blocSupprime)
+										.UNLINK('commentaires:' + blocSupprime)
+										.UNLINK('evaluations:' + blocSupprime)
 										.exec()
 										resolve('supprime')
 									} else {
@@ -6356,9 +6215,11 @@ async function demarrerServeur () {
 				if (mur.ordre === 'decroissant') {
 					blocs.reverse()
 				}
+				const listeBlocs = []
 				// Vérifier capsules épinglées
 				const blocsEpingles = []
 				blocs.forEach(function (item, index) {
+					listeBlocs.push(item.bloc)
 					if (item.epinglee === 'oui') {
 						blocsEpingles.push(item)
 						blocs.splice(index, 1)
@@ -6368,10 +6229,13 @@ async function demarrerServeur () {
 					html = v.stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 					html = html.replace(/style=".*?"/mg, '')
 					html = html.replace(/class=".*?"/mg, '')
-					html = DOMPurify.sanitize(html)
 					item.texte = html
 				})
 				blocs.unshift(...blocsEpingles)
+				// Filtrer activité
+				activite = activite.filter(function (element) {
+					return Object.keys(element).length > 0 && ((element.hasOwnProperty('type') && element.type.includes('colonne')) || (element.hasOwnProperty('bloc') && listeBlocs.includes(element.bloc)))
+				})
 				// Ajouter nombre de vues
 				await db.HSET('murs:' + id, 'vues', vues)
 				// Ajouter dans murs rejoints
@@ -6571,9 +6435,11 @@ async function demarrerServeur () {
 				if (mur.ordre === 'decroissant') {
 					blocs.reverse()
 				}
+				const listeBlocs = []
 				// Vérifier capsules épinglées
 				const blocsEpingles = []
 				blocs.forEach(function (item, index) {
+					listeBlocs.push(item.bloc)
 					if (item.epinglee === 'oui') {
 						blocsEpingles.push(item)
 						blocs.splice(index, 1)
@@ -6583,10 +6449,13 @@ async function demarrerServeur () {
 					html = v.stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 					html = html.replace(/style=".*?"/mg, '')
 					html = html.replace(/class=".*?"/mg, '')
-					html = DOMPurify.sanitize(html)
 					item.texte = html
 				})
 				blocs.unshift(...blocsEpingles)
+				// Filtrer activité
+				activite = activite.filter(function (element) {
+					return Object.keys(element).length > 0 && ((element.hasOwnProperty('type') && element.type.includes('colonne')) || (element.hasOwnProperty('bloc') && listeBlocs.includes(element.bloc)))
+				})
 				// Vérifier notification mise à jour mur
 				if (mur.hasOwnProperty('notification') && mur.notification.includes(identifiant) && Array.isArray(mur.notification)) {
 					mur.notification.splice(mur.notification.indexOf(identifiant), 1)
@@ -6860,6 +6729,14 @@ async function demarrerServeur () {
 		})
 	}
 
+	async function fetchSockets (room) {
+		for (let i = 0; i < 5; i++) {
+			try {
+				return await io.in(room).fetchSockets()
+			} catch (e) {}
+		}
+	}
+
 	function genererMotDePasse (longueur) {
 		function rand (max) {
 			return Math.floor(Math.random() * max)
@@ -6872,13 +6749,12 @@ async function demarrerServeur () {
 			}
 			return motdepasse
 		}
-		let caracteres = '123456789abcdefghijklmnopqrstuvwxyz'
+		const caracteres = '123456789abcdefghijklmnopqrstuvwxyz'.split('')
 		const caracteresSpeciaux = '!#$@*'
 		const specialRegex = /[!#\$@*]/
 		const majuscules = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 		const majusculesRegex = /[A-Z]/
 
-		caracteres = caracteres.split('')
 		let motdepasse = ''
 		let index
 

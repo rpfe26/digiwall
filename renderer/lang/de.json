@@ -429,5 +429,7 @@
 	"retourAccueil": "Zurück zur Startseite",
 	"nombreVues": "Anzahl der Ansichten",
 	"repeterImageFond": "Hintergrundbild wiederholen",
-	"parametreFondModifie": "Parameter für die Wiederholung des Hintergrundbildes geändert."
+	"parametreFondModifie": "Parameter für die Wiederholung des Hintergrundbildes geändert.",
+	"aValideCapsule": "den Beitrag \"{titre}\" überprüft",
+	"aValideUneCapsule": "einen Beitrag überprüft"
 }

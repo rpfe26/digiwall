@@ -429,5 +429,7 @@
 	"retourAccueil": "Torna alla pagina iniziale",
 	"nombreVues": "Numero di visualizzazioni",
 	"repeterImageFond": "Ripetizione dell'immagine di sfondo",
-	"parametreFondModifie": "Parametro di ripetizione dell'immagine di sfondo modificato."
+	"parametreFondModifie": "Parametro di ripetizione dell'immagine di sfondo modificato.",
+	"aValideCapsule": "ha approvato la capsula «&nbsp;{titre}&nbsp;»",
+	"aValideUneCapsule": "ha approvato una capsula"
 }

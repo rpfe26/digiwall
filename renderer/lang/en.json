@@ -429,5 +429,7 @@
 	"retourAccueil": "Back to home page",
 	"nombreVues": "Number of views",
 	"repeterImageFond": "Repeat background image",
-	"parametreFondModifie": "Background image repeat parameter changed."
+	"parametreFondModifie": "Background image repeat parameter changed.",
+	"aValideCapsule": "approved the capsule \"{titre}\"",
+	"aValideUneCapsule": "approved a capsule"
 }

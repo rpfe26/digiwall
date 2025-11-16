@@ -4,6 +4,7 @@ import pell from 'pell'
 import linkifyHtml from 'linkify-html'
 import escapeHtml from 'voca/escape_html'
 import stripTags from 'voca/strip_tags'
+import DOMPurify from 'dompurify'
 import fileSaver from 'file-saver'
 const { saveAs } = fileSaver
 import ClipboardJS from 'clipboard'
@@ -412,6 +413,10 @@ export default {
 				}
 
 				this.definirPressePapier()
+
+				this.blocs.forEach(function (bloc) {
+					bloc.texte = DOMPurify.sanitize(bloc.texte)
+				})
 
 				setTimeout(function () {
 					this.chargementPage = false
@@ -958,6 +963,7 @@ export default {
 						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 						html = html.replace(/style=".*?"/mg, '')
 						html = html.replace(/class=".*?"/mg, '')
+						html = DOMPurify.sanitize(html)
 						pell.exec('insertHTML', html)
 					} else {
 						pell.exec('insertText', event.clipboardData.getData('text/plain'))
@@ -1864,7 +1870,7 @@ export default {
 					})
 				})
 			}
-			this.$socket.emit('autoriserbloc', this.mur.id, this.mur.token, donneesBloc, indexBloc, indexBlocColonne, moderation, this.identifiant)
+			this.$socket.emit('autoriserbloc', this.mur.id, this.mur.token, donneesBloc, indexBloc, indexBlocColonne, moderation, this.identifiant, this.nom)
 		},
 		fermerModaleBloc () {
 			this.modale = ''
@@ -2739,6 +2745,7 @@ export default {
 						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 						html = html.replace(/style=".*?"/mg, '')
 						html = html.replace(/class=".*?"/mg, '')
+						html = DOMPurify.sanitize(html)
 						pell.exec('insertHTML', html)
 					} else {
 						pell.exec('insertText', event.clipboardData.getData('text/plain'))
@@ -2814,6 +2821,7 @@ export default {
 						html = stripTags(html, ['b', 'i', 'u', 'strike', 'a', 'br', 'div', 'font', 'ul', 'ol', 'li'])
 						html = html.replace(/style=".*?"/mg, '')
 						html = html.replace(/class=".*?"/mg, '')
+						html = DOMPurify.sanitize(html)
 						pell.exec('insertHTML', html)
 					} else {
 						pell.exec('insertText', event.clipboardData.getData('text/plain'))
@@ -4149,9 +4157,7 @@ export default {
 					} else if (this.mur.epinglage === 'desactive' && this.mur.ordre === 'decroissant') {
 						this.blocs.unshift(donnees)
 					}
-					if (donnees.visibilite === 'visible' || this.admin || (this.mur.contributions === 'moderees' && (this.utilisateur === this.identifiant))) {
-						this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-ajoute' })
-					}
+					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-ajoute' })
 					if (this.admin || this.mur.affichage !== 'colonnes' || (this.mur.affichage === 'colonnes' && this.affichageColonnes[donnees.colonne])) {
 						this.$nextTick(function () {
 							const bloc = document.querySelector('#' + donnees.bloc)
@@ -4172,95 +4178,99 @@ export default {
 			}.bind(this))
 
 			this.$socket.on('modifierbloc', function (donnees) {
-				this.action = 'modifier'
-				if (this.mur.affichage === 'colonnes') {
-					this.colonnes[donnees.colonne].forEach(function (item, index) {
+				if (this.blocs.map(function (e) { return e.bloc }).includes(donnees.bloc)) {
+					this.action = 'modifier'
+					if (this.mur.affichage === 'colonnes') {
+						this.colonnes[donnees.colonne].forEach(function (item, index) {
+							if (item.bloc === donnees.bloc) {
+								if (donnees.visibilite === 'privee' && !this.admin) {
+									this.colonnes[donnees.colonne].splice(index, 1)
+								} else {
+									this.colonnes[donnees.colonne].splice(index, 1, { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivite: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite, motdepasse: donnees.motdepasse })
+								}
+							}
+						}.bind(this))
+					}
+					this.blocs.forEach(function (item, index) {
 						if (item.bloc === donnees.bloc) {
+							this.utilisateur = donnees.identifiant
 							if (donnees.visibilite === 'privee' && !this.admin) {
-								this.colonnes[donnees.colonne].splice(index, 1)
+								this.blocs.splice(index, 1)
 							} else {
-								this.colonnes[donnees.colonne].splice(index, 1, { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivite: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite, motdepasse: donnees.motdepasse })
+								this.blocs.splice(index, 1, { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivee: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite, motdepasse: donnees.motdepasse })
 							}
 						}
 					}.bind(this))
-				}
-				this.blocs.forEach(function (item, index) {
-					if (item.bloc === donnees.bloc) {
-						this.utilisateur = donnees.identifiant
-						if (donnees.visibilite === 'privee' && !this.admin) {
-							this.blocs.splice(index, 1)
-						} else {
-							this.blocs.splice(index, 1, { bloc: donnees.bloc, typeBloc: donnees.typeBloc, identifiant: item.identifiant, nom: item.nom, titre: donnees.titre, texte: donnees.texte, media: donnees.media, iframe: donnees.iframe, type: donnees.type, source: donnees.source, vignette: donnees.vignette, vignetteActivee: donnees.vignetteActivee, mediaExtra: donnees.mediaExtra, medias: donnees.medias, edition: donnees.edition, date: item.date, modifie: donnees.modifie, couleur: donnees.couleur, commentaires: item.commentaires, evaluations: item.evaluations, colonne: item.colonne, visibilite: donnees.visibilite, motdepasse: donnees.motdepasse })
-						}
-					}
-				}.bind(this))
-				if (donnees.visibilite === 'visible' || donnees.visibilite === 'protegee') {
 					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.modifie, type: 'bloc-modifie' })
+					this.envoyerNotificationAdmins()
 				}
-				this.envoyerNotificationAdmins()
 			}.bind(this))
 
 			this.$socket.on('epinglerbloc', function (donnees) {
 				this.chargement = false
-				const blocActif = document.querySelector('.bloc.actif')
-				let blocId = ''
-				if (blocActif && donnees.identifiant !== this.identifiant) {
-					blocId = blocActif.id
-				}
-				const blocsEpingles = []
-				const blocs = JSON.parse(JSON.stringify(this.blocs))
-				blocs.forEach(function (item) {
-					if (item.bloc === donnees.bloc) {
-						item.epinglee = 'oui'
+				if (this.blocs.map(function (e) { return e.bloc }).includes(donnees.bloc)) {
+					const blocActif = document.querySelector('.bloc.actif')
+					let blocId = ''
+					if (blocActif && donnees.identifiant !== this.identifiant) {
+						blocId = blocActif.id
 					}
-				})
-				blocs.forEach(function (item, index) {
-					if (item.epinglee === 'oui') {
-						blocsEpingles.push(item)
-						blocs.splice(index, 1)
-					}
-				})
-				blocs.unshift(...blocsEpingles)
-				if (this.mur.affichage === 'colonnes') {
-					this.definirColonnes(blocs)
-				} else {
-					this.blocs = blocs
-				}
-				if (this.identifiant === donnees.identifiant) {
-					this.notification = this.$t('capsuleEpinglee') + '.'
-					this.$nextTick(function () {
-						blocActif.classList.remove('actif')
-						if (document.querySelector('#' + donnees.bloc)) {
-							document.querySelector('#' + donnees.bloc).classList.add('actif')
-							document.querySelector('#' + donnees.bloc).focus()
+					const blocsEpingles = []
+					const blocs = JSON.parse(JSON.stringify(this.blocs))
+					blocs.forEach(function (item) {
+						if (item.bloc === donnees.bloc) {
+							item.epinglee = 'oui'
 						}
 					})
-				} else {
-					this.$nextTick(function () {
-						if (blocActif && document.querySelector('#' + blocId)) {
+					blocs.forEach(function (item, index) {
+						if (item.epinglee === 'oui') {
+							blocsEpingles.push(item)
+							blocs.splice(index, 1)
+						}
+					})
+					blocs.unshift(...blocsEpingles)
+					if (this.mur.affichage === 'colonnes') {
+						this.definirColonnes(blocs)
+					} else {
+						this.blocs = blocs
+					}
+					if (this.identifiant === donnees.identifiant) {
+						this.notification = this.$t('capsuleEpinglee') + '.'
+						this.$nextTick(function () {
 							blocActif.classList.remove('actif')
-							document.querySelector('#' + blocId).classList.add('actif')
-							document.querySelector('#' + blocId).focus()
-						}
-					})
+							if (document.querySelector('#' + donnees.bloc)) {
+								document.querySelector('#' + donnees.bloc).classList.add('actif')
+								document.querySelector('#' + donnees.bloc).focus()
+							}
+						})
+					} else {
+						this.$nextTick(function () {
+							if (blocActif && document.querySelector('#' + blocId)) {
+								blocActif.classList.remove('actif')
+								document.querySelector('#' + blocId).classList.add('actif')
+								document.querySelector('#' + blocId).focus()
+							}
+						})
+					}
 				}
 			}.bind(this))
 
 			this.$socket.on('desepinglerbloc', function (donnees) {
 				this.chargement = false
-				const blocs = JSON.parse(JSON.stringify(this.blocs))
-				blocs.forEach(function (item) {
-					if (item.bloc === donnees.bloc) {
-						item.epinglee = 'non'
+				if (this.blocs.map(function (e) { return e.bloc }).includes(donnees.bloc)) {
+					const blocs = JSON.parse(JSON.stringify(this.blocs))
+					blocs.forEach(function (item) {
+						if (item.bloc === donnees.bloc) {
+							item.epinglee = 'non'
+						}
+					})
+					if (this.mur.affichage === 'colonnes') {
+						this.definirColonnes(blocs)
+					} else {
+						this.blocs = blocs
 					}
-				})
-				if (this.mur.affichage === 'colonnes') {
-					this.definirColonnes(blocs)
-				} else {
-					this.blocs = blocs
-				}
-				if (this.identifiant === donnees.identifiant) {
-					this.notification = this.$t('capsuleDesepinglee')
+					if (this.identifiant === donnees.identifiant) {
+						this.notification = this.$t('capsuleDesepinglee')
+					}
 				}
 			}.bind(this))
 
@@ -4276,7 +4286,9 @@ export default {
 							colonne.forEach(function (item, index) {
 								if (item.bloc === donnees.bloc) {
 									this.colonnes[indexColonne][index].visibilite = 'visible'
-									this.colonnes[indexColonne][index].date = donnees.date
+									if (donnees.moderation === 'privee') {
+										this.colonnes[indexColonne][index].date = donnees.date
+									}
 									if (this.colonnes[indexColonne][index].hasOwnProperty('modifie')) {
 										delete this.colonnes[indexColonne][index].modifie
 									}
@@ -4287,7 +4299,9 @@ export default {
 					this.blocs.forEach(function (item, index) {
 						if (item.bloc === donnees.bloc) {
 							this.blocs[index].visibilite = 'visible'
-							this.blocs[index].date = donnees.date
+							if (donnees.moderation === 'privee') {
+								this.blocs[index].date = donnees.date
+							}
 							if (this.blocs[index].hasOwnProperty('modifie')) {
 								delete this.blocs[index].modifie
 							}
@@ -4300,7 +4314,11 @@ export default {
 						this.colonnes[donnees.colonne].splice(donnees.indexBlocColonne, 0, donnees)
 					}
 				}
-				this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-ajoute' })
+				if (donnees.moderation === 'moderee') {
+					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.admin, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-valide' })
+				} else {
+					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-ajoute' })
+				}
 				this.$nextTick(function () {
 					const bloc = document.querySelector('#' + donnees.bloc)
 					if (bloc !== null) {
@@ -4424,18 +4442,20 @@ export default {
 			}.bind(this))
 
 			this.$socket.on('commenterbloc', function (donnees) {
-				const blocs = this.blocs
-				blocs.forEach(function (item) {
-					if (item.bloc === donnees.bloc) {
-						item.commentaires = donnees.commentaires
+				if (this.blocs.map(function (e) { return e.bloc }).includes(donnees.bloc)) {
+					const blocs = this.blocs
+					blocs.forEach(function (item) {
+						if (item.bloc === donnees.bloc) {
+							item.commentaires = donnees.commentaires
+						}
+					})
+					this.blocs = blocs
+					if ((this.modale === 'commentaires' && this.bloc === donnees.bloc) || (this.modaleDiaporama && this.donneesBloc.bloc === donnees.bloc)) {
+						this.commentaires.push({ id: donnees.id, identifiant: donnees.identifiant, nom: donnees.nom, texte: donnees.texte, date: donnees.date })
 					}
-				})
-				this.blocs = blocs
-				if ((this.modale === 'commentaires' && this.bloc === donnees.bloc) || (this.modaleDiaporama && this.donneesBloc.bloc === donnees.bloc)) {
-					this.commentaires.push({ id: donnees.id, identifiant: donnees.identifiant, nom: donnees.nom, texte: donnees.texte, date: donnees.date })
+					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-commente' })
+					this.envoyerNotificationAdmins()
 				}
-				this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-commente' })
-				this.envoyerNotificationAdmins()
 			}.bind(this))
 
 			this.$socket.on('modifiercommentaire', function (donnees) {
@@ -4485,15 +4505,17 @@ export default {
 
 			this.$socket.on('evaluerbloc', function (donnees) {
 				this.chargement = false
-				const blocs = this.blocs
-				blocs.forEach(function (item) {
-					if (item.bloc === donnees.bloc) {
-						item.evaluations.push(donnees.evaluation)
-					}
-				})
-				this.blocs = blocs
-				this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-evalue' })
-				this.envoyerNotificationAdmins()
+				if (this.blocs.map(function (e) { return e.bloc }).includes(donnees.bloc)) {
+					const blocs = this.blocs
+					blocs.forEach(function (item) {
+						if (item.bloc === donnees.bloc) {
+							item.evaluations.push(donnees.evaluation)
+						}
+					})
+					this.blocs = blocs
+					this.activite.unshift({ id: donnees.activiteId, bloc: donnees.bloc, identifiant: donnees.identifiant, nom: donnees.nom, titre: donnees.titre, date: donnees.date, type: 'bloc-evalue' })
+					this.envoyerNotificationAdmins()
+				}
 			}.bind(this))
 
 			this.$socket.on('modifierevaluation', function (donnees) {

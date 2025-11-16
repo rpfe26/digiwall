@@ -429,5 +429,7 @@
 	"retourAccueil": "Retour à la page d'accueil",
 	"nombreVues": "Nombre de vues",
 	"repeterImageFond": "Répéter l'image de fond",
-	"parametreFondModifie": "Paramètre de répétition de l'image de fond modifié."
+	"parametreFondModifie": "Paramètre de répétition de l'image de fond modifié.",
+	"aValideCapsule": "a validé la capsule «&nbsp;{titre}&nbsp;»",
+	"aValideUneCapsule": "a validé une capsule"
 }
