@@ -1305,7 +1305,9 @@ async function demarrerServeur () {
 								.UNLINK('dates-murs:' + id)
 								.exec()
 								const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
-								await fs.emptyDir(chemin)
+								if (stockage === 'fs') {
+									await fs.emptyDir(chemin)
+								}
 								const donneesBlocs = []
 								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 									const donneesBloc = new Promise(async function (resolve) {
@@ -1433,7 +1435,9 @@ async function demarrerServeur () {
 								})
 							} else {
 								const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
-								await fs.emptyDir(chemin)
+								if (stockage === 'fs') {
+									await fs.emptyDir(chemin)
+								}
 								const donneesBlocs = []
 								for (const [indexBloc, bloc] of donnees.blocs.entries()) {
 									const donneesBloc = new Promise(async function (resolve) {
