@@ -1083,6 +1083,8 @@ export default {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
 						window.location.replace('/')
+					} else if (donnees === 'erreur') {
+						this.message = this.$t('erreurCommunicationServeur')
 					} else {
 						this.classer(classement)
 						this.classement = classement
@@ -1113,6 +1115,8 @@ export default {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
 						window.location.replace('/')
+					} else if (donnees === 'erreur') {
+						this.message = this.$t('erreurCommunicationServeur')
 					} else {
 						this.nom = nom
 						this.email = email
@@ -1180,6 +1184,8 @@ export default {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
 						window.location.replace('/')
+					} else if (donnees === 'erreur') {
+						this.message = this.$t('erreurCommunicationServeur')
 					} else {
 						this.$i18n.locale = langue
 						document.getElementsByTagName('html')[0].setAttribute('lang', langue)
@@ -1202,6 +1208,8 @@ export default {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
 						window.location.replace('/')
+					} else if (donnees === 'erreur') {
+						this.message = this.$t('erreurCommunicationServeur')
 					} else {
 						this.affichage = affichage
 						this.notification = this.$t('affichageModifie')

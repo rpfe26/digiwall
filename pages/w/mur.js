@@ -3612,21 +3612,51 @@ export default {
 				this.chargement = true
 				axios.post(this.hote + '/api/verifier-mot-de-passe', {
 					mur: this.mur.id,
+					identifiantMur: this.mur.identifiant,
+					identifiant: this.identifiant,
+					acces: this.accesAutorise,
 					motdepasse: this.motDePasse
 				}).then(function (reponse) {
 					const donnees = reponse.data
-					if (donnees === 'motdepasse_incorrect') {
+					if (donnees.message === 'motdepasse_incorrect') {
 						this.chargement = false
 						this.message = this.$t('motDePassePasCorrect')
-					} else if (donnees === 'erreur') {
+					} else if (donnees.message === 'erreur') {
 						this.chargement = false
 						this.message = this.$t('erreurCommunicationServeur')
-					} else if (donnees === 'motdepasse_correct') {
-						this.$socket.emit('debloquermur', this.mur.identifiant, this.mur.id, this.accesAutorise)
+					} else if (donnees.message === 'motdepasse_correct') {
 						this.fermerModaleMotDePasse()
-					} else if (donnees === 'motdepasseadmin_correct') {
-						this.$socket.emit('debloquermur', this.identifiant, this.mur.id, this.accesAutorise)
-						this.fermerModaleMotDePasse()
+						this.chargement = false
+						this.accesAutorise = true
+						this.modifierCaracteristique(this.identifiant, 'identifiant', donnees.identifiant)
+						this.modifierCaracteristique(donnees.identifiant, 'nom', donnees.nom)
+						const murs = JSON.parse(JSON.stringify(this.murs))
+						if (!murs.includes(this.mur.id)) {
+							murs.push(this.mur.id)
+						}
+						this.identifiant = donnees.identifiant
+						this.nom = donnees.nom
+						this.langue = donnees.langue
+						this.statut = 'auteur'
+						this.murs = murs
+						this.$socket.emit('connexion', { mur: this.mur.id, identifiant: this.identifiant, nom: this.nom })
+						if (donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite') && donnees.hasOwnProperty('mur')) {
+							this.blocs = donnees.blocs
+							this.activite = donnees.activite
+							this.mur.code = donnees.mur.code
+							this.mur.motdepasseAdmin = donnees.mur.motdepasseAdmin
+							this.mur.colonnes = donnees.mur.colonnes
+							this.mur.affichageColonnes = donnees.mur.affichageColonnes
+							if (this.mur.affichage === 'colonnes') {
+								this.definirColonnes(this.blocs)
+								if (!this.mobile) {
+									this.$nextTick(function () {
+										this.activerDefilementHorizontal()
+									}.bind(this))
+								}
+							}
+						}
+						this.notification = this.$t('murDebloque')
 					}
 				}.bind(this)).catch(function () {
 					this.chargement = false
@@ -5001,39 +5031,6 @@ export default {
 					}
 				}
 				this.chargement = false
-			}.bind(this))
-
-			this.$socket.on('debloquermur', function (donnees) {
-				this.chargement = false
-				this.accesAutorise = true
-				this.modifierCaracteristique(this.identifiant, 'identifiant', donnees.identifiant)
-				this.modifierCaracteristique(donnees.identifiant, 'nom', donnees.nom)
-				const murs = JSON.parse(JSON.stringify(this.murs))
-				if (!murs.includes(this.mur.id)) {
-					murs.push(this.mur.id)
-				}
-				this.identifiant = donnees.identifiant
-				this.nom = donnees.nom
-				this.langue = donnees.langue
-				this.statut = 'auteur'
-				this.murs = murs
-				if (donnees.hasOwnProperty('blocs') && donnees.hasOwnProperty('activite') && donnees.hasOwnProperty('mur')) {
-					this.blocs = donnees.blocs
-					this.activite = donnees.activite
-					this.mur.code = donnees.mur.code
-					this.mur.motdepasseAdmin = donnees.mur.motdepasseAdmin
-					this.mur.colonnes = donnees.mur.colonnes
-					this.mur.affichageColonnes = donnees.mur.affichageColonnes
-					if (this.mur.affichage === 'colonnes') {
-						this.definirColonnes(this.blocs)
-						if (!this.mobile) {
-							this.$nextTick(function () {
-								this.activerDefilementHorizontal()
-							}.bind(this))
-						}
-					}
-				}
-				this.notification = this.$t('murDebloque')
 			}.bind(this))
 
 			this.$socket.on('modifiernotification', function (donnees) {
