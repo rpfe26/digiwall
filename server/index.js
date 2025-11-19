@@ -568,7 +568,15 @@ async function demarrerServeur () {
 				req.session.langue = langue
 				req.session.statut = 'utilisateur'
 				req.session.cookie.expires = new Date(Date.now() + dureeSession)
-				res.json({ identifiant: identifiant })
+				const message = {
+					from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
+					to: '"Moi" <' + email + '>',
+					subject: 'Nouveau compte Digiwall',
+					html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Conservez bien cet identifiant, il est nécessaire pour vous connecter à votre compte.</p>'
+				}
+				transporter.sendMail(message, async function () {
+					res.json({ identifiant: identifiant })
+				})
 			} else {
 				res.send('utilisateur_existe_deja')
 			}
@@ -666,12 +674,7 @@ async function demarrerServeur () {
 		let donnees = await db.HGETALL('murs:' + mur)
 		donnees = Object.assign({}, donnees)
 		if (donnees === null || !donnees.hasOwnProperty('identifiant')) { res.send('erreur'); return false }
-		const proprietaire = donnees.identifiant
-		let admins = []
-		if (donnees.hasOwnProperty('admins')) {
-			admins = JSON.parse(donnees.admins)
-		}
-		if ((admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) && req.session.identifiant === identifiant) {
+		if (req.session.identifiant === identifiant && await verifierAdmin(mur, donnees, req.session) === true) {
 			recupererDonneesAuteur(identifiant).then(function (murs) {
 				let mursCrees = murs[0].filter(function (element) {
 					if (element.hasOwnProperty('id')) {
@@ -770,6 +773,7 @@ async function demarrerServeur () {
 				identifiant = req.session.identifiant
 				nom = req.session.nom
 			}
+			req.session.motdepasse = ''
 			if (!req.session.hasOwnProperty('acces')) {
 				req.session.acces = []
 			}
@@ -785,7 +789,6 @@ async function demarrerServeur () {
 			const token = Math.random().toString(16).slice(10)
 			const slug = definirSlug(titre)
 			const date = dayjs().format()
-			req.session.motdepasse = motdepasse
 			let langue = 'fr'
 			if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
 				langue = req.session.langue
@@ -833,7 +836,6 @@ async function demarrerServeur () {
 			if (motdepasse.trim() !== '' && nouveaumotdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
 				const hash = await bcrypt.hash(nouveaumotdepasse, 10)
 				await db.HSET('murs:' + mur, 'motdepasse', hash)
-				req.session.motdepasse = nouveaumotdepasse
 				res.send('motdepasse_modifie')
 			} else {
 				res.send('motdepasse_incorrect')
@@ -846,11 +848,8 @@ async function demarrerServeur () {
 	app.post('/api/ajouter-mur-favoris', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
-			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
-			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
-				const mur = req.body.murId
+			const mur = req.body.murId
+			if (await verifierAdminUtilisateur(mur, identifiant, req.session.motdepasse) === true) {
 				await db.SADD('murs-favoris:' + identifiant, mur.toString())
 				res.send('mur_ajoute_favoris')
 			} else {
@@ -865,11 +864,8 @@ async function demarrerServeur () {
 	app.post('/api/supprimer-mur-favoris', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
-			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
-			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
-				const mur = req.body.murId
+			const mur = req.body.murId
+			if (await verifierAdminUtilisateur(mur, identifiant, req.session.motdepasse) === true) {
 				await db.SREM('murs-favoris:' + identifiant, mur.toString())
 				res.send('mur_supprime_favoris')
 			} else {
@@ -884,16 +880,10 @@ async function demarrerServeur () {
 	app.post('/api/deplacer-mur', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
-			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur_deplacement'); return false }
-			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
-				const murId = req.body.murId
+			const murId = req.body.murId
+			if (await verifierAdminUtilisateur(murId, identifiant, req.session.motdepasse) === true) {
 				const destination = req.body.destination
-				let donnees = await db.HGETALL('utilisateurs:' + identifiant)
-				donnees = Object.assign({}, donnees)
-				if (donnees === null) { res.send('erreur_deplacement'); return false }
-				const dossiers = JSON.parse(donnees.dossiers)
+				const dossiers = JSON.parse(donneesUtilisateur.dossiers)
 				dossiers.forEach(function (dossier, indexDossier) {
 					if (dossier.murs.includes(murId)) {
 						const indexMur = dossier.murs.indexOf(murId)
@@ -921,11 +911,8 @@ async function demarrerServeur () {
 		}
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
-			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur_duplication'); return false }
-			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
-				const mur = req.body.murId
+			const mur = req.body.murId
+			if (await verifierAdminUtilisateur(mur, identifiant, req.session.motdepasse) === true) {
 				const num = await db.GET('mur')
 				if (num === null) { res.send('erreur_duplication'); return false }
 				const id = parseInt(num) + 1
@@ -1045,7 +1032,7 @@ async function demarrerServeur () {
 		if (motdepasseAdmin !== '' && motdepasseAdmin === motdepasseEnvAdmin) {
 			admin = true
 		}
-		if ((req.session.identifiant && req.session.identifiant === identifiant && (req.session.statut === 'utilisateur' || req.session.statut === 'auteur') && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') || admin) {
+		if ((req.session.identifiant && req.session.identifiant === identifiant && ((req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') || req.session.statut === 'auteur')) || admin) {
 			const id = req.body.murId
 			const resultat = await db.EXISTS('murs:' + id)
 			if (resultat === null) { res.send('erreur_export'); return false }
@@ -1053,17 +1040,7 @@ async function demarrerServeur () {
 				let donneesMur = await db.HGETALL('murs:' + id)
 				donneesMur = Object.assign({}, donneesMur)
 				if (donneesMur === null) { res.send('erreur_export'); return false }
-				const proprietaire = donneesMur.identifiant
-				let motdepasse
-				if (!admin && req.session.statut === 'utilisateur') {
-					let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-					donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-					if (donneesUtilisateur === null) { res.send('erreur_export'); return false }
-					motdepasse = donneesUtilisateur.motdepasse
-				} else if (!admin && req.session.statut === 'auteur') {
-					motdepasse = donneesMur.motdepasse
-				}
-				if (admin || (proprietaire === identifiant && await bcrypt.compare(req.session.motdepasse, motdepasse))) {
+				if (admin || await verifierAdmin(id, donneesMur, req.session) === true) {
 					exporterMur(req, res, id, 'erreur_export')
 				} else {
 					res.send('non_autorise')
@@ -1270,14 +1247,11 @@ async function demarrerServeur () {
 			return false
 		}
 		const identifiant = req.session.identifiant
-		if (identifiant && req.session.statut === 'auteur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
+		if (identifiant && req.session.statut === 'auteur') {
 			televerserTemp(req, res, async function (err) {
 				if (err) { res.send('erreur_import'); return false }
 				const id = req.body.mur
-				let donneesMur = await db.HGETALL('murs:' + id)
-				donneesMur = Object.assign({}, donneesMur)
-				if (donneesMur === null) { res.send('erreur_import'); return false }
-				if (await bcrypt.compare(req.session.motdepasse, donneesMur.motdepasse)) {
+				if (req.session.hasOwnProperty('murs') && req.session.murs.includes(parseInt(id))) {
 					try {
 						const source = path.join(__dirname, '..', '/static/temp/' + req.file.filename)
 						const cible = path.join(__dirname, '..', '/static/temp/archive-' + Math.floor((Math.random() * 100000) + 1))
@@ -1575,7 +1549,6 @@ async function demarrerServeur () {
 				}
 			})
 		} else {
-			supprimerSession(req)
 			res.send('non_connecte')
 		}
 	})
@@ -1594,7 +1567,7 @@ async function demarrerServeur () {
 		if (motdepasseAdmin !== '' && motdepasseAdmin === motdepasseEnvAdmin) {
 			admin = true
 		}
-		if ((req.session.identifiant && req.session.identifiant === identifiant && (req.session.statut === 'utilisateur' || req.session.statut === 'auteur') && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') || admin) {
+		if ((req.session.identifiant && req.session.identifiant === identifiant && ((req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') || req.session.statut === 'auteur')) || admin) {
 			let suppressionFichiers = true
 			if (req.body.hasOwnProperty('suppressionFichiers')) {
 				suppressionFichiers = req.body.suppressionFichiers
@@ -1606,16 +1579,7 @@ async function demarrerServeur () {
 				donneesMur = Object.assign({}, donneesMur)
 				if (donneesMur === null) { res.send('erreur_suppression'); return false }
 				if (donneesMur.identifiant === identifiant) { // mur créé
-					let motdepasse
-					if (!admin && req.session.statut === 'utilisateur') {
-						let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
-						donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-						if (donneesUtilisateur === null) { res.send('erreur_suppression'); return false }
-						motdepasse = donneesUtilisateur.motdepasse
-					} else if (!admin && req.session.statut === 'auteur') {
-						motdepasse = donneesMur.motdepasse
-					}
-					if (admin || await bcrypt.compare(req.session.motdepasse, motdepasse)) {
+					if (admin || await verifierAdmin(mur, donneesMur, req.session) === true) {
 						const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
 						if (blocs === null) { res.send('erreur_suppression'); return false }
 						for (let i = 0; i < blocs.length; i++) {
@@ -2274,7 +2238,7 @@ async function demarrerServeur () {
 				utilisateur = Object.assign({}, utilisateur)
 				if (utilisateur === null) { req.json({ message: 'erreur' }); return false }
 				req.session.identifiant = identifiant
-				req.session.motdepasse = motdepasse
+				req.session.motdepasse = ''
 				req.session.nom = utilisateur.nom
 				req.session.statut = 'auteur'
 				req.session.langue = utilisateur.langue
@@ -2284,8 +2248,8 @@ async function demarrerServeur () {
 				if (!req.session.hasOwnProperty('murs')) {
 					req.session.murs = []
 				}
-				if (!req.session.murs.includes(mur)) {
-					req.session.murs.push(mur)
+				if (!req.session.murs.includes(parseInt(mur))) {
+					req.session.murs.push(parseInt(mur))
 				}
 				req.session.cookie.expires = new Date(Date.now() + dureeSession)
 				if (acces === true) {
@@ -2296,7 +2260,7 @@ async function demarrerServeur () {
 				}
 			} else {
 				req.session.identifiant = identifiant
-				req.session.motdepasse = motdepasse
+				req.session.motdepasse = ''
 				req.session.statut = 'auteur'
 				if (!req.session.hasOwnProperty('nom')) {
 					if (identifiant.length === 13 && identifiant.substring(0, 1) === 'u') {
@@ -2314,8 +2278,8 @@ async function demarrerServeur () {
 				if (!req.session.hasOwnProperty('murs')) {
 					req.session.murs = []
 				}
-				if (!req.session.murs.includes(mur)) {
-					req.session.murs.push(mur)
+				if (!req.session.murs.includes(parseInt(mur))) {
+					req.session.murs.push(parseInt(mur))
 				}
 				req.session.cookie.expires = new Date(Date.now() + dureeSession)
 				if (acces === true) {
@@ -2344,18 +2308,18 @@ async function demarrerServeur () {
 			}
 			let murAcces = false
 			req.session.acces.forEach(function (acces) {
-				if (acces.mur === mur) {
+				if (parseInt(acces.mur) === parseInt(mur)) {
 					murAcces = true
 				}
 			})
 			if (murAcces) {
 				req.session.acces.forEach(function (acces, index) {
-					if (acces.mur === mur) {
+					if (parseInt(acces.mur) === parseInt(mur)) {
 						req.session.acces[index].code = code
 					}
 				})
 			} else {
-				req.session.acces.push({ code: code, mur: mur })
+				req.session.acces.push({ code: code, mur: parseInt(mur) })
 			}
 			res.send({ mur: donneesMur.mur, blocs: donneesMur.blocs, activite: donneesMur.activite.reverse() })
 		} else {
@@ -2422,12 +2386,9 @@ async function demarrerServeur () {
 			if (donneesUtilisateur === null) { res.send('erreur_ajout_dossier'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const nom = req.body.dossier
-				let donnees = await db.HGETALL('utilisateurs:' + identifiant)
-				donnees = Object.assign({}, donnees)
-				if (donnees === null) { res.send('erreur_ajout_dossier'); return false }
 				let dossiers = []
-				if (donnees.hasOwnProperty('dossiers')) {
-					dossiers = JSON.parse(donnees.dossiers)
+				if (donneesUtilisateur.hasOwnProperty('dossiers')) {
+					dossiers = JSON.parse(donneesUtilisateur.dossiers)
 				}
 				const id = Math.random().toString(36).substring(2)
 				dossiers.push({ id: id, nom: nom, murs: [] })
@@ -2451,10 +2412,7 @@ async function demarrerServeur () {
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const nom = req.body.dossier
 				const dossierId = req.body.dossierId
-				let donnees = await db.HGETALL('utilisateurs:' + identifiant)
-				donnees = Object.assign({}, donnees)
-				if (donnees === null) { res.send('erreur_modification_dossier'); return false }
-				const dossiers = JSON.parse(donnees.dossiers)
+				const dossiers = JSON.parse(donneesUtilisateur.dossiers)
 				dossiers.forEach(function (dossier, index) {
 					if (dossier.id === dossierId) {
 						dossiers[index].nom = nom
@@ -2479,10 +2437,7 @@ async function demarrerServeur () {
 			if (donneesUtilisateur === null) { res.send('erreur_suppression_dossier'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const dossierId = req.body.dossierId
-				let donnees = await db.HGETALL('utilisateurs:' + identifiant)
-				donnees = Object.assign({}, donnees)
-				if (donnees === null) { res.send('erreur_suppression_dossier'); return false }
-				const dossiers = JSON.parse(donnees.dossiers)
+				const dossiers = JSON.parse(donneesUtilisateur.dossiers)
 				dossiers.forEach(function (dossier, index) {
 					if (dossier.id === dossierId) {
 						dossiers.splice(index, 1)
@@ -3725,7 +3680,7 @@ async function demarrerServeur () {
 					req.session.acces = []
 				}
 				req.session.acces.map(function (e) {
-					if (e.hasOwnProperty('mur') && e.mur === mur) {
+					if (e.hasOwnProperty('mur') && parseInt(e.mur) === parseInt(mur)) {
 						code = e.code 
 					}
 				})
@@ -3756,15 +3711,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant') || !donnees.hasOwnProperty('bloc') || !donnees.hasOwnProperty('verrouillage')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				let admin = false
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
-					admin = true
-				}
+				const admin = await verifierAdmin(mur, donnees, req.session)
 				if (donnees.id === mur && donnees.token === token && (donnees.contributions !== 'fermees' || admin)) {
 					const id = parseInt(donnees.bloc) + 1
 					const date = dayjs().format()
@@ -3881,15 +3828,7 @@ async function demarrerServeur () {
 						let objet = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
 						objet = Object.assign({}, objet)
 						if (objet === null) { socket.emit('erreur'); return false }
-						const proprietaire = donnees.identifiant
-						let admins = []
-						if (donnees.hasOwnProperty('admins')) {
-							admins = JSON.parse(donnees.admins)
-						}
-						let admin = false
-						if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
-							admin = true
-						}
+						const admin = await verifierAdmin(mur, donnees, req.session)
 						if (objet.identifiant === identifiant || admin || donnees.contributions === 'modifiables')  {
 							let visibilite = 'visible'
 							if (objet.hasOwnProperty('visibilite')) {
@@ -4020,12 +3959,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant') || !donnees.hasOwnProperty('bloc')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur)))) {
+				if (donnees.id === mur && donnees.token === token && await verifierAdmin(mur, donnees, req.session) === true) {
 					const id = parseInt(donnees.bloc) + 1
 					const date = dayjs().format()
 					const activiteId = parseInt(donnees.activite) + 1
@@ -4115,12 +4049,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur)))) {
+				if (donnees.id === mur && donnees.token === token && await verifierAdmin(mur, donnees, req.session) === true) {
 					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
@@ -4146,12 +4075,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur)))) {
+				if (donnees.id === mur && donnees.token === token && await verifierAdmin(mur, donnees, req.session) === true) {
 					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
@@ -4177,12 +4101,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur)))) {
+				if (donnees.id === mur && donnees.token === token && await verifierAdmin(mur, donnees, req.session) === true) {
 					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
@@ -4208,12 +4127,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur)))) {
+				if (donnees.id === mur && donnees.token === token && await verifierAdmin(mur, donnees, req.session) === true) {
 					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + bloc)
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
@@ -4239,12 +4153,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('token') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (donnees.id === mur && donnees.token === token && (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur)))) {
+				if (donnees.id === mur && donnees.token === token && await verifierAdmin(mur, donnees, req.session) === true) {
 					const resultat = await db.EXISTS('contenu-blocs:' + mur + ':' + item.bloc)
 					if (resultat === null) { socket.emit('erreur'); return false }
 					if (resultat === 1) {
@@ -4295,12 +4204,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('id') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (donnees.id === mur && (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur)))) {
+				if (donnees.id === mur && await verifierAdmin(mur, donnees, req.session) === true) {
 					if (ordre === 'decroissant') {
 						items.reverse()
 					}
@@ -4365,12 +4269,7 @@ async function demarrerServeur () {
 						let objet = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
 						objet = Object.assign({}, objet)
 						if (objet === null) { socket.emit('erreur'); return false }
-						const proprietaire = donnees.identifiant
-						let admins = []
-						if (donnees.hasOwnProperty('admins')) {
-							admins = JSON.parse(donnees.admins)
-						}
-						if (objet.identifiant === identifiant || admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+						if (objet.identifiant === identifiant || await verifierAdmin(mur, donnees, req.session) === true) {
 							if (objet.hasOwnProperty('media') && objet.media !== '' && objet.type !== 'embed' && objet.type !== 'lien') {
 								await supprimerFichier(mur, objet.media)
 							}
@@ -4704,12 +4603,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'titre', titre)
 					const slug = definirSlug(titre)
 					io.to('mur-' + mur).emit('modifiertitre', { titre: titre, slug: slug, identifiant: identifiant })
@@ -4732,12 +4626,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'code', code)
 					io.to('mur-' + mur).emit('modifiercodeacces', code, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -4799,12 +4688,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					let code = ''
 					if (donnees.hasOwnProperty('code') && donnees.code !== '') {
 						code = donnees.code
@@ -4832,12 +4716,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'contributions', contributions)
 					io.to('mur-' + mur).emit('modifiercontributions', { contributions: contributions, contributionsPrecedentes: contributionsPrecedentes })
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -4859,12 +4738,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'affichage', affichage)
 					io.to('mur-' + mur).emit('modifieraffichage', affichage, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -4886,12 +4760,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'ordre', ordre)
 					io.to('mur-' + mur).emit('modifierordre', ordre, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -4913,12 +4782,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'largeur', largeur)
 					io.to('mur-' + mur).emit('modifierlargeur', largeur, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -4940,12 +4804,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, ['fond', fond, 'fondRepete', 'desactive'])
 					io.to('mur-' + mur).emit('modifierfond', fond, identifiant)
 					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
@@ -4970,12 +4829,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session)) {
 					await db.HSET('murs:' + mur, ['fond', fond, 'fondRepete', 'desactive'])
 					io.to('mur-' + mur).emit('modifiercouleurfond', fond, identifiant)
 					if (!ancienfond.includes('/img/') && ancienfond.substring(0, 1) !== '#' && ancienfond !== '') {
@@ -5000,12 +4854,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = donnees.admins
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'fondRepete', statut)
 					io.to('mur-' + mur).emit('modifierfondrepete', statut)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5027,12 +4876,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'registreActivite', statut)
 					io.to('mur-' + mur).emit('modifieractivite', statut)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5054,12 +4898,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'conversation', statut)
 					io.to('mur-' + mur).emit('modifierconversation', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5081,12 +4920,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'listeUtilisateurs', statut)
 					io.to('mur-' + mur).emit('modifierlisteutilisateurs', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5108,12 +4942,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'editionNom', statut)
 					io.to('mur-' + mur).emit('modifiereditionnom', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5135,12 +4964,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'fichiers', statut)
 					io.to('mur-' + mur).emit('modifierfichiers', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5162,12 +4986,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'enregistrements', statut)
 					io.to('mur-' + mur).emit('modifierenregistrements', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5189,12 +5008,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'liens', statut)
 					io.to('mur-' + mur).emit('modifierliens', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5216,12 +5030,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'documents', statut)
 					io.to('mur-' + mur).emit('modifierdocuments', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5243,12 +5052,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'commentaires', statut)
 					io.to('mur-' + mur).emit('modifiercommentaires', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5270,12 +5074,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'evaluations', statut)
 					io.to('mur-' + mur).emit('modifierevaluations', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5297,12 +5096,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'verrouillage', statut)
 					io.to('mur-' + mur).emit('modifierverrouillage', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5324,12 +5118,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'epinglage', statut)
 					io.to('mur-' + mur).emit('modifierepinglage', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5351,12 +5140,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.HSET('murs:' + mur, 'copieBloc', statut)
 					io.to('mur-' + mur).emit('modifiercopiebloc', statut, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5385,12 +5169,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					io.to('mur-' + mur).emit('reinitialisermessages', identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
 					req.session.save()
@@ -5407,12 +5186,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.UNLINK('activite:' + mur)
 					io.to('mur-' + mur).emit('reinitialiseractivite', identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5434,12 +5208,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('activite') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = donnees.admins
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					const date = dayjs().format()
 					const activiteId = parseInt(donnees.activite) + 1
 					colonnes.push(titre)
@@ -5471,12 +5240,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					const colonnes = JSON.parse(donnees.colonnes)
 					colonnes[index] = titre
 					await db.HSET('murs:' + mur, 'colonnes', JSON.stringify(colonnes))
@@ -5500,12 +5264,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					let affichageColonnes = []
 					if (donnees.hasOwnProperty('affichageColonnes')) {
 						affichageColonnes = JSON.parse(donnees.affichageColonnes)
@@ -5549,12 +5308,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					const colonnes = JSON.parse(donnees.colonnes)
 					colonnes.splice(colonne, 1)
 					const affichageColonnes = JSON.parse(donnees.affichageColonnes)
@@ -5669,12 +5423,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('colonnes') || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					const colonnes = JSON.parse(donnees.colonnes)
 					const affichageColonnes = JSON.parse(donnees.affichageColonnes)
 					if (direction === 'gauche') {
@@ -5787,12 +5536,7 @@ async function demarrerServeur () {
 				let donnees = await db.HGETALL('murs:' + mur)
 				donnees = Object.assign({}, donnees)
 				if (donnees === null || !donnees.hasOwnProperty('identifiant')) { socket.emit('erreur'); return false }
-				const proprietaire = donnees.identifiant
-				let admins = []
-				if (donnees.hasOwnProperty('admins')) {
-					admins = JSON.parse(donnees.admins)
-				}
-				if (admins.includes(identifiant) || proprietaire === identifiant || (req.session.statut === 'auteur' && req.session.murs.includes(mur))) {
+				if (await verifierAdmin(mur, donnees, req.session) === true) {
 					await db.ZREMRANGEBYSCORE('activite:' + mur, id, id)
 					io.to('mur-' + mur).emit('supprimeractivite', id, identifiant)
 					req.session.cookie.expires = new Date(Date.now() + dureeSession)
@@ -5879,6 +5623,7 @@ async function demarrerServeur () {
 			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 			await fs.mkdirp(chemin)
 		}
+		req.session.murs.push(parseInt(id))
 		if (type === 'api') {
 			res.send(id + '/' + token + '/' + slug)
 		} else {
@@ -6136,7 +5881,7 @@ async function demarrerServeur () {
 			mur.admins = JSON.parse(mur.admins)
 			// Vérifier si admin
 			let admin = false
-			if (mur.admins.includes(identifiant) || mur.identifiant === identifiant || (statut === 'auteur' && murs && murs.includes(id))) {
+			if ((statut === 'utilisateur' && (mur.admins.includes(identifiant) || mur.identifiant === identifiant)) || (statut === 'auteur' && murs && murs.includes(id))) {
 				admin = true
 			}
 			// Vérifier accès
@@ -6445,7 +6190,7 @@ async function demarrerServeur () {
 								donnees.epinglee = 'non'
 							}
 							// Ne pas ajouter les capsules en attente de modération ou privées
-							if ((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') {
+							if (((mur.contributions === 'moderees' && donnees.visibilite === 'masquee') || donnees.visibilite === 'privee') && donnees.identifiant !== identifiant) {
 								resolve({})
 								return false
 							}
@@ -6607,7 +6352,7 @@ async function demarrerServeur () {
 				utilisateur = Object.assign({}, utilisateur)
 				if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
 				req.session.identifiant = utilisateur.id
-				req.session.motdepasse = motdepasse
+				req.session.motdepasse = ''
 				req.session.nom = utilisateur.nom
 				req.session.statut = 'auteur'
 				req.session.langue = utilisateur.langue
@@ -6616,6 +6361,9 @@ async function demarrerServeur () {
 				}
 				if (!req.session.hasOwnProperty('murs')) {
 					req.session.murs = []
+				}
+				if (!req.session.murs.includes(parseInt(mur))) {
+					req.session.murs.push(parseInt(mur))
 				}
 				if (!req.session.hasOwnProperty('blocsAutorises')) {
 					req.session.blocsAutorises = []
@@ -6634,7 +6382,7 @@ async function demarrerServeur () {
 					if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('motdepasse') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
 					if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
 						req.session.identifiant = utilisateur.id
-						req.session.motdepasse = motdepasse
+						req.session.motdepasse = ''
 						req.session.nom = utilisateur.nom
 						req.session.statut = 'auteur'
 						req.session.langue = utilisateur.langue
@@ -6643,6 +6391,9 @@ async function demarrerServeur () {
 						}
 						if (!req.session.hasOwnProperty('murs')) {
 							req.session.murs = []
+						}
+						if (!req.session.murs.includes(parseInt(mur))) {
+							req.session.murs.push(parseInt(mur))
 						}
 						if (!req.session.hasOwnProperty('blocsAutorises')) {
 							req.session.blocsAutorises = []
@@ -6866,6 +6617,50 @@ async function demarrerServeur () {
 				return await io.in(room).fetchSockets()
 			} catch (e) {}
 		}
+	}
+
+	async function verifierAdmin (mur, donnees, session) {
+		return new Promise(async function (resolve) {
+			if (session.hasOwnProperty('identifiant') && session.hasOwnProperty('statut') && session.statut === 'utilisateur' && session.hasOwnProperty('motdepasse')) {
+				const proprietaire = donnees.identifiant
+				let admins = []
+				if (donnees.hasOwnProperty('admins')) {
+					admins = donnees.admins
+				}
+				let donneesUtilisateur = await db.HGETALL('utilisateurs:' + session.identifiant)
+				donneesUtilisateur = Object.assign({}, donneesUtilisateur)
+				if (donneesUtilisateur === null) { resolve('erreur'); return false }
+				if ((proprietaire === session.identifiant || admins.includes(session.identifiant)) && await bcrypt.compare(session.motdepasse, donneesUtilisateur.motdepasse)) {
+					resolve(true)
+				} else {
+					resolve(false)
+				}
+			} else if (session.hasOwnProperty('statut') && session.statut === 'auteur' && session.hasOwnProperty('murs') && session.murs.includes(parseInt(mur))) {
+				resolve(true)
+			} else {
+				resolve(false)
+			}
+		})
+	}
+
+	async function verifierAdminUtilisateur (mur, identifiant, motdepasse) {
+		return new Promise(async function (resolve) {
+			let donneesMur = await db.HGETALL('murs:' + mur)
+			donneesMur = Object.assign({}, donneesMur)
+			if (donneesMur === null) { resolve('erreur'); return false }
+			let admins = []
+			if (donneesMur.hasOwnProperty('admins')) {
+				admins = donneesMur.admins
+			}
+			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
+			if (donneesUtilisateur === null) { resolve('erreur'); return false }
+			if ((donneesMur.identifiant === identifiant || admins.includes(identifiant)) && await bcrypt.compare(motdepasse, donneesUtilisateur.motdepasse)) {
+				resolve(true)
+			} else {
+				resolve(false)
+			}
+		})
 	}
 
 	function supprimerSession (req) {
