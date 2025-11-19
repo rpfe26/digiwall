@@ -5624,12 +5624,17 @@ async function demarrerServeur () {
 			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 			await fs.mkdirp(chemin)
 		}
-		req.session.murs.push(parseInt(id))
 		if (type === 'api') {
 			res.send(id + '/' + token + '/' + slug)
 		} else {
 			req.session.langue = langue
 			req.session.statut = 'auteur'
+			if (!req.session.hasOwnProperty('murs')) {
+				req.session.murs = []
+			}
+			if (!req.session.murs.includes(parseInt(id))) {
+				req.session.murs.push(parseInt(id))
+			}
 			req.session.cookie.expires = new Date(Date.now() + dureeSession)
 			res.json({ id: id, token: token, slug: slug })
 		}
