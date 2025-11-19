@@ -883,7 +883,10 @@ async function demarrerServeur () {
 			const murId = req.body.murId
 			if (await verifierAdminUtilisateur(murId, identifiant, req.session.motdepasse) === true) {
 				const destination = req.body.destination
-				const dossiers = JSON.parse(donneesUtilisateur.dossiers)
+				let donnees = await db.HGETALL('utilisateurs:' + identifiant)
+				donnees = Object.assign({}, donnees)
+				if (donnees === null) { res.send('erreur_deplacement'); return false }
+				const dossiers = JSON.parse(donnees.dossiers)
 				dossiers.forEach(function (dossier, indexDossier) {
 					if (dossier.murs.includes(murId)) {
 						const indexMur = dossier.murs.indexOf(murId)
@@ -928,90 +931,85 @@ async function demarrerServeur () {
 							let donnees = await db.HGETALL('murs:' + mur)
 							donnees = Object.assign({}, donnees)
 							if (donnees === null || !donnees.hasOwnProperty('identifiant')) { res.send('erreur_duplication'); return false }
-							const proprietaire = donnees.identifiant
-							if (proprietaire === identifiant) {
-								const donneesBlocs = []
-								const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
-								if (blocs === null) { res.send('erreur_duplication'); return false }
-								for (const [indexBloc, bloc] of blocs.entries()) {
-									const donneesBloc = new Promise(async function (resolve) {
-										let infos = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
-										infos = Object.assign({}, infos)
-										if (infos === null) { resolve({}); return false }
-										const date = dayjs().format()
-										if (infos.hasOwnProperty('vignette') && definirVignettePersonnalisee(infos.vignette) === true) {
-											infos.vignette = path.basename(infos.vignette)
-										}
-										if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
-											const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
-											const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
-											const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
-											axios.get(url)
-											infos.iframe = etherpad + '/p/' + destinationId
-											infos.media = etherpad + '/p/' + destinationId
-										}
-										let motdepasse = ''
-										if (infos.hasOwnProperty('motdepasse')) {
-											motdepasse = infos.motdepasse
-										}
-										let epinglee = 'non'
-										if (infos.hasOwnProperty('epinglee')) {
-											epinglee = infos.epinglee
-										}
-										const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
-										await db
-										.multi()
-										.HSET('contenu-blocs:' + id + ':' + blocId, ['id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', infos.couleur])
-										.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
-										.exec()
-										resolve(blocId)
-									})
-									donneesBlocs.push(donneesBloc)
-								}
-								Promise.all(donneesBlocs).then(async function () {
-									const token = Math.random().toString(16).slice(10)
-									const slug = definirSlug(donnees.titre)
+							const donneesBlocs = []
+							const blocs = await db.ZRANGE('blocs:' + mur, 0, -1)
+							if (blocs === null) { res.send('erreur_duplication'); return false }
+							for (const [indexBloc, bloc] of blocs.entries()) {
+								const donneesBloc = new Promise(async function (resolve) {
+									let infos = await db.HGETALL('contenu-blocs:' + mur + ':' + bloc)
+									infos = Object.assign({}, infos)
+									if (infos === null) { resolve({}); return false }
 									const date = dayjs().format()
-									const code = Math.floor(100000 + Math.random() * 900000)
-									if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
-										donnees.fond = path.basename(donnees.fond)
+									if (infos.hasOwnProperty('vignette') && definirVignettePersonnalisee(infos.vignette) === true) {
+										infos.vignette = path.basename(infos.vignette)
 									}
-									let epinglage = 'desactive'
-									if (donnees.hasOwnProperty('epinglage')) {
-										epinglage = donnees.epinglage
+									if (infos.hasOwnProperty('iframe') && infos.iframe !== '' && infos.iframe.includes(etherpad)) {
+										const etherpadId = infos.iframe.replace(etherpad + '/p/', '')
+										const destinationId = 'mur-' + id + '-' + Math.random().toString(16).slice(2)
+										const url = etherpad + '/api/1.2.14/copyPad?apikey=' + etherpadApi + '&sourceID=' + etherpadId + '&destinationID=' + destinationId
+										axios.get(url)
+										infos.iframe = etherpad + '/p/' + destinationId
+										infos.media = etherpad + '/p/' + destinationId
 									}
-									if (donnees.hasOwnProperty('code')) {
-										await db
-										.multi()
-										.INCR('mur')
-										.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 0])
-										.SADD('murs-crees:' + identifiant, id.toString())
-										.SADD('utilisateurs-murs:' + id, identifiant)
-										.exec()
-									} else {
-										await db
-										.multi()
-										.INCR('mur')
-										.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 0])
-										.SADD('murs-crees:' + identifiant, id.toString())
-										.SADD('utilisateurs-murs:' + id, identifiant)
-										.exec()
+									let motdepasse = ''
+									if (infos.hasOwnProperty('motdepasse')) {
+										motdepasse = infos.motdepasse
 									}
-									if (stockage === 'fs' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
-										await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
-									} else if (stockage === 's3') {
-										const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
-										if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
-											for (let i = 0; i < liste.Contents.length; i++) {
-												await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: id + '/' + liste.Contents[i].Key.replace(mur + '/', ''), CopySource: '/' + bucket + '/' + liste.Contents[i].Key, ACL: 'public-read' }))
-											}
+									let epinglee = 'non'
+									if (infos.hasOwnProperty('epinglee')) {
+										epinglee = infos.epinglee
+									}
+									const blocId = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
+									await db
+									.multi()
+									.HSET('contenu-blocs:' + id + ':' + blocId, ['id', infos.id, 'bloc', blocId, 'typeBloc', infos.typeBloc, 'titre', infos.titre, 'texte', infos.texte, 'media', infos.media, 'iframe', infos.iframe, 'type', infos.type, 'source', infos.source, 'vignette', infos.vignette, 'vignetteActivee', infos.vignetteActivee, 'mediaExtra', infos.mediaExtra, 'medias', infos.medias, 'edition', infos.edition, 'date', date, 'identifiant', infos.identifiant, 'commentaires', 0, 'evaluations', 0, 'colonne', infos.colonne, 'visibilite', infos.visibilite, 'motdepasse', motdepasse, 'epinglee', epinglee, 'couleur', infos.couleur])
+									.ZADD('blocs:' + id, [{ score: indexBloc, value: blocId }])
+									.exec()
+									resolve(blocId)
+								})
+								donneesBlocs.push(donneesBloc)
+							}
+							Promise.all(donneesBlocs).then(async function () {
+								const token = Math.random().toString(16).slice(10)
+								const slug = definirSlug(donnees.titre)
+								const date = dayjs().format()
+								const code = Math.floor(100000 + Math.random() * 900000)
+								if (!donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '') {
+									donnees.fond = path.basename(donnees.fond)
+								}
+								let epinglage = 'desactive'
+								if (donnees.hasOwnProperty('epinglage')) {
+									epinglage = donnees.epinglage
+								}
+								if (donnees.hasOwnProperty('code')) {
+									await db
+									.multi()
+									.INCR('mur')
+									.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'code', code, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 0])
+									.SADD('murs-crees:' + identifiant, id.toString())
+									.SADD('utilisateurs-murs:' + id, identifiant)
+									.exec()
+								} else {
+									await db
+									.multi()
+									.INCR('mur')
+									.HSET('murs:' + id, ['id', id, 'token', token, 'titre', 'Copie de ' + donnees.titre, 'identifiant', identifiant, 'fond', donnees.fond, 'acces', donnees.acces, 'motdepasseAdmin', donnees.motdepasseAdmin, 'contributions', donnees.contributions, 'affichage', donnees.affichage, 'registreActivite', donnees.registreActivite, 'conversation', donnees.conversation, 'listeUtilisateurs', donnees.listeUtilisateurs, 'editionNom', donnees.editionNom, 'fichiers', donnees.fichiers, 'enregistrements', donnees.enregistrements, 'liens', donnees.liens, 'documents', donnees.documents, 'commentaires', donnees.commentaires, 'evaluations', donnees.evaluations, 'verrouillage', donnees.verrouillage, 'epinglage', epinglage, 'copieBloc', donnees.copieBloc, 'ordre', donnees.ordre, 'largeur', donnees.largeur, 'date', date, 'colonnes', donnees.colonnes, 'affichageColonnes', donnees.affichageColonnes, 'bloc', donnees.bloc, 'activite', 0, 'admins', JSON.stringify([]), 'vues', 0, 'digidrive', 0])
+									.SADD('murs-crees:' + identifiant, id.toString())
+									.SADD('utilisateurs-murs:' + id, identifiant)
+									.exec()
+								}
+								if (stockage === 'fs' && await fs.pathExists(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur))) {
+									await fs.copy(path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + mur), path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id))
+								} else if (stockage === 's3') {
+									const liste = await s3Client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: mur + '/' }))
+									if (liste !== null && liste.hasOwnProperty('Contents') && liste.Contents instanceof Array) {
+										for (let i = 0; i < liste.Contents.length; i++) {
+											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: id + '/' + liste.Contents[i].Key.replace(mur + '/', ''), CopySource: '/' + bucket + '/' + liste.Contents[i].Key, ACL: 'public-read' }))
 										}
 									}
-									res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
-								})
-							} else {
-								res.send('non_autorise')
-							}
+								}
+								res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
+							})
 						}
 					}
 				})
@@ -1408,6 +1406,9 @@ async function demarrerServeur () {
 									res.send(slug)
 								})
 							} else {
+								let donneesMur = await db.HGETALL('murs:' + id)
+								donneesMur = Object.assign({}, donneesMur)
+								if (donneesMur === null) { res.send('erreur_import'); return false }
 								const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 								if (stockage === 'fs') {
 									await fs.emptyDir(chemin)
