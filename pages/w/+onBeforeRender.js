@@ -31,7 +31,7 @@ async function onBeforeRender (pageContext) {
 		pageProps = { redirection }
 	} else {
 		let admin = false
-		if ((reponse.data.mur.hasOwnProperty('identifiant') && reponse.data.mur.identifiant === identifiant) || (reponse.data.mur.hasOwnProperty('admins') && reponse.data.mur.admins.includes(identifiant)) || (statut === 'auteur' && reponse.data.mur.hasOwnProperty('id') && murs.includes(reponse.data.mur.id))) {
+		if ((statut === 'utilisateur' && ((reponse.data.mur.hasOwnProperty('identifiant') && reponse.data.mur.identifiant === identifiant) || (reponse.data.mur.hasOwnProperty('admins') && reponse.data.mur.admins.includes(identifiant)))) || (statut === 'auteur' && reponse.data.mur.hasOwnProperty('identifiant') && reponse.data.mur.identifiant === identifiant && reponse.data.mur.hasOwnProperty('id') && murs.includes(parseInt(reponse.data.mur.id)))) {
 			admin = true
 		}
 		if (!admin && reponse.data.mur.acces === 'prive' && statut === 'utilisateur') {
