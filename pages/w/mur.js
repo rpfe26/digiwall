@@ -171,7 +171,7 @@ export default {
 	},
 	computed: {
 		admin () {
-			return (this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant) || (this.mur.hasOwnProperty('admins') && this.mur.admins.includes(this.identifiant)) || (this.statut === 'auteur' && this.mur.hasOwnProperty('id') && this.murs.includes(this.mur.id))
+			return ((this.statut === 'utilisateur' && ((this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant) || (this.mur.hasOwnProperty('admins') && this.mur.admins.includes(this.identifiant)))) || (this.statut === 'auteur' && this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant && this.mur.hasOwnProperty('id') && this.murs.includes(parseInt(this.mur.id))))
 		},
 		mobile () {
 			if (((this.userAgent.match(/iPhone/i) || this.userAgent.match(/iPad/i) || this.userAgent.match(/iPod/i)) && this.userAgent.match(/Mobile/i)) || this.userAgent.match(/Android/i)) {
@@ -3631,8 +3631,8 @@ export default {
 						this.modifierCaracteristique(this.identifiant, 'identifiant', donnees.identifiant)
 						this.modifierCaracteristique(donnees.identifiant, 'nom', donnees.nom)
 						const murs = JSON.parse(JSON.stringify(this.murs))
-						if (!murs.includes(this.mur.id)) {
-							murs.push(this.mur.id)
+						if (!murs.includes(parseInt(this.mur.id))) {
+							murs.push(parseInt(this.mur.id))
 						}
 						this.identifiant = donnees.identifiant
 						this.nom = donnees.nom
