@@ -404,6 +404,7 @@ async function demarrerServeur () {
 					})
 				})
 			} else {
+				supprimerSession(req)
 				res.redirect('/')
 			}
 		} else {
@@ -419,7 +420,9 @@ async function demarrerServeur () {
 		}
 		const userAgent = req.headers['user-agent']
 		if (req.query.id && req.query.id !== '' && req.query.mdp && req.query.mdp !== '') {
-			await verifierAcces(req, req.params.id, req.query.id, base64.decode(req.query.mdp))
+			const id = req.query.id
+			const mdp = base64.decode(req.query.mdp)
+			await verifierAcces(req, req.params.id, id, mdp)
 		}
 		if (!req.query.id && !req.query.mdp && (req.session.identifiant === '' || req.session.identifiant === undefined)) {
 			const identifiant = 'u' + Math.random().toString(16).slice(3)
@@ -570,7 +573,7 @@ async function demarrerServeur () {
 				req.session.cookie.expires = new Date(Date.now() + dureeSession)
 				const message = {
 					from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
-					to: '"Moi" <' + email + '>',
+					to: email,
 					subject: 'Nouveau compte Digiwall',
 					html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Conservez bien cet identifiant, il est nécessaire pour vous connecter à votre compte.</p>'
 				}
@@ -639,7 +642,7 @@ async function demarrerServeur () {
 					const motdepasse = genererMotDePasse(8)
 					const message = {
 						from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
-						to: '"Moi" <' + email + '>',
+						to: email,
 						subject: 'Mot de passe Digiwall',
 						html: '<p>Votre nouveau mot de passe : ' + motdepasse + '</p><p>Identifiant : ' + identifiant + '</p>'
 					}
