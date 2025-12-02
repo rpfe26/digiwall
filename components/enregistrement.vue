@@ -1,0 +1,327 @@
+<template>
+	<div class="enregistrer audio">
+		<template v-if="!$parent.enregistrement">
+			<span id="enregistrer" class="bouton" role="button" :tabindex="$parent.definirTabIndexModale()" @click="enregistrerAudio" @keydown.enter="enregistrerAudio"><i class="material-icons">fiber_manual_record</i><span>{{ $t('enregistrerAudio') }}</span></span>
+		</template>
+		<div id="enregistrement" v-else>
+			<canvas id="visualisation" width="360" height="60" />
+			<div class="enregistrement">
+				<span class="bouton" :class="{'stopper': !pause}" role="button" :tabindex="$parent.definirTabIndexModale()" @click="arreterEnregistrementAudio" @keydown.enter="arreterEnregistrementAudio">
+					<i class="material-icons">stop</i>
+				</span>
+				<span class="bouton" role="button" :tabindex="$parent.definirTabIndexModale()" @click="mettreEnPauseEnregistrementAudio" @keydown.enter="mettreEnPauseEnregistrementAudio">
+					<i class="material-icons" v-if="!pause">pause</i>
+					<i class="material-icons" v-else>play_arrow</i>
+				</span>
+				<span class="duree">{{ dureeEnregistrement }}</span>
+			</div>
+		</div>
+	</div>
+</template>
+
+<script>
+export default {
+	name: 'Enregistrement',
+	data () {
+		return {
+			enregistrementSupporte: true,
+			entreeAudio: false,
+			mediaRecorder: '',
+			flux: '',
+			pause: false,
+			delta: '',
+			contexte: '',
+			intervalle: '',
+			dureeEnregistrement: '00:00',
+			safari: false
+		}
+	},
+	async mounted () {
+		if (!navigator.mediaDevices || !navigator.mediaDevices?.enumerateDevices) {
+			this.enregistrementSupporte = false
+		} else {
+			navigator.mediaDevices.enumerateDevices().then(function (devices) {
+				for (const device of devices) {
+					if (device.kind === 'audioinput') {
+						this.entreeAudio = true
+						break
+					}
+				}
+				if (this.entreeAudio === true) {
+					if (!navigator.mediaDevices?.getUserMedia) {
+						this.enregistrementSupporte = false
+					}
+				}
+			}.bind(this))
+		}
+		
+		const ua = window.navigator.userAgent
+		const apple = ua.match(/Macintosh/i) || ua.match(/iPad/i) || ua.match(/iPhone/i)
+		const webkit = ua.match(/WebKit/i)
+		this.safari = apple && webkit && !ua.match(/CriOS/i) && !ua.match(/EdgiOS/i) && !ua.match(/Chrome/i) && !ua.match(/Edg/i)
+	},
+	beforeUnmount () {
+		if (this.flux !== '') {
+			this.flux.stop()
+			this.flux = ''
+		}
+		if (this.contexte !== '') {
+			this.contexte.close()
+			this.contexte = ''
+		}
+		if (this.intervalle !== '') {
+			clearInterval(this.intervalle)
+			this.intervalle = ''
+		}
+		if (this.mediaRecorder !== '') {
+			if (this.safari) {
+				this.mediaRecorder.getInternalRecorder().clearRecordedData()
+			}
+			this.mediaRecorder.destroy()
+			this.mediaRecorder = ''
+		}
+	},
+	methods: {
+		enregistrerAudio () {
+			if (!this.enregistrementSupporte) {
+				this.$parent.notification = this.$t('enregistrementNonSupporte')
+			} else if (!this.entreeAudio) {
+				this.$parent.notification = this.$t('aucuneEntreeAudio')
+			} else {
+				navigator.mediaDevices.getUserMedia({ audio: true }).then(function (flux) {
+					let options = { type: 'audio', mimeType: 'audio/wav', sampleRate: 44100, desiredSampRate: 44100 }
+					if (this.safari) {
+						options = { type: 'audio', recorderType: StereoAudioRecorder, sampleRate: 44100, desiredSampRate: 44100, bufferSize: 4096, numberOfAudioChannels: 2 }
+					}
+					this.flux = flux
+					this.mediaRecorder = RecordRTC(this.flux, options)
+					this.mediaRecorder.startRecording()
+					this.$nextTick(function () {
+						this.visualiser(flux)
+					}.bind(this))
+					this.$parent.enregistrement = true
+					const temps = Date.now()
+					this.intervalle = setInterval(function () {
+						this.delta = Date.now() - temps
+						let secondes = Math.floor((this.delta / 1000) % 60)
+						let minutes = Math.floor((this.delta / 1000 / 60) << 0)
+						if (secondes < 10) {
+							secondes = '0' + secondes
+						}
+						if (minutes < 10) {
+							minutes = '0' + minutes
+						}
+						this.dureeEnregistrement = minutes + ':' + secondes
+						if (this.dureeEnregistrement === '09:00') {
+							this.arreterEnregistrementAudio()
+						}
+					}.bind(this), 100)
+				}.bind(this)).catch(function () {
+					this.$parent.enregistrement = false
+					this.mediaRecorder = ''
+					this.flux = ''
+					if (this.contexte !== '') {
+						this.contexte.close()
+						this.contexte = ''
+					}
+					this.$parent.notification = this.$t('erreurMicro')
+				}.bind(this))
+			}
+		},
+		mettreEnPauseEnregistrementAudio () {
+			if (this.pause === false) {
+				if (this.intervalle !== '') {
+					clearInterval(this.intervalle)
+					this.intervalle = ''
+				}
+				this.pause = true
+				this.mediaRecorder.pauseRecording()
+			} else {
+				this.pause = false
+				this.mediaRecorder.resumeRecording()
+				let temps = Date.now()
+				temps = temps - this.delta
+				this.intervalle = setInterval(function () {
+					this.delta = Date.now() - temps
+					let secondes = Math.floor((this.delta / 1000) % 60)
+					let minutes = Math.floor((this.delta / 1000 / 60) << 0)
+					if (secondes < 10) {
+						secondes = '0' + secondes
+					}
+					if (minutes < 10) {
+						minutes = '0' + minutes
+					}
+					this.dureeEnregistrement = minutes + ':' + secondes
+				}.bind(this), 100)
+			}
+		},
+		arreterEnregistrementAudio () {
+			this.mediaRecorder.stopRecording(function () {
+				const blob = this.mediaRecorder.getBlob()
+				this.$parent.blob = blob
+				if (this.$parent.typeBloc === 'image-audio') {
+					this.$parent.mediaExtra = URL.createObjectURL(blob)
+					this.$parent.typeExtra = 'enregistrement'
+				} else {
+					this.$parent.media = URL.createObjectURL(blob)
+					this.$parent.type = 'enregistrement'
+					const donnees = {}
+					donnees.type = 'enregistrement'
+					const vignette = this.$parent.definirVignette(donnees)
+					this.$parent.vignette = vignette
+					this.$parent.vignetteDefaut = vignette
+				}
+				this.delta = ''
+				this.pause = false
+				this.dureeEnregistrement = '00:00'
+				this.$parent.enregistrement = false
+				if (this.flux !== '') {
+					this.flux.stop()
+					this.flux = ''
+				}
+				if (this.contexte !== '') {
+					this.contexte.close()
+					this.contexte = ''
+				}
+				if (this.intervalle !== '') {
+					clearInterval(this.intervalle)
+					this.intervalle = ''
+				}
+				if (this.mediaRecorder !== '') {
+					if (this.safari) {
+						this.mediaRecorder.getInternalRecorder().clearRecordedData()
+					}
+					this.mediaRecorder.destroy()
+					this.mediaRecorder = ''
+				}
+			}.bind(this))
+		},
+		visualiser (flux) {
+			if (this.contexte === '') {
+				this.contexte = new AudioContext()
+			}
+			const source = this.contexte.createMediaStreamSource(flux)
+			const analyser = this.contexte.createAnalyser()
+			analyser.fftSize = 2048
+			const bufferLength = analyser.frequencyBinCount
+			const dataArray = new Uint8Array(bufferLength)
+			source.connect(analyser)
+
+			this.$nextTick(function () {
+				draw()
+			})
+
+			function draw () {
+				if (document.querySelector('#visualisation')) {
+					const canvas = document.querySelector('#visualisation')
+					const canvasCtx = canvas.getContext('2d')
+					const largeur = document.querySelector('#enregistrement').offsetWidth
+					const hauteur = canvas.height
+					canvas.width = largeur
+					requestAnimationFrame(draw)
+					analyser.getByteTimeDomainData(dataArray)
+
+					canvasCtx.fillStyle = '#eeeeee'
+					canvasCtx.fillRect(0, 0, largeur, hauteur)
+					canvasCtx.lineWidth = 2
+					canvasCtx.strokeStyle = '#000000'
+					canvasCtx.beginPath()
+
+					const sliceWidth = largeur * 1.0 / bufferLength
+					let x = 0
+
+					for (let i = 0; i < bufferLength; i++) {
+						const v = dataArray[i] / 128.0
+						const y = v * hauteur / 2
+						if (i === 0) {
+							canvasCtx.moveTo(x, y)
+						} else {
+							canvasCtx.lineTo(x, y)
+						}
+						x += sliceWidth
+					}
+					canvasCtx.lineTo(canvas.width, canvas.height / 2)
+					canvasCtx.stroke()
+				}
+			}
+		}
+	}
+}
+</script>
+
+<style scoped>
+.enregistrer.audio {
+	font-size: 0;
+	text-align: center;
+}
+
+.enregistrer.audio .bouton {
+	margin-bottom: 1.5rem;
+}
+
+#enregistrer i {
+	font-size: 24px;
+	margin-right: 1rem;
+	color: #ff1f1f;
+}
+
+#enregistrement .enregistrement {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+#enregistrement .enregistrement .duree {
+	font-family: monospace;
+	font-size: 3rem;
+	font-weight: 500;
+	margin-left: 2.5rem;
+}
+
+#enregistrement .enregistrement .bouton {
+	background-color: #fff;
+	border-color: #001d1d;
+	border-width: 2px;
+	border-radius: 0;
+	line-height: 1;
+	height: auto;
+	padding: 1rem;
+	margin-bottom: 0;
+}
+
+#enregistrement .enregistrement .bouton:hover {
+	color: #001d1d;
+	background-color: #eee;
+}
+
+#enregistrement .enregistrement .bouton:first-child {
+	margin-right: 2.5rem;
+}
+
+#enregistrement .enregistrement .bouton i {
+	font-size: 48px;
+	line-height: 1;
+	margin: 0;
+}
+
+#enregistrement .enregistrement .bouton.stopper {
+	color: #001d1d;
+    animation: couleur ease-in 2s infinite;
+}
+
+#visualisation {
+	margin-bottom: 1.5rem;
+}
+
+@keyframes couleur {
+    0% {
+		background: #fff;
+	}
+    50% {
+		background: #ff1f1f;
+	}
+    100% {
+		background: #fff;
+	}
+}
+</style>

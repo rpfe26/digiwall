@@ -16,8 +16,8 @@
 	</div>
 
 	<nav id="nav">
-		<span id="compte" role="button" :tabindex="definirTabIndex()" :title="$t('compteUtilisateur')" @click="allerCompte" @keydown.enter="allerCompte" v-if="statut === 'utilisateur'"><i class="material-icons">arrow_back</i></span>
-		<span id="accueil" role="button" :tabindex="definirTabIndex()" :title="$t('accueil')" @click="allerAccueil" @keydown.enter="allerAccueil" v-else><i class="material-icons">home</i></span>
+		<span id="compte" role="button" :tabindex="definirTabIndex()" :title="$t('compteUtilisateur')" @click="allerCompte" @keydown.enter="allerCompte" v-if="statut === 'utilisateur' && !integration"><i class="material-icons">arrow_back</i></span>
+		<span id="accueil" role="button" :tabindex="definirTabIndex()" :title="$t('accueil')" @click="allerAccueil" @keydown.enter="allerAccueil" v-else-if="!integration"><i class="material-icons">home</i></span>
 		<span id="recherche" role="button" :tabindex="definirTabIndex()" :title="$t('recherche')" :class="{'active': recherche, 'desactive': action === 'organiser'}" @click="gererRecherche" @keydown.enter="gererRecherche"><i class="material-icons">search</i></span>
 		<span id="activite" role="button" :tabindex="definirTabIndex()" :title="$t('activiteMur')" @click="afficherActivite" @keydown.enter="afficherActivite" v-if="accesAutorise && mur.registreActivite === 'active'"><i class="material-icons">schedule</i></span>
 		<span id="chat" :title="$t('conversation')" @click="afficherChat" @keydown.enter="afficherChat" v-if="accesAutorise && mur.conversation === 'activee'">
@@ -689,18 +689,7 @@
 						<div class="separateur" v-if="media === '' && progressionFichier === 0 && !chargementLien && !enregistrement && mur.fichiers === 'actives' && mur.enregistrements === 'actives'">
 							<span>{{ $t('ou') }}</span>
 						</div>
-						<div class="enregistrer audio" v-if="media === '' && progressionFichier === 0 && !chargementLien && mur.enregistrements === 'actives'">
-							<template v-if="!enregistrement">
-								<span id="enregistrer" class="bouton" role="button" :tabindex="definirTabIndexModale()" @click="enregistrerAudio" @keydown.enter="enregistrerAudio"><i class="material-icons">fiber_manual_record</i><span>{{ $t('enregistrerAudio') }}</span></span>
-							</template>
-							<div id="enregistrement" v-else>
-								<canvas id="visualisation" width="360" height="60" />
-								<div class="enregistrement">
-									<span class="bouton stopper" role="button" :tabindex="definirTabIndexModale()" @click="arreterEnregistrementAudio" @keydown.enter="arreterEnregistrementAudio"><i class="material-icons">stop</i></span>
-									<span class="duree">{{ dureeEnregistrement }}</span>
-								</div>
-							</div>
-						</div>
+						<Enregistrement v-if="media === '' && progressionFichier === 0 && !chargementLien && mur.enregistrements === 'actives'" />
 						<div class="separateur" v-if="media === '' && progressionFichier === 0 && !chargementLien && !enregistrement && ((mur.fichiers === 'actives' || mur.enregistrements === 'actives') && mur.liens === 'actives')">
 							<span>{{ $t('ou') }}</span>
 						</div>
@@ -826,18 +815,7 @@
 						<div class="separateur" v-if="mediaExtra === '' && !enregistrement && mur.enregistrements === 'actives'">
 							<span>{{ $t('ou') }}</span>
 						</div>
-						<div class="enregistrer audio" v-if="mediaExtra === '' && mur.enregistrements === 'actives'">
-							<template v-if="!enregistrement">
-								<span id="enregistrer" class="bouton" role="button" :tabindex="definirTabIndexModale()" @click="enregistrerAudio" @keydown.enter="enregistrerAudio"><i class="material-icons">fiber_manual_record</i><span>{{ $t('enregistrerAudio') }}</span></span>
-							</template>
-							<div id="enregistrement" v-else>
-								<canvas id="visualisation" width="360" height="60" />
-								<div class="enregistrement">
-									<span class="bouton stopper" role="button" :tabindex="definirTabIndexModale()" @click="arreterEnregistrementAudio" @keydown.enter="arreterEnregistrementAudio"><i class="material-icons">stop</i></span>
-									<span class="duree">{{ dureeEnregistrement }}</span>
-								</div>
-							</div>
-						</div>
+						<Enregistrement v-if="mediaExtra === '' && mur.enregistrements === 'actives'" />
 						<label v-if="mediaExtra !== ''">{{ $t('audio') }}</label>
 						<div id="media-extra" v-if="mediaExtra !== ''">
 							<div class="conteneur-chargement" v-if="chargementMediaExtra">
