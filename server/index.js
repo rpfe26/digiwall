@@ -187,6 +187,7 @@ async function demarrerServeur () {
 				"default-src": ["'self'", "https:", "ws:"],
 				"script-src": ["'self'", process.env.VITE_MATOMO, "'unsafe-inline'", "'unsafe-eval'"],
 				"media-src": ["'self'", "https:", "data:", "blob:"],
+				"worker-src": ["'self'", "https:", "data:", "blob:"],
 				"img-src": ["'self'", "https:", "data:"],
 				"frame-ancestors": ["*"],
 				"frame-src": ["*", "blob:"]
