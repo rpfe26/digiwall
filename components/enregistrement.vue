@@ -1,9 +1,9 @@
 <template>
 	<div class="enregistrer audio">
-		<template v-if="!$parent.enregistrement">
+		<template v-if="!$parent.enregistrement && !chargement">
 			<span id="enregistrer" class="bouton" role="button" :tabindex="$parent.definirTabIndexModale()" @click="enregistrerAudio" @keydown.enter="enregistrerAudio"><i class="material-icons">fiber_manual_record</i><span>{{ $t('enregistrerAudio') }}</span></span>
 		</template>
-		<div id="enregistrement" v-else>
+		<div id="enregistrement" v-else-if="$parent.enregistrement && !chargement">
 			<canvas id="visualisation" width="360" height="60" />
 			<div class="enregistrement">
 				<span class="bouton" :class="{'stopper': !pause}" role="button" :tabindex="$parent.definirTabIndexModale()" @click="arreterEnregistrementAudio" @keydown.enter="arreterEnregistrementAudio">
@@ -16,6 +16,9 @@
 				<span class="duree">{{ dureeEnregistrement }}</span>
 			</div>
 		</div>
+		<div class="conteneur-chargement" v-else>
+			<div class="chargement" />
+		</div>
 	</div>
 </template>
 
@@ -24,6 +27,7 @@ export default {
 	name: 'Enregistrement',
 	data () {
 		return {
+			chargement: false,
 			enregistrementSupporte: true,
 			entreeAudio: false,
 			mediaRecorder: '',
@@ -156,25 +160,14 @@ export default {
 			}
 		},
 		arreterEnregistrementAudio () {
+			if (this.safari) {
+				this.chargement = true
+			}
 			this.mediaRecorder.stopRecording(function () {
 				const blob = this.mediaRecorder.getBlob()
-				this.$parent.blob = blob
-				if (this.$parent.typeBloc === 'image-audio') {
-					this.$parent.mediaExtra = URL.createObjectURL(blob)
-					this.$parent.typeExtra = 'enregistrement'
-				} else {
-					this.$parent.media = URL.createObjectURL(blob)
-					this.$parent.type = 'enregistrement'
-					const donnees = {}
-					donnees.type = 'enregistrement'
-					const vignette = this.$parent.definirVignette(donnees)
-					this.$parent.vignette = vignette
-					this.$parent.vignetteDefaut = vignette
-				}
 				this.delta = ''
 				this.pause = false
 				this.dureeEnregistrement = '00:00'
-				this.$parent.enregistrement = false
 				if (this.flux !== '') {
 					this.flux.stop()
 					this.flux = ''
@@ -194,6 +187,21 @@ export default {
 					this.mediaRecorder.destroy()
 					this.mediaRecorder = ''
 				}
+				this.$parent.blob = blob
+				if (this.$parent.typeBloc === 'image-audio') {
+					this.$parent.mediaExtra = URL.createObjectURL(blob)
+					this.$parent.typeExtra = 'enregistrement'
+				} else {
+					this.$parent.media = URL.createObjectURL(blob)
+					this.$parent.type = 'enregistrement'
+					const donnees = {}
+					donnees.type = 'enregistrement'
+					const vignette = this.$parent.definirVignette(donnees)
+					this.$parent.vignette = vignette
+					this.$parent.vignetteDefaut = vignette
+				}
+				this.chargement = false
+				this.$parent.enregistrement = false
 			}.bind(this))
 		},
 		visualiser (flux) {
@@ -256,7 +264,23 @@ export default {
 }
 
 .enregistrer.audio .bouton {
-	margin-bottom: 1.5rem;
+	margin-bottom: 15px;
+}
+
+.enregistrer.audio .conteneur-chargement {
+	font-size: 0;
+	line-height: 1;
+	text-align: center;
+}
+
+.enregistrer.audio .chargement {
+	display: inline-block;
+	border: 7px solid #ddd;
+	border-top: 7px solid #00ced1;
+	border-radius: 50%;
+	width: 50px;
+	height: 50px;
+	animation: rotation 0.7s linear infinite;
 }
 
 #enregistrer i {
@@ -310,7 +334,7 @@ export default {
 }
 
 #visualisation {
-	margin-bottom: 1.5rem;
+	margin-bottom: 15px;
 }
 
 @keyframes couleur {
