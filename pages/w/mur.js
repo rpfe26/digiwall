@@ -927,18 +927,6 @@ export default {
 			this.elementPrecedent = (document.activeElement || document.body)
 			this.modale = 'bloc'
 			this.$nextTick(function () {
-				// Adapter la taille de la modale au contenu
-				const observer = new MutationObserver(function () {
-					document.querySelector('#bloc').removeAttribute('style')
-					this.$nextTick(function () {
-						document.querySelector('#bloc').style.height = document.querySelector('#bloc').clientHeight + 'px'
-					})
-				}.bind(this))
-				observer.observe(document.querySelector('#bloc .contenu'), {
-					attributes: true,
-					childList: true,
-					subtree: true
-				})
 				if (mode === 'creation') {
 					document.querySelector('#champ-titre').focus()
 				} else {
