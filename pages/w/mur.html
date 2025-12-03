@@ -593,12 +593,12 @@
 	</div>
 
 	<div class="conteneur-modale" v-else-if="modale === 'bloc'">
-		<div id="bloc" class="modale" role="dialog">
+		<div id="bloc" class="modale ascenseur" role="dialog">
 			<div class="en-tete">
 				<span class="titre">{{ titreModale }}</span>
 				<span class="fermer" role="button" :tabindex="definirTabIndexModale()" @click="fermerModaleBloc" @keydown.enter="fermerModaleBloc"><i class="material-icons">close</i></span>
 			</div>
-			<div class="conteneur ascenseur" tabindex="-1">
+			<div class="conteneur" tabindex="-1">
 				<div class="contenu">
 					<div class="conteneur-interrupteur" v-if="admin && mur.fichiers === 'actives'">
 						<div class="interrupteur">
