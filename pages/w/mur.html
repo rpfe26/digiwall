@@ -42,7 +42,7 @@
 				<span class="fermer" role="button" :tabindex="definirTabIndex()" @click="fermerMenu" @keydown.enter="fermerMenu"><i class="material-icons">close</i></span>
 			</span>
 		</div>
-		<div class="contenu ascenseur" tabindex="-1">
+		<div class="contenu ascenseur">
 			<ul id="entrees">
 				<template v-for="(entree, indexEntree) in activite">
 					<li v-if="entree.type === 'bloc-ajoute'" :data-bloc="entree.bloc" :key="'activite_' + indexEntree">
@@ -112,7 +112,7 @@
 				<span class="fermer" role="button" :tabindex="definirTabIndex()" @click="fermerMenu" @keydown.enter="fermerMenu"><i class="material-icons">close</i></span>
 			</span>
 		</div>
-		<div class="contenu ascenseur" tabindex="-1">
+		<div class="contenu ascenseur">
 			<ul id="messages">
 				<template v-for="(messageConversation, indexMessageConversation) in messagesChat">
 					<li class="moi" :key="'message_' + indexMessageConversation" v-if="messageConversation.identifiant === identifiant"><span class="utilisateur">{{ definirNom(messageConversation) }}</span><span v-html="messageConversation.texte" /></li>
@@ -131,7 +131,7 @@
 			<span class="titre">{{ $t('parametresMur') }}</span>
 			<span class="fermer" role="button" :tabindex="definirTabIndex()" @click="fermerMenuOptions" @keydown.enter="fermerMenuOptions"><i class="material-icons">close</i></span>
 		</div>
-		<div class="contenu ascenseur" tabindex="-1">
+		<div class="contenu ascenseur">
 			<div class="conteneur">
 				<label for="titre-mur">{{ $t('titre') }}</label>
 				<input id="titre-mur"  type="text" :disabled="viaDigidrive" :value="mur.titre" @keydown.enter="modifierTitre">
@@ -421,7 +421,7 @@
 			<span class="titre">{{ $t('utilisateursConnectes') }}</span>
 			<span class="fermer" role="button" :tabindex="definirTabIndex()" @click="fermerMenu" @keydown.enter="fermerMenu"><i class="material-icons">close</i></span>
 		</div>
-		<div class="contenu ascenseur" tabindex="-1">
+		<div class="contenu ascenseur">
 			<ul id="utilisateurs">
 				<template v-for="(utilisateurConnecte, indexUtilisateurConnecte) in utilisateurs">
 					<li class="moi" v-if="utilisateurConnecte.identifiant === identifiant && statut === 'utilisateur'" :key="'utilisateur_compte_' + indexUtilisateurConnecte">
@@ -598,7 +598,7 @@
 				<span class="titre">{{ titreModale }}</span>
 				<span class="fermer" role="button" :tabindex="definirTabIndexModale()" @click="fermerModaleBloc" @keydown.enter="fermerModaleBloc"><i class="material-icons">close</i></span>
 			</div>
-			<div class="conteneur" tabindex="-1">
+			<div class="conteneur">
 				<div class="contenu">
 					<div class="conteneur-interrupteur" v-if="admin && mur.fichiers === 'actives'">
 						<div class="interrupteur">
@@ -920,7 +920,7 @@
 				<span class="titre">{{ $t('commentairesCapsule') }}</span>
 				<span class="fermer" role="button" :tabindex="definirTabIndexModale()" @click="fermerModaleCommentaire" @keydown.enter="fermerModaleCommentaire"><i class="material-icons">close</i></span>
 			</div>
-			<ul class="commentaires ascenseur" tabindex="-1">
+			<ul class="commentaires ascenseur">
 				<li :id="'commentaire-' + entreeCommentaire.id" :tabindex="definirTabIndexModale()" :class="{'edition': editionCommentaire && commentaireId === entreeCommentaire.id, 'focus': focusId === entreeCommentaire.id}" v-for="(entreeCommentaire, indexEntreeCommentaire) in commentaires" @focus="focusId = entreeCommentaire.id" :key="'commentaire_' + indexEntreeCommentaire">
 					<span class="meta" :class="{'auteur': entreeCommentaire.identifiant === identifiant || admin}">{{ $t('par') }} {{ definirNom(entreeCommentaire) }}, {{ $formaterDateRelative(entreeCommentaire.date, langue) }}</span>
 					<div class="action" v-if="entreeCommentaire.identifiant === identifiant || admin">
@@ -1158,7 +1158,7 @@
 				<span class="titre"><span>{{ donneesBloc.titre }}</span> <span>{{ $t('par') }} {{ definirNom(donneesBloc) }}</span></span>
 				<span class="fermer" role="button" :tabindex="definirTabIndexModaleDiaporama()" @click="fermerModaleDiaporama" @keydown.enter="fermerModaleDiaporama"><i class="material-icons">close</i></span>
 			</div>
-			<div class="contenu ascenseur" tabindex="-1" :class="{'vide': donneesBloc.texte === '' && donneesBloc.media === '' && mur.evaluations === 'desactivees' && mur.commentaires === 'desactives' && ((mur.contributions !== 'moderees') || (mur.contributions === 'moderees' && donneesBloc.visibilite === 'visible'))}" v-if="donneesBloc.visibilite !== 'protegee' || blocsAutorises.includes(donneesBloc.bloc)">
+			<div class="contenu ascenseur" :class="{'vide': donneesBloc.texte === '' && donneesBloc.media === '' && mur.evaluations === 'desactivees' && mur.commentaires === 'desactives' && ((mur.contributions !== 'moderees') || (mur.contributions === 'moderees' && donneesBloc.visibilite === 'visible'))}" v-if="donneesBloc.visibilite !== 'protegee' || blocsAutorises.includes(donneesBloc.bloc)">
 				<div class="conteneur conteneur-texte" v-if="donneesBloc.texte !== ''">
 					<div class="texte" v-html="donneesBloc.texte" />
 				</div>
@@ -1244,7 +1244,7 @@
 					</div>
 				</div>
 			</div>
-			<div class="contenu ascenseur" tabindex="-1" v-else>
+			<div class="contenu ascenseur" v-else>
 				<div class="conteneur conteneur-media cadenas" :style="{'background': eclaircirCouleur(donneesBloc.couleur)}">
 					<i class="material-icons">lock_outline</i>
 				</div>

@@ -302,7 +302,7 @@
 #bloc .conteneur {
 	height: auto!important;
 	padding: 0 20px 20px;
-	overflow: hidden;
+	overflow: initial!important;
 }
 
 #bloc .contenu {
@@ -312,13 +312,8 @@
 #texte {
 	border: 1px solid #ddd;
     width: 100%;
-	outline: 0;
 	border-radius: 4px;
 	margin-bottom: 20px;
-}
-
-#texte.focus {
-	border-color: #001d1d;
 }
 
 #texte.mobile {
@@ -336,7 +331,7 @@
 	text-transform: uppercase;
 	color: #fff;
 	background: #242f3d;
-	bottom: 0;
+	bottom: 20px;
 	height: 5rem;
 	cursor: pointer;
 	letter-spacing: 1px;
@@ -1439,26 +1434,9 @@
 	width: 3.5rem;
 	height: 3.5rem;
 	padding: 0;
+	border-radius: 0;
 	border: none;
 	cursor: pointer;
-}
-
-.menu .couleurs input[type="color"] {
-	width: 2.5rem;
-	height: 2.5rem;
-	padding: 0;
-	border: none;
-	cursor: pointer;
-}
-
-.menu .couleurs input[type="color"]::-moz-color-swatch {
-	border: 1px solid #ddd;
-	border-radius: 50%;
-}
-
-.menu .couleurs input[type="color"]:focus::-moz-color-swatch {
-	border: 1px solid #001d1d;
-	border-radius: 50%;
 }
 
 .menu .conteneur .fonds input[type="color"]::-moz-color-swatch {
@@ -1466,41 +1444,9 @@
 	border-radius: 50%;
 }
 
-.menu .conteneur .fonds input[type="color"]:focus::-moz-color-swatch {
-	border: 1px solid #001d1d;
-	border-radius: 50%;
-}
-
-.menu .couleurs input[type="color"]::-webkit-color-swatch {
-	border: 1px solid #ddd;
-	border-radius: 50%;
-}
-
-.menu .couleurs input[type="color"]:focus::-webkit-color-swatch {
-	border: 1px solid #001d1d;
-	border-radius: 50%;
-}
-
 .menu .conteneur .fonds input[type="color"]::-webkit-color-swatch {
 	border: 1px solid #ddd;
 	border-radius: 50%;
-}
-
-.menu .conteneur .fonds input[type="color"]:focus::-webkit-color-swatch {
-	border: 1px solid #001d1d;
-	border-radius: 50%;
-}
-
-.menu .couleurs .actif input[type="color"]::-moz-color-swatch {
-	border: 2px solid #242f3d;
-}
-
-.menu .couleurs .actif input[type="color"]::-webkit-color-swatch {
-	border: 2px solid #242f3d;
-}
-
-.menu .couleurs input[type="color"]::-webkit-color-swatch-wrapper {
-	padding: 0;
 }
 
 .menu .conteneur .fonds input[type="color"]::-webkit-color-swatch-wrapper {
@@ -1523,6 +1469,7 @@
 	margin-right: 10px;
 	cursor: pointer;
 	flex: 0 0 auto;
+	outline: none;
 }
 
 .modale #couleurs span.icone {

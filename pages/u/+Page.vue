@@ -30,7 +30,7 @@
 				</div>
 				<div class="conteneur">
 					<label for="identifiant">{{ $t('identifiant') }}</label>
-					<input id="identifiant" type="text" readonly :value="identifiant">
+					<input id="identifiant" type="text" disabled :value="identifiant">
 				</div>
 				<div class="conteneur">
 					<label for="nom">{{ $t('nom') }}</label>

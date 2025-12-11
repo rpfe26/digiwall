@@ -971,12 +971,6 @@ export default {
 						pell.exec('insertText', event.clipboardData.getData('text/plain'))
 					}
 				}
-				document.querySelector('#texte .contenu-editeur').addEventListener('focus', function () {
-					document.querySelector('#texte').classList.add('focus')
-				})
-				document.querySelector('#texte .contenu-editeur').addEventListener('blur', function () {
-					document.querySelector('#texte').classList.remove('focus')
-				})
 				document.querySelector('#couleur-texte').addEventListener('change', this.modifierCouleurTexte)
 			}.bind(this))
 		},
