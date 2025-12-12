@@ -952,7 +952,19 @@ export default {
 						{ name: 'listeordonnee', title: that.$t('listeOrdonnee'), icon: '<i class="material-icons">format_list_numbered</i>', result: () => pell.exec('insertOrderedList') },
 						{ name: 'liste', title: that.$t('liste'), icon: '<i class="material-icons">format_list_bulleted</i>', result: () => pell.exec('insertUnorderedList') },
 						{ name: 'couleur', title: that.$t('couleurTexte'), icon: '<label for="couleur-texte"><i class="material-icons">format_color_text</i></label><input id="couleur-texte" type="color">', result: () => undefined },
-						{ name: 'lien', title: that.$t('lien'), icon: '<i class="material-icons">link</i>', result: () => { const url = window.prompt(that.$t('adresseLien')); if (url) { pell.exec('createLink', url) } } }
+						{ name: 'lien', title: that.$t('lien'), icon: '<i class="material-icons">link</i>', result: () => {
+							const fragment = window.getSelection().focusNode.parentNode
+							let lienActuel = ''
+							if (fragment.href && fragment.href !== null) {
+								lienActuel = fragment.href
+							}
+							const url = window.prompt(that.$t('adresseLien'), lienActuel)
+							if (url && url !== '') {
+								pell.exec('createLink', url)
+							} else if (url === '') {
+								pell.exec('unlink')
+							}
+						} }
 					],
 					classes: { actionbar: 'boutons-editeur', button: 'bouton-editeur', content: 'contenu-editeur', selected: 'bouton-actif' }
 				})
@@ -2691,7 +2703,19 @@ export default {
 				{ name: 'souligne', title: this.$t('souligne'), icon: '<i class="material-icons">format_underlined</i>', result: () => pell.exec('underline') },
 				{ name: 'barre', title: this.$t('barre'), icon: '<i class="material-icons">format_strikethrough</i>', result: () => pell.exec('strikethrough') },
 				{ name: 'couleur', title: this.$t('couleurTexte'), icon: '<label for="couleur-texte-' + type + '"><i class="material-icons">format_color_text</i></label><input id="couleur-texte-' + type + '" type="color">', result: () => undefined },
-				{ name: 'lien', title: this.$t('lien'), icon: '<i class="material-icons">link</i>', result: () => { const url = window.prompt(this.$t('adresseLien')); if (url) { pell.exec('createLink', url) } } },
+				{ name: 'lien', title: this.$t('lien'), icon: '<i class="material-icons">link</i>', result: () => {
+					const fragment = window.getSelection().focusNode.parentNode
+					let lienActuel = ''
+					if (fragment.href && fragment.href !== null) {
+						lienActuel = fragment.href
+					}
+					const url = window.prompt(this.$t('adresseLien'), lienActuel)
+					if (url && url !== '') {
+						pell.exec('createLink', url)
+					} else if (url === '') {
+						pell.exec('unlink')
+					}
+				} },
 				{ name: 'emojis', title: this.$t('emoticones'), icon: '<i class="material-icons">insert_emoticon</i>', result: function () { this.afficherEmojis(type) }.bind(this) }
 			]
 			return actions
