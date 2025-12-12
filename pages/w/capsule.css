@@ -346,6 +346,10 @@
 	border-radius: 1rem;
 }
 
+#blocs .bloc .media span a {
+	display: block;
+}
+
 #blocs .bloc .titre + .media {
 	margin-top: 0;
 	border-top: none;
