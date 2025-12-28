@@ -19,7 +19,7 @@
 }
 
 #mur.fond-personnalise-repete {
-	background-size: contain;
+	background-size: auto;
 }
 
 .colonnes #mur {
