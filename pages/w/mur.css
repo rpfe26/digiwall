@@ -1472,6 +1472,10 @@
 	outline: none;
 }
 
+.modale #couleurs span:focus {
+	border: 2px solid #ed5b00;
+}
+
 .modale #couleurs span.icone {
 	display: flex;
 	width: 62px;
@@ -1491,6 +1495,7 @@
 	height: 30px;
 	padding: 0;
 	border: none;
+	outline: none;
 	cursor: pointer;
 }
 
@@ -1506,6 +1511,14 @@
 
 .modale #couleurs span input[type="color"]::-webkit-color-swatch-wrapper {
 	padding: 0;
+}
+
+.modale #couleurs span input[type="color"]:focus::-moz-color-swatch {
+	border: 2px solid #ed5b00;
+}
+
+.modale #couleurs span input[type="color"]:focus::-webkit-color-swatch {
+	border: 2px solid #ed5b00;
 }
 
 .modale #couleurs span input[type="color"].selectionne::-moz-color-swatch {
