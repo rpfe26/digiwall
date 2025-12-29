@@ -935,6 +935,7 @@ label.bouton-bleu {
 }
 
 .contenu-editeur-commentaire {
+	position: relative;
 	padding: 10px 15px;
 	font-size: 16px;
 	height: calc(100% - (25px + 1rem));
