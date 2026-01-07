@@ -14,8 +14,8 @@
 	"remplirChamps": "Completa tutti campi del form.",
 	"identifiantExisteDeja": "L'utente <i>{identifiant}<\/i> è già registrato.",
 	"motsDePassePasIdentiques": "Le password non corrispondono.",
-	"monCompte": "Il mio profilo",
-	"parametresCompte": "Impostazioni del profilo",
+	"monCompte": "Mio account Digiwall",
+	"parametresCompte": "Impostazioni dell'account",
 	"rechercher": "Cerca",
 	"recherche": "Cerca",
 	"deconnexion": "Logout",
@@ -431,5 +431,9 @@
 	"repeterImageFond": "Ripetizione dell'immagine di sfondo",
 	"parametreFondModifie": "Parametro di ripetizione dell'immagine di sfondo modificato.",
 	"aValideCapsule": "ha approvato la capsula «&nbsp;{titre}&nbsp;»",
-	"aValideUneCapsule": "ha approvato una capsula"
+	"aValideUneCapsule": "ha approvato una capsula",
+	"corbeille": "Cestino",
+	"restaurer": "Ripristina",
+	"murRestaure": "Muro ripristinato.",
+	"murDansCorbeille": "Muro cestinato."
 }

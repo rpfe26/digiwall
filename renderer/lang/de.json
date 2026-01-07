@@ -14,7 +14,7 @@
     "remplirChamps": "Bitte fülle alle Felder aus.",
     "identifiantExisteDeja": "Benutzername <i>{identifiant}</i> existiert bereits.",
     "motsDePassePasIdentiques": "Die Passwörter stimmen nicht überein.",
-    "monCompte": "Mein Account",
+    "monCompte": "Mein Digiwall-Account",
     "parametresCompte": "Account Einstellungen",
     "rechercher": "Suche",
     "recherche": "Suche",
@@ -431,5 +431,9 @@
 	"repeterImageFond": "Hintergrundbild wiederholen",
 	"parametreFondModifie": "Parameter für die Wiederholung des Hintergrundbildes geändert.",
 	"aValideCapsule": "den Beitrag \"{titre}\" überprüft",
-	"aValideUneCapsule": "einen Beitrag überprüft"
+	"aValideUneCapsule": "einen Beitrag überprüft",
+	"corbeille": "Papierkorb",
+	"restaurer": "Wiederherstellen",
+	"murRestaure": "Wand wiederhergestellt.",
+	"murDansCorbeille": "Wand in den Papierkorb verschoben."
 }

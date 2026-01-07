@@ -261,29 +261,41 @@ async function demarrerServeur () {
 			if (donneesUtilisateur === null) { res.redirect('/'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				recupererDonneesUtilisateur(identifiant).then(async function (murs) {
+					let contenusSupprimes = []
+					let favorisSupprimes = []
 					let mursCrees = murs[0].filter(function (element) {
 						if (element.hasOwnProperty('id')) {
 							element.id = parseInt(element.id)
 						}
 						return element !== '' && Object.keys(element).length > 0
 					})
-					let mursRejoints = murs[1].filter(function (element) {
+					let mursCorbeille = murs[1].filter(function (element) {
+						if (element.hasOwnProperty('id')) {
+							element.id = parseInt(element.id)
+							contenusSupprimes.push(parseInt(element.id))
+						}
+						return element !== '' && Object.keys(element).length > 0
+					})
+					let mursRejoints = murs[2].filter(function (element) {
 						if (element.hasOwnProperty('id')) {
 							element.id = parseInt(element.id)
 						}
 						return element !== '' && Object.keys(element).length > 0
 					})
-					let mursAdmins = murs[2].filter(function (element) {
+					let mursAdmins = murs[3].filter(function (element) {
 						if (element.hasOwnProperty('id')) {
 							element.id = parseInt(element.id)
 						}
 						return element !== '' && Object.keys(element).length > 0
 					})
-					let mursFavoris = murs[3].filter(function (element) {
+					let mursFavoris = murs[4].filter(function (element) {
 						if (element.hasOwnProperty('id')) {
 							element.id = parseInt(element.id)
+							if (contenusSupprimes.includes(parseInt(element.id))) {
+								favorisSupprimes.push(parseInt(element.id))
+							}
 						}
-						return element !== '' && Object.keys(element).length > 0
+						return element !== '' && Object.keys(element).length > 0 && !contenusSupprimes.includes(element.id)
 					})
 					// Suppresion redondances murs rejoints et murs administrés
 					mursRejoints.forEach(function (mur, index) {
@@ -295,6 +307,11 @@ async function demarrerServeur () {
 					})
 					// Supprimer doublons
 					mursCrees = mursCrees.filter((valeur, index, self) =>
+						index === self.findIndex((t) => (
+							t.id === valeur.id && t.token === valeur.token
+						))
+					)
+					mursCorbeille = mursCorbeille.filter((valeur, index, self) =>
 						index === self.findIndex((t) => (
 							t.id === valeur.id && t.token === valeur.token
 						))
@@ -314,6 +331,8 @@ async function demarrerServeur () {
 							t.id === valeur.id && t.token === valeur.token
 						))
 					)
+					// Dossiers
+					let contenusSupprimesDansDossiers = []
 					let dossiers = []
 					if (donneesUtilisateur.hasOwnProperty('dossiers')) {
 						try {
@@ -326,6 +345,9 @@ async function demarrerServeur () {
 					dossiers.forEach(function (dossier, indexDossier) {
 						dossier.murs.forEach(function (mur, indexMur) {
 							dossiers[indexDossier].murs[indexMur] = parseInt(mur)
+							if (contenusSupprimes.includes(parseInt(mur))) {
+								contenusSupprimesDansDossiers.push({ mur: parseInt(mur), dossier: dossier.id })
+							}
 							if (!listeMursDossiers.includes(parseInt(mur))) {
 								listeMursDossiers.push(parseInt(mur))
 							}
@@ -354,6 +376,20 @@ async function demarrerServeur () {
 								})
 							}
 						})
+						// Préparer contenus corbeille avec favoris et dossiers
+						mursCorbeille.forEach(function (mur, indexMur) {
+							if (favorisSupprimes.includes(mur.id)) {
+								mursCorbeille[indexMur].favori = true
+							} else {
+								mursCorbeille[indexMur].favori = false
+							}
+							if (contenusSupprimesDansDossiers.map(function (e) { return e.mur }).includes(mur.id)) {
+								const index = contenusSupprimesDansDossiers.map(function (e) { return e.mur }).indexOf(mur.id)
+								mursCorbeille[indexMur].dossier = contenusSupprimesDansDossiers[index].dossier
+							} else {
+								mursCorbeille[indexMur].dossier = ''
+							}
+						})
 						// Supprimer doublons dans dossiers
 						dossiers.forEach(function (dossier, indexDossier) {
 							const murs = []
@@ -366,6 +402,14 @@ async function demarrerServeur () {
 							})
 						})
 						await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
+						// Supprimer contenus corbeille dans dossiers
+						dossiers.forEach(function (dossier, indexDossier) {
+							dossier.murs.forEach(function () {
+								dossiers[indexDossier].murs = dossiers[indexDossier].murs.filter(function (element) {
+									return !contenusSupprimes.includes(element)
+								})
+							})
+						})
 						const pageContextInit = {
 							urlOriginal: req.originalUrl,
 							params: req.query,
@@ -379,6 +423,7 @@ async function demarrerServeur () {
 							affichage: donneesUtilisateur.affichage,
 							classement: donneesUtilisateur.classement,
 							mursCrees: mursCrees,
+							mursCorbeille: mursCorbeille,
 							mursRejoints: mursRejoints,
 							mursAdmins: mursAdmins,
 							mursFavoris: mursFavoris,
@@ -742,15 +787,16 @@ async function demarrerServeur () {
 				const token = Math.random().toString(16).slice(10)
 				const slug = definirSlug(titre)
 				const date = dayjs().format()
+				const destination = req.body.dossier
 				const resultat = await db.EXISTS('mur')
 				if (resultat === null) { res.send('erreur_creation'); return false }
 				if (resultat === 1) {
 					const reponse = await db.GET('mur')
 					if (reponse === null) { res.send('erreur_creation'); return false }
 					const id = parseInt(reponse) + 1
-					creerMur(res, id, token, slug, titre, date, identifiant)
+					creerMur(res, id, token, slug, titre, date, identifiant, destination, donneesUtilisateur)
 				} else {
-					creerMur(res, 1, token, slug, titre, date, identifiant)
+					creerMur(res, 1, token, slug, titre, date, identifiant, destination, donneesUtilisateur)
 				}
 			} else {
 				res.send('non_connecte')
@@ -852,8 +898,11 @@ async function demarrerServeur () {
 	app.post('/api/ajouter-mur-favoris', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
-			const mur = req.body.murId
-			if (await verifierAdminUtilisateur(mur, identifiant, req.session.motdepasse) === true) {
+			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
+			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
+				const mur = req.body.murId
 				await db.SADD('murs-favoris:' + identifiant, mur.toString())
 				res.send('mur_ajoute_favoris')
 			} else {
@@ -868,8 +917,11 @@ async function demarrerServeur () {
 	app.post('/api/supprimer-mur-favoris', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
-			const mur = req.body.murId
-			if (await verifierAdminUtilisateur(mur, identifiant, req.session.motdepasse) === true) {
+			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
+			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
+				const mur = req.body.murId
 				await db.SREM('murs-favoris:' + identifiant, mur.toString())
 				res.send('mur_supprime_favoris')
 			} else {
@@ -884,13 +936,13 @@ async function demarrerServeur () {
 	app.post('/api/deplacer-mur', async function (req, res) {
 		const identifiant = req.body.identifiant
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
-			const murId = req.body.murId
-			if (await verifierAdminUtilisateur(murId, identifiant, req.session.motdepasse) === true) {
+			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
+			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
+				const murId = req.body.murId
 				const destination = req.body.destination
-				let donnees = await db.HGETALL('utilisateurs:' + identifiant)
-				donnees = Object.assign({}, donnees)
-				if (donnees === null) { res.send('erreur_deplacement'); return false }
-				const dossiers = JSON.parse(donnees.dossiers)
+				const dossiers = JSON.parse(donneesUtilisateur.dossiers)
 				dossiers.forEach(function (dossier, indexDossier) {
 					if (dossier.murs.includes(murId)) {
 						const indexMur = dossier.murs.indexOf(murId)
@@ -1010,6 +1062,20 @@ async function demarrerServeur () {
 										for (let i = 0; i < liste.Contents.length; i++) {
 											await s3Client.send(new CopyObjectCommand({ Bucket: bucket, Key: id + '/' + liste.Contents[i].Key.replace(mur + '/', ''), CopySource: '/' + bucket + '/' + liste.Contents[i].Key, ACL: 'public-read' }))
 										}
+									}
+								}
+								const destination = req.body.dossier
+								if (destination !== '') {
+									let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
+									donneesUtilisateur = Object.assign({}, donneesUtilisateur)
+									if (donneesUtilisateur !== null) {
+										const dossiers = JSON.parse(donneesUtilisateur.dossiers)
+										dossiers.forEach(function (dossier, indexDossier) {
+											if (dossier.id === destination) {
+												dossiers[indexDossier].murs.push(id)
+											}
+										})
+										await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
 									}
 								}
 								res.json({ id: id, token: token, slug: slug, titre: 'Copie de ' + donnees.titre, identifiant: identifiant, fond: donnees.fond, acces: donnees.acces, motdepasseAdmin: donnees.motdepasseAdmin, code: code, contributions: donnees.contributions, affichage: donnees.affichage, registreActivite: donnees.registreActivite, conversation: donnees.conversation, listeUtilisateurs: donnees.listeUtilisateurs, editionNom: donnees.editionNom, fichiers: donnees.fichiers, enregistrements: donnees.enregistrements, liens: donnees.liens, documents: donnees.documents, commentaires: donnees.commentaires, evaluations: donnees.evaluations, verrouillage: donnees.verrouillage, epinglage: epinglage, copieBloc: donnees.copieBloc, ordre: donnees.ordre, largeur: donnees.largeur, date: date, colonnes: donnees.colonnes, affichageColonnes: donnees.affichageColonnes, bloc: donnees.bloc, activite: 0, admins: [], vues: 0 })
@@ -1558,6 +1624,44 @@ async function demarrerServeur () {
 		}
 	})
 
+	app.post('/api/mettre-mur-corbeille', async function (req, res) {
+		const identifiant = req.body.identifiant
+		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
+			const murId = req.body.murId
+			if (await verifierAdminUtilisateur(murId, identifiant, req.session.motdepasse) === true) {
+				await db
+				.multi()
+				.SADD('murs-supprimes:' + identifiant, murId.toString())
+				.SREM('murs-crees:' + identifiant, murId.toString())
+				.exec()
+				res.send('mur_supprime')
+			} else {
+				res.send('non_autorise')
+			}
+		} else {
+			res.send('non_connecte')
+		}
+	})
+
+	app.post('/api/restaurer-mur', async function (req, res) {
+		const identifiant = req.body.identifiant
+		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
+			const murId = req.body.murId
+			if (await verifierAdminUtilisateur(murId, identifiant, req.session.motdepasse) === true) {
+				await db
+				.multi()
+				.SREM('murs-supprimes:' + identifiant, murId.toString())
+				.SADD('murs-crees:' + identifiant, murId.toString())
+				.exec()
+				res.send('mur_restaure')
+			} else {
+				res.send('non_autorise')
+			}
+		} else {
+			res.send('non_connecte')
+		}
+	})
+
 	app.post('/api/supprimer-mur', async function (req, res) {
 		if (maintenance === true) {
 			res.redirect('/maintenance')
@@ -1602,6 +1706,7 @@ async function demarrerServeur () {
 						.UNLINK('activite:' + mur)
 						.UNLINK('dates-murs:' + mur)
 						.SREM('murs-crees:' + identifiant, mur.toString())
+						.SREM('murs-supprimes:' + identifiant, mur.toString())
 						.exec()
 						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
 						if (utilisateurs === null) { res.send('erreur_suppression'); return false }
@@ -1909,6 +2014,7 @@ async function demarrerServeur () {
 					.multi()
 					.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
 					.SREM('murs-crees:' + identifiant, mur.toString())
+					.SREM('murs-supprimes:' + identifiant, mur.toString())
 					.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
 					.SREM('utilisateurs-murs:' + mur, identifiant)
 					.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
@@ -1951,6 +2057,7 @@ async function demarrerServeur () {
 								.multi()
 								.SADD('murs-crees:' + nouvelIdentifiant, mur.toString())
 								.SREM('murs-crees:' + identifiant, mur.toString())
+								.SREM('murs-supprimes:' + identifiant, mur.toString())
 								.SADD('utilisateurs-murs:' + mur, nouvelIdentifiant)
 								.SREM('utilisateurs-murs:' + mur, identifiant)
 								.HSET('murs:' + mur, 'identifiant', nouvelIdentifiant)
@@ -2156,6 +2263,7 @@ async function demarrerServeur () {
 						await db
 						.multi()
 						.UNLINK('murs-crees:' + identifiant)
+						.UNLINK('murs-supprimes:' + identifiant)
 						.UNLINK('murs-rejoints:' + identifiant)
 						.UNLINK('murs-favoris:' + identifiant)
 						.UNLINK('murs-admins:' + identifiant)
@@ -3301,6 +3409,7 @@ async function demarrerServeur () {
 						.UNLINK('activite:' + mur)
 						.UNLINK('dates-murs:' + mur)
 						.SREM('murs-crees:' + identifiant, mur.toString())
+						.SREM('murs-supprimes:' + identifiant, mur.toString())
 						.exec()
 						const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
 						if (utilisateurs === null) { res.send('erreur'); return false }
@@ -3351,6 +3460,7 @@ async function demarrerServeur () {
 								.UNLINK('activite:' + mur)
 								.UNLINK('dates-murs:' + mur)
 								.SREM('murs-crees:' + identifiant, mur.toString())
+								.SREM('murs-supprimes:' + identifiant, mur.toString())
 								.exec()
 								const utilisateurs = await db.SMEMBERS('utilisateurs-murs:' + mur)
 								if (utilisateurs === null) { res.send('erreur'); return false }
@@ -5586,7 +5696,7 @@ async function demarrerServeur () {
 		})
 	})
 
-	async function creerMur (res, id, token, slug, titre, date, identifiant) {
+	async function creerMur (res, id, token, slug, titre, date, identifiant, destination, donneesUtilisateur) {
 		if (id === 1) {
 			await db.SET('mur', 1)
 		} else {
@@ -5602,6 +5712,15 @@ async function demarrerServeur () {
 		if (stockage === 'fs') {
 			const chemin = path.join(__dirname, '..', '/static' + definirCheminFichiers() + '/' + id)
 			await fs.mkdirp(chemin)
+		}
+		if (destination !== '') {
+			const dossiers = JSON.parse(donneesUtilisateur.dossiers)
+			dossiers.forEach(function (dossier, indexDossier) {
+				if (dossier.id === destination) {
+					dossiers[indexDossier].murs.push(id)
+				}
+			})
+			await db.HSET('utilisateurs:' + identifiant, 'dossiers', JSON.stringify(dossiers))
 		}
 		res.json({ id: id, token: token, slug: slug, titre: titre, identifiant: identifiant, fond: '/img/fond7.png', acces: 'public', motdepasseAdmin: '', contributions: 'ouvertes', affichage: 'mur', registreActivite: 'active', conversation: 'desactivee', listeUtilisateurs: 'activee', editionNom: 'desactivee', fichiers: 'actives', enregistrements: 'desactives', liens: 'actives', documents: 'desactives', commentaires: 'desactives', evaluations: 'desactivees', verrouillage: 'desactive', epinglage: 'desactive', copieBloc: 'desactivee', ordre: 'croissant', largeur: 'normale', date: date, colonnes: [], affichageColonnes: [], bloc: 0, activite: 0, admins: [], vues: 0 })
 	}
@@ -5648,6 +5767,52 @@ async function demarrerServeur () {
 		// Murs créés
 		const donneesMursCrees = new Promise(async function (resolveMain) {
 			const murs = await db.SMEMBERS('murs-crees:' + identifiant)
+			const donneesMurs = []
+			if (murs === null) { resolveMain(donneesMurs) }
+			for (const mur of murs) {
+				const donneeMur = new Promise(async function (resolve) {
+					const resultat = await db.EXISTS('murs:' + mur)
+					if (resultat === null) { resolve({}); return false }
+					if (resultat === 1) {
+						let donnees = await db.HGETALL('murs:' + mur)
+						donnees = Object.assign({}, donnees)
+						if (donnees === null) { resolve({}); return false }
+						// Pour compatibilité avec les anciens chemins
+						if (donnees.hasOwnProperty('fond') && !donnees.fond.includes('/img/') && donnees.fond.substring(0, 1) !== '#' && donnees.fond !== '' && typeof donnees.fond === 'string') {
+							donnees.fond = path.basename(donnees.fond)
+						}
+						const reponse = await db.EXISTS('utilisateurs:' + donnees.identifiant)
+						if (reponse === 1) {
+							let utilisateur = await db.HGETALL('utilisateurs:' + donnees.identifiant)
+							utilisateur = Object.assign({}, utilisateur)
+							if (utilisateur === null) {
+								donnees.nom = donnees.identifiant
+								resolve(donnees)
+								return false
+							}
+							if (utilisateur.nom === '') {
+								donnees.nom = donnees.identifiant
+							} else {
+								donnees.nom = utilisateur.nom
+							}
+							resolve(donnees)
+						} else {
+							donnees.nom = donnees.identifiant
+							resolve(donnees)
+						}
+					} else {
+						resolve({})
+					}
+				})
+				donneesMurs.push(donneeMur)
+			}
+			Promise.all(donneesMurs).then(function (resultat) {
+				resolveMain(resultat)
+			})
+		})
+		// Murs supprimés
+		const donneesMursSupprimes = new Promise(async function (resolveMain) {
+			const murs = await db.SMEMBERS('murs-supprimes:' + identifiant)
 			const donneesMurs = []
 			if (murs === null) { resolveMain(donneesMurs) }
 			for (const mur of murs) {
@@ -5829,7 +5994,7 @@ async function demarrerServeur () {
 				resolveMain(resultat)
 			})
 		})
-		return Promise.all([donneesMursCrees, donneesMursRejoints, donneesMursAdmins, donneesMursFavoris])
+		return Promise.all([donneesMursCrees, donneesMursSupprimes, donneesMursRejoints, donneesMursAdmins, donneesMursFavoris])
 	}
 
 	function recupererDonneesAuteur (identifiant) {

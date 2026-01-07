@@ -77,6 +77,10 @@
 					<span class="bouton supprimer" role="button" :tabindex="definirTabIndex()" :title="$t('supprimerDossier')" @click="afficherModaleConfirmation($event, item.id, 'supprimer-dossier')" @keydown.enter="afficherModaleConfirmation($event, item.id, 'supprimer-dossier')"><i class="material-icons">delete</i></span>
 				</div>
 			</div>
+			<div class="onglet" role="button" :tabindex="definirTabIndex()" :class="{'actif': onglet === 'murs-corbeille'}" @click="modifierOnglet('murs-corbeille')" @keydown.enter="modifierOnglet('murs-corbeille')">
+				<span>{{ $t('corbeille') }}</span>
+				<span class="badge">{{ mursCorbeille.length }}</span>
+			</div>
 			<span class="bouton-ajouter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleAjouterDossier" @keydown.enter="afficherModaleAjouterDossier">{{ $t('ajouterDossier') }}</span>
 		</div>
 
@@ -105,7 +109,7 @@
 						<span role="button" :tabindex="definirTabIndex()" :title="$t('affichageMosaique')" @click="modifierAffichage('mosaique')" @keydown.enter="modifierAffichage('mosaique')"><i class="material-icons">view_module</i></span>
 					</div>
 				</div>
-				<div id="actions-dossier" v-if="onglet !== 'murs-crees' && onglet !== 'murs-rejoints' && onglet !== 'murs-admins' && onglet !== 'murs-favoris'">
+				<div id="actions-dossier" v-if="onglet !== 'murs-crees' && onglet !== 'murs-rejoints' && onglet !== 'murs-admins' && onglet !== 'murs-favoris' && onglet !== 'murs-corbeille'">
 					<div class="conteneur">
 						<label>{{ $t('actionsDossier') }}</label>
 						<span role="button" :tabindex="definirTabIndex()" class="bouton" :title="$t('modifierDossier')" @click="afficherModaleModifierDossier($event, onglet)" @keydown.enter="afficherModaleModifierDossier($event, onglet)"><i class="material-icons">edit</i></span>
@@ -116,21 +120,24 @@
 					<template v-for="(mur, indexMur) in murs">
 						<div :id="'mur-' + mur.id" class="mur liste" v-if="affichage === 'liste'" :key="'mur_liste_' + indexMur">
 							<a class="fond" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" />
-							<a class="meta" :class="{'mur-rejoint': mur.identifiant !== identifiant, 'deplacer': dossiers.length > 0}" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
+							<a class="meta" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />
 								<span class="titre">{{ mur.titre }}</span>
-								<span class="date">{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
+								<span class="dossier" v-if="verifierDossierMur(mur.id) && (onglet === 'murs-crees' || onglet === 'murs-rejoints' || onglet === 'murs-admins' || onglet === 'murs-favoris')"> (📁 {{ verifierTitreDossier(mur.id) }})</span>
+								<span class="date">&nbsp;-&nbsp;{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
 								<span class="auteur" v-if="mur.identifiant !== identifiant">&nbsp;{{ $t('par') }} {{ mur.identifiant }}</span>
 								<span class="vues" v-if="mur.vues > 1"> - {{ mur.vues }} {{ $t('vues') }}</span>
 								<span class="vues" v-else> - {{ mur.vues }} {{ $t('vue') }}</span>
 							</a>
 							<div class="actions" v-if="mur.identifiant === identifiant">
-								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
-								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else><i class="material-icons">star</i></span>
-								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0"><i class="material-icons">drive_file_move</i></span>
-								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')"><i class="material-icons">content_copy</i></span>
-								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')"><i class="material-icons">get_app</i></span>
-								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')"><i class="material-icons">delete</i></span>
+								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star_outline</i></span>
+								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else-if="favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star</i></span>
+								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0 && onglet !== 'murs-corbeille'"><i class="material-icons">drive_file_move</i></span>
+								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">content_copy</i></span>
+								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">get_app</i></span>
+								<span class="restaurer" role="button" :tabindex="definirTabIndex()" @click="restaurerMur(mur)" @keydown.enter="restaurerMur(mur)" :title="$t('restaurer')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">restore_from_trash</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">delete</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="mettreMurCorbeille(mur)" @keydown.enter="mettreMurCorbeille(mur)" :title="$t('supprimerMur')" v-else><i class="material-icons">delete</i></span>
 							</div>
 							<div class="actions" v-else>
 								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
@@ -145,7 +152,7 @@
 						<div :id="'mur-' + mur.id" class="mur mosaique" v-else :key="'mur_mosaique_' + indexMur">
 							<a class="conteneur" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<div class="meta">
-									<span class="titre"><span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />{{ mur.titre }}</span>
+									<span class="titre"><span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />{{ mur.titre }} <small v-if="verifierDossierMur(mur.id) && (onglet === 'murs-crees' || onglet === 'murs-rejoints' || onglet === 'murs-admins' || onglet === 'murs-favoris')"> (📁 {{ verifierTitreDossier(mur.id) }})</small></span>
 									<span class="date">{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
 									<span class="auteur" v-if="mur.identifiant !== identifiant">&nbsp;{{ $t('par') }} {{ mur.identifiant }}</span>
 									<span class="vues" v-if="mur.vues > 1"> - {{ mur.vues }} {{ $t('vues') }}</span>
@@ -153,12 +160,14 @@
 								</div>
 							</a>
 							<div class="actions" v-if="mur.identifiant === identifiant">
-								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
-								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else><i class="material-icons">star</i></span>
-								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0"><i class="material-icons">drive_file_move</i></span>
-								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')"><i class="material-icons">content_copy</i></span>
-								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')"><i class="material-icons">get_app</i></span>
-								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')"><i class="material-icons">delete</i></span>
+								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star_outline</i></span>
+								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else-if="favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star</i></span>
+								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0 && onglet !== 'murs-corbeille'"><i class="material-icons">drive_file_move</i></span>
+								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">content_copy</i></span>
+								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">get_app</i></span>
+								<span class="restaurer" role="button" :tabindex="definirTabIndex()" @click="restaurerMur(mur)" @keydown.enter="restaurerMur(mur)" :title="$t('restaurer')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">restore_from_trash</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">delete</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="mettreMurCorbeille(mur)" @keydown.enter="mettreMurCorbeille(mur)" :title="$t('supprimerMur')" v-else><i class="material-icons">delete</i></span>
 							</div>
 							<div class="actions" v-else>
 								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
@@ -181,21 +190,24 @@
 					<template v-for="(mur, indexMur) in resultats">
 						<div :id="'mur-' + mur.id" class="mur liste" v-if="affichage === 'liste'" :key="'mur_liste_' + indexMur">
 							<a class="fond" :href="'/w/' + mur.id + '/' + definirSlug(mur.titre)" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" />
-							<a class="meta" :class="{'mur-rejoint': mur.identifiant !== identifiant, 'deplacer': dossiers.length > 0}" :href="'/w/' + mur.id + '/' + mur.token + '/' + mur.token + '/' + definirSlug(mur.titre)">
+							<a class="meta" :href="'/w/' + mur.id + '/' + mur.token + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />
 								<span class="titre">{{ mur.titre }}</span>
-								<span class="date">{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
+								<span class="dossier" v-if="verifierDossierMur(mur.id) && (onglet === 'murs-crees' || onglet === 'murs-rejoints' || onglet === 'murs-admins' || onglet === 'murs-favoris')"> (📁 {{ verifierTitreDossier(mur.id) }})</span>
+								<span class="date">&nbsp;-&nbsp;{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
 								<span class="auteur" v-if="mur.identifiant !== identifiant">&nbsp;{{ $t('par') }} {{ mur.identifiant }}</span>
 								<span class="vues" v-if="mur.vues > 1"> - {{ mur.vues }} {{ $t('vues') }}</span>
 								<span class="vues" v-else> - {{ mur.vues }} {{ $t('vue') }}</span>
 							</a>
 							<div class="actions" v-if="mur.identifiant === identifiant">
-								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
-								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else><i class="material-icons">star</i></span>
-								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0"><i class="material-icons">drive_file_move</i></span>
-								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')"><i class="material-icons">content_copy</i></span>
-								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')"><i class="material-icons">get_app</i></span>
-								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')"><i class="material-icons">delete</i></span>
+								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star_outline</i></span>
+								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else-if="favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star</i></span>
+								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0 && onglet !== 'murs-corbeille'"><i class="material-icons">drive_file_move</i></span>
+								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">content_copy</i></span>
+								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">get_app</i></span>
+								<span class="restaurer" role="button" :tabindex="definirTabIndex()" @click="restaurerMur(mur)" @keydown.enter="restaurerMur(mur)" :title="$t('restaurer')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">restore_from_trash</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">delete</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="mettreMurCorbeille(mur)" @keydown.enter="mettreMurCorbeille(mur)" :title="$t('supprimerMur')" v-else><i class="material-icons">delete</i></span>
 							</div>
 							<div class="actions" v-else>
 								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
@@ -210,7 +222,7 @@
 						<div :id="'mur-' + mur.id" class="mur mosaique" v-else :key="'mur_mosaique_' + indexMur">
 							<a class="conteneur" :class="{'fond-personnalise': !mur.fond.includes('/img/') && mur.fond.substring(0, 1) !== '#'}" :style="definirFond(mur.fond, mur.id)" :href="'/w/' + mur.id + '/' + mur.token + '/' + definirSlug(mur.titre)">
 								<div class="meta">
-									<span class="titre"><span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />{{ mur.titre }}</span>
+									<span class="titre"><span class="mise-a-jour" v-if="mur.hasOwnProperty('notification') && mur.notification.includes(identifiant)" />{{ mur.titre }} <small v-if="verifierDossierMur(mur.id) && (onglet === 'murs-crees' || onglet === 'murs-rejoints' || onglet === 'murs-admins' || onglet === 'murs-favoris')"> (📁 {{ verifierTitreDossier(mur.id) }})</small></span>
 									<span class="date">{{ $t('creeLe') }} {{ $formaterDate(mur.date, langue) }}</span>
 									<span class="auteur" v-if="mur.identifiant !== identifiant">&nbsp;{{ $t('par') }} {{ mur.identifiant }}</span>
 									<span class="vues" v-if="mur.vues > 1"> - {{ mur.vues }} {{ $t('vues') }}</span>
@@ -218,12 +230,14 @@
 								</div>
 							</a>
 							<div class="actions" v-if="mur.identifiant === identifiant">
-								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
-								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else><i class="material-icons">star</i></span>
-								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0"><i class="material-icons">drive_file_move</i></span>
-								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')"><i class="material-icons">content_copy</i></span>
-								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')"><i class="material-icons">get_app</i></span>
-								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')"><i class="material-icons">delete</i></span>
+								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star_outline</i></span>
+								<span class="supprimer-favori" role="button" :tabindex="definirTabIndex()" @click="supprimerFavori(mur.id)" @keydown.enter="supprimerFavori(mur.id)" :title="$t('supprimerFavori')" v-else-if="favoris.includes(mur.id) && onglet !== 'murs-corbeille'"><i class="material-icons">star</i></span>
+								<span class="deplacer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleDeplacerMur(mur.id)" @keydown.enter="afficherModaleDeplacerMur(mur.id)" :title="$t('ajouterDansDossier')" :class="{'actif': verifierDossierMur(mur.id)}" v-if="dossiers.length > 0 && onglet !== 'murs-corbeille'"><i class="material-icons">drive_file_move</i></span>
+								<span class="dupliquer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'dupliquer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'dupliquer')" :title="$t('dupliquerMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">content_copy</i></span>
+								<span class="exporter" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'exporter')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'exporter')" :title="$t('exporterMur')" v-if="onglet !== 'murs-corbeille'"><i class="material-icons">get_app</i></span>
+								<span class="restaurer" role="button" :tabindex="definirTabIndex()" @click="restaurerMur(mur)" @keydown.enter="restaurerMur(mur)" :title="$t('restaurer')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">restore_from_trash</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="afficherModaleConfirmation($event, mur.id, 'supprimer')" @keydown.enter="afficherModaleConfirmation($event, mur.id, 'supprimer')" :title="$t('supprimerMur')" v-if="onglet === 'murs-corbeille'"><i class="material-icons">delete</i></span>
+								<span class="supprimer" role="button" :tabindex="definirTabIndex()" @click="mettreMurCorbeille(mur)" @keydown.enter="mettreMurCorbeille(mur)" :title="$t('supprimerMur')" v-else><i class="material-icons">delete</i></span>
 							</div>
 							<div class="actions" v-else>
 								<span class="ajouter-favori" role="button" :tabindex="definirTabIndex()" @click="ajouterFavori(mur)" @keydown.enter="ajouterFavori(mur)" :title="$t('ajouterFavori')" v-if="!favoris.includes(mur.id)"><i class="material-icons">star_outline</i></span>
@@ -300,7 +314,7 @@
 						<select id="champ-dossier-mur">
 							<option value="aucun" v-if="dossierActuel.id !== 'aucun'">{{ $t('aucunDossier') }}</option>
 							<template v-for="(item, indexItem) in dossiers">
-								<option :value="item.id" v-if="dossierActuel.id !== item.id" :key="'dossier_' + indexItem">{{ item.nom }}</option>
+								<option v-if="dossierActuel.id !== item.id" :value="item.id" :key="'dossier_' + indexItem">{{ item.nom }}</option>
 							</template>
 						</select>
 						<div class="actions">
@@ -480,6 +494,7 @@ export default {
 			classement: this.$pageContext.pageProps.classement,
 			limite: 100,
 			mursCrees: this.$pageContext.pageProps.mursCrees,
+			mursCorbeille: this.$pageContext.pageProps.mursCorbeille,
 			mursRejoints: this.$pageContext.pageProps.mursRejoints,
 			mursAdmins: this.$pageContext.pageProps.mursAdmins,
 			mursFavoris: this.$pageContext.pageProps.mursFavoris,
@@ -492,13 +507,15 @@ export default {
 		onglet: function (onglet) {
 			let murs = []
 			if (onglet === 'murs-crees') {
-				murs = this.mursCrees
+				murs = JSON.parse(JSON.stringify(this.mursCrees))
 			} else if (onglet === 'murs-rejoints') {
-				murs = this.mursRejoints
+				murs = JSON.parse(JSON.stringify(this.mursRejoints))
 			} else if (onglet === 'murs-admins') {
-				murs = this.mursAdmins
+				murs = JSON.parse(JSON.stringify(this.mursAdmins))
 			} else if (onglet === 'murs-favoris') {
-				murs = this.mursFavoris
+				murs = JSON.parse(JSON.stringify(this.mursFavoris))
+			} else if (onglet === 'murs-corbeille') {
+				murs = JSON.parse(JSON.stringify(this.mursCorbeille))
 			} else {
 				let listeMurs = []
 				this.dossiers.forEach(function (dossier) {
@@ -515,6 +532,7 @@ export default {
 			}
 			this.murs = murs
 			this.requete = ''
+			this.classer(this.classement)
 		},
 		requete: function () {
 			this.rechercher()
@@ -629,9 +647,15 @@ export default {
 		creerMur () {
 			if (this.titre !== '') {
 				this.chargementModale = true
+				const onglets = ['murs-crees', 'murs-rejoints', 'murs-admins', 'murs-favoris', 'murs-corbeille']
+				let dossierId = ''
+				if (this.onglet !== '' && !onglets.includes(this.onglet)) {
+					dossierId = this.onglet
+				}
 				axios.post(this.hote + '/api/creer-mur', {
 					titre: this.titre,
-					identifiant: this.identifiant
+					identifiant: this.identifiant,
+					dossier: dossierId
 				}).then(function (reponse) {
 					const donnees = reponse.data
 					if (donnees === 'non_connecte') {
@@ -694,6 +718,14 @@ export default {
 					} else {
 						this.onglet = 'murs-crees'
 						this.mursCrees.push(donnees)
+						this.classer(this.classement)
+						this.$nextTick(function () {
+							if (this.affichage === 'liste' && document.querySelector('#mur-' + donnees.id + ' a.meta')) {
+								document.querySelector('#mur-' + donnees.id + ' a.meta').focus()
+							} else if (this.affichage === 'mosaique' && document.querySelector('#mur-' + donnees.id + ' a')) {
+								document.querySelector('#mur-' + donnees.id + ' a').focus()
+							}
+						}.bind(this))
 						this.notification = this.$t('murImporte')
 					}
 				}.bind(this)).catch(function () {
@@ -816,6 +848,15 @@ export default {
 			})
 			return murDansDossier
 		},
+		verifierTitreDossier (murId) {
+			let titreDossier = ''
+			this.dossiers.forEach(function (dossier) {
+				if (dossier.murs.includes(murId)) {
+					titreDossier = dossier.nom
+				}
+			})
+			return titreDossier
+		},
 		afficherModaleDeplacerMur (murId) {
 			this.murId = murId
 			let dossierActuel = { id: 'aucun', nom: '' }
@@ -883,9 +924,15 @@ export default {
 		dupliquerMur () {
 			this.modaleConfirmation = ''
 			this.chargement = true
+			const onglets = ['murs-crees', 'murs-rejoints', 'murs-admins', 'murs-favoris', 'murs-corbeille']
+			let dossierId = ''
+			if (this.onglet !== '' && !onglets.includes(this.onglet)) {
+				dossierId = this.onglet
+			}
 			axios.post(this.hote + '/api/dupliquer-mur', {
 				murId: this.murId,
-				identifiant: this.identifiant
+				identifiant: this.identifiant,
+				dossier: dossierId
 			}).then(function (reponse) {
 				this.chargement = false
 				const donnees = reponse.data
@@ -897,9 +944,26 @@ export default {
 					this.message = this.$t('actionNonAutorisee')
 				} else {
 					this.mursCrees.push(donnees)
+					if (dossierId !== '') {
+						this.murs.push(donnees)
+						this.dossiers.forEach(function (dossier, indexDossier) {
+							if (dossier.id === dossierId) {
+								this.dossiers[indexDossier].murs.push(donnees.id)
+							}
+						}.bind(this))
+					} else {
+						this.onglet = 'murs-crees'
+					}
+					this.classer(this.classement)
+					this.$nextTick(function () {
+						if (this.affichage === 'liste' && document.querySelector('#mur-' + donnees.id + ' a.meta')) {
+							document.querySelector('#mur-' + donnees.id + ' a.meta').focus()
+						} else if (this.affichage === 'mosaique' && document.querySelector('#mur-' + donnees.id + ' a')) {
+							document.querySelector('#mur-' + donnees.id + ' a').focus()
+						}
+					}.bind(this))
 					this.notification = this.$t('murDuplique')
 					this.murId = ''
-					this.onglet = 'murs-crees'
 				}
 			}.bind(this)).catch(function () {
 				this.chargement = false
@@ -935,6 +999,113 @@ export default {
 				this.message = this.$t('erreurCommunicationServeur')
 			}.bind(this))
 		},
+		restaurerMur (mur) {
+			this.chargement = true
+			const murId = mur.id
+			axios.post(this.hote + '/api/restaurer-mur', {
+				murId: murId,
+				identifiant: this.identifiant
+			}).then(function (reponse) {
+				this.chargement = false
+				const donnees = reponse.data
+				if (donnees === 'non_connecte') {
+					window.location.href = '/'
+				} else if (donnees === 'non_autorise') {
+					this.message = this.$t('actionNonAutorisee')
+				} else if (donnees === 'mur_restaure') {
+					this.mursCrees.push(mur)
+					this.mursCorbeille.forEach(function (mur, index) {
+						if (mur.id === murId) {
+							if (mur.favori === true) {
+								this.mursFavoris.push(mur)
+								this.favoris.push(murId)
+							}
+							if (mur.dossier !== '') {
+								this.dossiers.forEach(function (dossier, indexDossier) {
+									if (dossier.id === mur.dossier) {
+										this.dossiers[indexDossier].murs.push(murId)
+									}
+								}.bind(this))
+							}
+							this.mursCorbeille.splice(index, 1)
+						}
+					}.bind(this))
+					this.murs.forEach(function (mur, index) {
+						if (mur.id === murId) {
+							this.murs.splice(index, 1)
+						}
+					}.bind(this))
+					this.resultats.forEach(function (mur, index) {
+						if (mur.id === murId) {
+							this.resultats.splice(index, 1)
+						}
+					}.bind(this))
+					this.classer(this.classement)
+					this.notification = this.$t('murRestaure')
+				}
+			}.bind(this)).catch(function () {
+				this.chargement = false
+				this.message = this.$t('erreurCommunicationServeur')
+			}.bind(this))
+		},
+		mettreMurCorbeille (mur) {
+			this.chargement = true
+			const murId = mur.id
+			axios.post(this.hote + '/api/mettre-mur-corbeille', {
+				murId: murId,
+				identifiant: this.identifiant
+			}).then(function (reponse) {
+				this.chargement = false
+				const donnees = reponse.data
+				if (donnees === 'non_connecte') {
+					window.location.href = '/'
+				} else if (donnees === 'non_autorise') {
+					this.message = this.$t('actionNonAutorisee')
+				} else if (donnees === 'mur_supprime') {
+					mur.favori = false
+					mur.dossier = ''
+					this.mursFavoris.forEach(function (favori, indexFavori) {
+						if (favori.id === murId) {
+							this.mursFavoris.splice(indexFavori, 1)
+							mur.favori = true
+						}
+					}.bind(this))
+					this.dossiers.forEach(function (dossier, index) {
+						if (dossier.murs.includes(murId)) {
+							const indexContenu = dossier.murs.indexOf(murId)
+							this.dossiers[index].murs.splice(indexContenu, 1)
+							mur.dossier = dossier.id
+						}
+					}.bind(this))
+					this.mursCorbeille.push(mur)
+					this.mursCrees.forEach(function (mur, index) {
+						if (mur.id === murId) {
+							this.mursCrees.splice(index, 1)
+						}
+					}.bind(this))
+					this.murs.forEach(function (mur, index) {
+						if (mur.id === murId) {
+							this.murs.splice(index, 1)
+						}
+					}.bind(this))
+					this.favoris.forEach(function (favori, indexFavori) {
+						if (favori === murId) {
+							this.favoris.splice(indexFavori, 1)
+						}
+					}.bind(this))
+					this.resultats.forEach(function (mur, index) {
+						if (mur.id === murId) {
+							this.resultats.splice(index, 1)
+						}
+					}.bind(this))
+					this.classer(this.classement)
+					this.notification = this.$t('murDansCorbeille')
+				}
+			}.bind(this)).catch(function () {
+				this.chargement = false
+				this.message = this.$t('erreurCommunicationServeur')
+			}.bind(this))
+		},
 		supprimerMur () {
 			this.modaleConfirmation = ''
 			this.chargement = true
@@ -954,9 +1125,9 @@ export default {
 				} else if (donnees === 'erreur_suppression') {
 					this.message = this.$t('erreurSuppressionMur')
 				} else {
-					this.mursCrees.forEach(function (mur, index) {
+					this.mursCorbeille.forEach(function (mur, index) {
 						if (mur.id === this.murId) {
-							this.mursCrees.splice(index, 1)
+							this.mursCorbeille.splice(index, 1)
 						}
 					}.bind(this))
 					this.mursRejoints.forEach(function (mur, index) {
@@ -974,9 +1145,9 @@ export default {
 							this.mursFavoris.splice(index, 1)
 						}
 					}.bind(this))
-					this.favoris.forEach(function (favori, index) {
+					this.favoris.forEach(function (favori, indexFavori) {
 						if (favori === this.murId) {
-							this.favoris.splice(index, 1)
+							this.favoris.splice(indexFavori, 1)
 						}
 					}.bind(this))
 					this.murs.forEach(function (mur, index) {
@@ -984,8 +1155,8 @@ export default {
 							this.murs.splice(index, 1)
 						}
 					}.bind(this))
-					this.resultats.forEach(function (pad, index) {
-						if (pad.id === this.padId) {
+					this.resultats.forEach(function (mur, index) {
+						if (mur.id === this.murId) {
 							this.resultats.splice(index, 1)
 						}
 					}.bind(this))
@@ -1728,25 +1899,12 @@ export default {
 }
 
 .mur.liste .meta {
-	width: calc(100% - (96px + 13.5rem));
-}
-
-.mur.liste .meta.mur-rejoint {
-	width: calc(100% - (48px + 10.5rem));
-}
-
-.mur.liste .meta.deplacer {
-	width: calc(100% - (120px + 15rem));
-}
-
-.mur.liste .meta.mur-rejoint.deplacer {
-	width: calc(100% - (72px + 12rem));
+	flex-grow: 1;
 }
 
 .mur.liste .titre {
 	font-size: 1.8rem;
 	font-weight: 700;
-	margin-right: 0.7rem;
 }
 
 .mur.liste .vues,

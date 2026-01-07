@@ -14,7 +14,7 @@
 	"remplirChamps": "Please fill in all the fields of the form.",
 	"identifiantExisteDeja": "Username <i>{identifiant}<\/i> already exists.",
 	"motsDePassePasIdentiques": "The 2 passwords are not identical.",
-	"monCompte": "My Account",
+	"monCompte": "My Digiwall account",
 	"parametresCompte": "Account settings",
 	"rechercher": "Search",
 	"recherche": "Search",
@@ -431,5 +431,9 @@
 	"repeterImageFond": "Repeat background image",
 	"parametreFondModifie": "Background image repeat parameter changed.",
 	"aValideCapsule": "approved the capsule \"{titre}\"",
-	"aValideUneCapsule": "approved a capsule"
+	"aValideUneCapsule": "approved a capsule",
+	"corbeille": "Trashbin",
+	"restaurer": "Restore",
+	"murRestaure": "Wall restored.",
+	"murDansCorbeille": "Wall trashed."
 }

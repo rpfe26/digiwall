@@ -14,7 +14,7 @@
 	"remplirChamps": "Por favor, complete todos los campos del formulario.",
 	"identifiantExisteDeja": "El usuario <i>{identifiant}<\/i> ya existe.",
 	"motsDePassePasIdentiques": "Las 2 contraseñas no coinciden.",
-	"monCompte": "Mi cuenta",
+	"monCompte": "Mi cuenta Digiwall",
 	"parametresCompte": "Parámetros de cuenta",
 	"rechercher": "Buscar",
 	"recherche": "Buscar",
@@ -431,5 +431,9 @@
 	"repeterImageFond": "Repetir imagen de fondo",
 	"parametreFondModifie": "Parámetro de repetición de imagen de fondo modificado.",
 	"aValideCapsule": "ha aprobado la cápsula «{titre}»",
-	"aValideUneCapsule": "ha aprobado una cápsula"
+	"aValideUneCapsule": "ha aprobado una cápsula",
+	"corbeille": "Papelera",
+	"restaurer": "Restaurar",
+	"murRestaure": "Muro restaurado.",
+	"murDansCorbeille": "Muro enviado a la papelera."
 }

@@ -17,12 +17,13 @@ async function onBeforeRender (pageContext) {
 		const affichage = pageContext.affichage
 		const classement = pageContext.classement
 		const mursCrees = pageContext.mursCrees
+		const mursCorbeille = pageContext.mursCorbeille
 		const mursRejoints = pageContext.mursRejoints
 		const mursAdmins = pageContext.mursAdmins
 		const mursFavoris = pageContext.mursFavoris
 		const dossiers = pageContext.dossiers
 		const titre = identifiant + ' - Digiwall by La Digitale'
-		pageProps = { urlOriginal, params, hote, identifiant, nom, email, langue, statut, affichage, classement, mursCrees, mursRejoints, mursAdmins, mursFavoris, dossiers, titre }
+		pageProps = { urlOriginal, params, hote, identifiant, nom, email, langue, statut, affichage, classement, mursCrees, mursCorbeille, mursRejoints, mursAdmins, mursFavoris, dossiers, titre }
 	}
 	return {
 		pageContext: {
