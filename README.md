@@ -77,6 +77,7 @@ S3_BUCKET (nom du conteneur s3)
 S3_MAX_SOCKETS (nombre maximum de sockets pour httpsAgent du client S3)
 VITE_DOCX_VIEWER (lien vers une visionneuse pour les documents MS Office / téléchargement du fichier par défaut)
 UPLOAD_HOST (lien vers un serveur externe pour le traitement des téléversements / équivalent à DOMAIN par défaut)
+ENCRYPTION_KEY (clé pour decrypter les données Digidrive / uniquement nécessaire si Digidrive est utilisé)
 ```
 
 ### Projet Vue (Vue.js 3 et Vike) avec serveur Node.js (Express) et base de données Redis
