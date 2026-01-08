@@ -35,7 +35,8 @@ libre.convertAsync = util.promisify(libre.convert)
 import { RedisStore } from 'connect-redis'
 import session from 'express-session'
 import { EventEmitter } from 'events'
-import base64 from 'base-64'
+import Rabbit from 'crypto-js/rabbit.js'
+import Utf8 from 'crypto-js/enc-utf8.js'
 import checkDiskSpace from 'check-disk-space'
 import { S3Client, CopyObjectCommand, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { renderPage, createDevMiddleware } from 'vike/server'
@@ -176,6 +177,8 @@ async function demarrerServeur () {
 
 	const creationCompte = parseInt(process.env.VITE_CREATE_ACCOUNT) || 1
 	const creationMurSansCompte = parseInt(process.env.VITE_WALL_WITHOUT_ACCOUNT) || 1
+
+	const cleCrypto = process.env.ENCRYPTION_KEY || ''
 
 	// Augmenter nombre de tâches asynchrones par défaut
 	EventEmitter.defaultMaxListeners = 20
@@ -464,13 +467,7 @@ async function demarrerServeur () {
 			res.redirect('/maintenance')
 			return false
 		}
-		const userAgent = req.headers['user-agent']
-		if (req.query.id && req.query.id !== '' && req.query.mdp && req.query.mdp !== '') {
-			const id = req.query.id
-			const mdp = base64.decode(req.query.mdp)
-			await verifierAcces(req, req.params.id, id, mdp)
-		}
-		if (!req.query.id && !req.query.mdp && (req.session.identifiant === '' || req.session.identifiant === undefined)) {
+		if (req.session.identifiant === '' || req.session.identifiant === undefined) {
 			const identifiant = 'u' + Math.random().toString(16).slice(3)
 			req.session.identifiant = identifiant
 			req.session.motdepasse = ''
@@ -483,15 +480,36 @@ async function demarrerServeur () {
 			req.session.blocsAutorises = []
 			req.session.cookie.expires = new Date(Date.now() + dureeSession)
 		}
-		if (!req.query.id && !req.query.mdp && !req.session.hasOwnProperty('acces')) {
+		if (!req.session.hasOwnProperty('acces')) {
 			req.session.acces = []
 		}
-		if (!req.query.id && !req.query.mdp && !req.session.hasOwnProperty('murs')) {
+		if (!req.session.hasOwnProperty('murs')) {
 			req.session.murs = []
 		}
-		if (!req.query.id && !req.query.mdp && !req.session.hasOwnProperty('blocsAutorises')) {
+		if (!req.session.hasOwnProperty('blocsAutorises')) {
 			req.session.blocsAutorises = []
 		}
+		if (req.query.id && req.query.id !== '' && req.query.mdp && req.query.mdp !== '') {
+			try {
+				const id = decodeURIComponent(req.query.id)
+				const mdpB = Rabbit.decrypt(decodeURIComponent(req.query.mdp), cleCrypto)
+				const mdp = mdpB.toString(Utf8)
+				const mur = req.params.id
+				const { acces, utilisateur } = await verifierAcces(mur, id, mdp)
+				if (acces === 'mur_debloque') {
+					req.session.identifiant = utilisateur.id
+					req.session.motdepasse = ''
+					req.session.nom = utilisateur.nom
+					req.session.statut = 'auteur'
+					req.session.langue = utilisateur.langue
+					if (!req.session.murs.includes(parseInt(mur))) {
+						req.session.murs.push(parseInt(mur))
+					}
+					req.session.cookie.expires = new Date(Date.now() + dureeSession)
+				}
+			} catch (e) {}
+		}
+		const userAgent = req.headers['user-agent']
 		const pageContextInit = {
 			urlOriginal: req.originalUrl,
 			params: req.query,
@@ -6517,75 +6535,39 @@ async function demarrerServeur () {
 		})
 	}
 
-	async function verifierAcces (req, mur, identifiant, motdepasse) {
+	async function verifierAcces (mur, identifiant, motdepasse) {
 		return new Promise(async function (resolve) {
 			let donnees = await db.HGETALL('murs:' + mur)
 			donnees = Object.assign({}, donnees)
-			if (donnees === null || !donnees.hasOwnProperty('identifiant')) { resolve('erreur'); return false }
+			if (donnees === null || !donnees.hasOwnProperty('identifiant')) { resolve({ acces: 'erreur', utilisateur: {} }); return false }
 			if (identifiant === donnees.identifiant && motdepasse.trim() !== '' && donnees.hasOwnProperty('motdepasse') && donnees.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, donnees.motdepasse)) {
 				let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 				utilisateur = Object.assign({}, utilisateur)
-				if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
-				req.session.identifiant = utilisateur.id
-				req.session.motdepasse = ''
-				req.session.nom = utilisateur.nom
-				req.session.statut = 'auteur'
-				req.session.langue = utilisateur.langue
-				if (!req.session.hasOwnProperty('acces')) {
-					req.session.acces = []
-				}
-				if (!req.session.hasOwnProperty('murs')) {
-					req.session.murs = []
-				}
-				if (!req.session.murs.includes(parseInt(mur))) {
-					req.session.murs.push(parseInt(mur))
-				}
-				if (!req.session.hasOwnProperty('blocsAutorises')) {
-					req.session.blocsAutorises = []
-				}
+				if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve({ acces: 'erreur', utilisateur: {} }); return false }
 				if (!donnees.hasOwnProperty('digidrive') || (donnees.hasOwnProperty('digidrive') && parseInt(donnees.digidrive) === 0)) {
 					await db.HSET('murs:' + mur, 'digidrive', 1)
 				}
-				req.session.cookie.expires = new Date(Date.now() + dureeSession)
-				resolve('mur_debloque')
+				resolve({ acces: 'mur_debloque', utilisateur: utilisateur })
 			} else if (identifiant === donnees.identifiant && !donnees.hasOwnProperty('motdepasse')) {
 				const resultat = await db.EXISTS('utilisateurs:' + identifiant)
-				if (resultat === null) { resolve('erreur'); return false }
+				if (resultat === null) { resolve({ acces: 'erreur', utilisateur: {} }); return false }
 				if (resultat === 1) {
 					let utilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 					utilisateur = Object.assign({}, utilisateur)
-					if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('motdepasse') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve('erreur'); return false }
+					if (utilisateur === null || !utilisateur.hasOwnProperty('id') || !utilisateur.hasOwnProperty('motdepasse') || !utilisateur.hasOwnProperty('nom') || !utilisateur.hasOwnProperty('langue')) { resolve({ acces: 'erreur', utilisateur: {} }); return false }
 					if (motdepasse.trim() !== '' && utilisateur.hasOwnProperty('motdepasse') && utilisateur.motdepasse.trim() !== '' && await bcrypt.compare(motdepasse, utilisateur.motdepasse)) {
-						req.session.identifiant = utilisateur.id
-						req.session.motdepasse = ''
-						req.session.nom = utilisateur.nom
-						req.session.statut = 'auteur'
-						req.session.langue = utilisateur.langue
-						if (!req.session.hasOwnProperty('acces')) {
-							req.session.acces = []
-						}
-						if (!req.session.hasOwnProperty('murs')) {
-							req.session.murs = []
-						}
-						if (!req.session.murs.includes(parseInt(mur))) {
-							req.session.murs.push(parseInt(mur))
-						}
-						if (!req.session.hasOwnProperty('blocsAutorises')) {
-							req.session.blocsAutorises = []
-						}
 						if (!donnees.hasOwnProperty('digidrive') || (donnees.hasOwnProperty('digidrive') && parseInt(donnees.digidrive) === 0)) {
 							await db.HSET('murs:' + mur, 'digidrive', 1)
 						}
-						req.session.cookie.expires = new Date(Date.now() + dureeSession)
-						resolve('mur_debloque')
+						resolve({ acces: 'mur_debloque', utilisateur: utilisateur })
 					} else {
-						resolve('erreur')
+						resolve({ acces: 'erreur', utilisateur: {} })
 					}
 				} else {
-					resolve('erreur')
+					resolve({ acces: 'erreur', utilisateur: {} })
 				}
 			} else {
-				resolve('erreur')
+				resolve({ acces: 'erreur', utilisateur: {} })
 			}
 		})
 	}
