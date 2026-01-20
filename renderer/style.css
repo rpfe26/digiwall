@@ -861,7 +861,7 @@ label.bouton-bleu {
 }
 
 #texte.mobile {
-	border-bottom: 0;
+	border-bottom: 0!important;
 }
 
 #texte.mobile .boutons-editeur {
