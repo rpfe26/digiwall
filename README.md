@@ -55,7 +55,7 @@ VITE_UPLOAD_FILE_TYPES (types de fichiers autorisés pour le téléversement / p
 VITE_WALL_LIMIT (nombre maximum de murs par compte utilisateur)
 VITE_WALL_WITHOUT_ACCOUNT (0 ou 1 / pour autoriser la création de murs sans compte)
 VITE_CREATE_ACCOUNT (0 ou 1 / pour autoriser la création de comptes)
-VITE_ADMIN_PASSWORD (mot de passe pour accéder à la page d'administration /admin)
+ADMIN_PASSWORD (mot de passe pour accéder à la page d'administration /admin)
 CRON_TASK_DATE (régularité de la tâche cron pour supprimer les fichiers temporaires et enregistrer les murs en JSON sur le disque / 59 23 * * Saturday par défaut)
 EMAIL_HOST (hôte pour l'envoi d'emails)
 EMAIL_ADDRESS (adresse pour l'envoi d'emails)
