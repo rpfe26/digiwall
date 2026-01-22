@@ -29,3 +29,32 @@ export default {
 	}
 }
 </script>
+
+<style>
+#conteneur-message .modale .conteneur {
+	height: 100%;
+	padding: 30px 25px;
+	text-align: center;
+}
+
+#conteneur-message .modale {
+	max-width: 500px;
+}
+
+#conteneur-message .message {
+	font-size: 18px;
+	line-height: 1.5;
+}
+
+#conteneur-message .bouton {
+	margin-top: 20px;
+}
+
+#conteneur-message .modale .actions {
+	font-size: 0;
+}
+
+#conteneur-message .modale .actions span {
+	min-width: 70px;
+}
+</style>
