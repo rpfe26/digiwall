@@ -262,7 +262,7 @@ async function demarrerServeur () {
 		} else if (identifiant === req.session.identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.redirect('/'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.redirect('/'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				recupererDonneesUtilisateur(identifiant).then(async function (murs) {
 					let contenusSupprimes = []
