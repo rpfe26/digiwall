@@ -307,7 +307,7 @@
 	"erreurEmail": "L'indirizzo e-mail non è valido.",
 	"email": "Email",
 	"motDePasseOublie": "Hai dimenticato la password?",
-	"emailNonValide": "Questo indirizzo e-mail non è associato a questo utente.",
+	"emailNonValide": "Questo indirizzo e-mail non è presente nel database.",
 	"emailEnvoye": "Email di modifica della password inviata.",
 	"informationsGenerales": "Informazioni generali",
 	"recupererDonneesMur": "Recupera i dati del muro",
@@ -424,5 +424,6 @@
 	"murDansCorbeille": "Muro cestinato.",
 	"emailExisteDeja": "L'indirizzo e-mail <i>{email}<\/i> è già in uso.",
 	"activationEnvoyee": "Un link di attivazione è stato appena inviato al tuo indirizzo e-mail. Clicca sul link per attivare il tuo account.",
-	"compteActive": "Il tuo account è stato attivato."
+	"compteActive": "Il tuo account è stato attivato.",
+	"erreurEnvoiEmail": "Errore durante l'invio dell'e-mail. È possibile che sia stato raggiunto il limite giornaliero di messaggi inviati."
 }

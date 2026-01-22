@@ -308,7 +308,7 @@
 	"erreurEmail": "La dirección de correo electrónico no es válida.",
 	"email": "Correo electrónico",
 	"motDePasseOublie": "¿Ha olvidado su contraseña?",
-	"emailNonValide": "Esta dirección de correo electrónico no está asociada a este usario.",
+	"emailNonValide": "Esta dirección de correo electrónico no figura en la base de datos.",
 	"emailEnvoye": "Se ha enviado un correo electrónico de cambio de contraseña.",
 	"informationsGenerales": "Información general",
 	"recupererDonneesMur": "Recuperar datos del muro",
@@ -425,5 +425,6 @@
 	"murDansCorbeille": "Muro enviado a la papelera.",
 	"emailExisteDeja": "La dirección de correo electrónico <i>{email}<\/i> ya está en uso.",
 	"activationEnvoyee": "Se acaba de enviar un enlace de activación a su dirección de correo electrónico. Haga clic en el enlace para activar su cuenta.",
-	"compteActive": "Su cuenta ha sido activada."
+	"compteActive": "Su cuenta ha sido activada.",
+	"erreurEnvoiEmail": "Error al enviar el correo electrónico. Es posible que se haya alcanzado el límite diario de mensajes enviados."
 }
