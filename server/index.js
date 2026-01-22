@@ -642,8 +642,12 @@ async function demarrerServeur () {
 							subject: 'Activation de votre compte Digiwall',
 							html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Cliquez sur ce lien pour activer votre compte : <a href="' + hote + '/activation/' + codeActivation + '" target="_blank">' + hote + '/activation/' + codeActivation + '</a>.</p>'
 						}
-						transporter.sendMail(message, async function () {
-							res.send('activation_demandee')
+						transporter.sendMail(message, async function (err) {
+							if (err) {
+								res.send('erreur_email')
+							} else {
+								res.send('activation_demandee')
+							}
 						})
 					} else {
 						res.send('email_existe_deja')
@@ -687,20 +691,6 @@ async function demarrerServeur () {
 					.HSET('emails:' + email, 'identifiant', identifiant)
 					.UNLINK('activations:' + codeActivation)
 					.exec()
-					req.session.identifiant = identifiant
-					req.session.motdepasse = motdepasse
-					req.session.nom = ''
-					req.session.email = email
-					req.session.langue = langue
-					req.session.statut = 'utilisateur'
-					req.session.cookie.expires = new Date(Date.now() + dureeSession)
-					const message = {
-						from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
-						to: '"Moi" <' + email + '>',
-						subject: 'Compte Digiwall activé',
-						html: '<p>Votre compte Digiwall ayant pour identifiant <strong>' + identifiant + '</strong> a été activé.</p><p>Conservez bien cet identifiant, il est nécessaire pour vous connecter à votre compte sur <a href="' + hote + '" target="_blank">' + hote + '</a>.</p>'
-					}
-					transporter.sendMail(message)
 					const pageContextInit = {
 						urlOriginal: req.originalUrl,
 						hote: hote,
@@ -782,7 +772,7 @@ async function demarrerServeur () {
 		const email = req.body.email.toLowerCase().trim()
 		let donnees = await db.HGETALL('emails:' + email)
 		donnees = Object.assign({}, donnees)
-		if (donnees === null) {
+		if (donnees !== null) {
 			const identifiant = donnees.identifiant
 			const motdepasse = genererMotDePasse(8)
 			const message = {
@@ -793,7 +783,7 @@ async function demarrerServeur () {
 			}
 			transporter.sendMail(message, async function (err) {
 				if (err) {
-					res.send('erreur')
+					res.send('erreur_email')
 				} else {
 					const hash = await bcrypt.hash(motdepasse, 10)
 					await db.HSET('utilisateurs:' + identifiant, 'motdepassetemp', hash)
