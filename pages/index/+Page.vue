@@ -295,6 +295,8 @@ export default {
 						this.message = this.$t('emailExisteDeja', { email: this.email })
 					} else if (donnees === 'identifiant_invalide') {
 						this.message = this.$t('identifiantNonConforme')
+					} else if (donnees === 'erreur_email') {
+						this.message = this.$t('erreurEnvoiEmail')
 					} else if (donnees === 'activation_demandee') {
 						this.fermerModaleInscription()
 						this.message = this.$t('activationEnvoyee')
@@ -344,6 +346,8 @@ export default {
 						this.message = this.$t('erreurCommunicationServeur')
 					} else if (donnees === 'email_invalide') {
 						this.message = this.$t('emailNonValide')
+					} else if (donnees === 'erreur_email') {
+						this.message = this.$t('erreurEnvoiEmail')
 					} else if (donnees === 'message_envoye') {
 						this.fermerModaleMotDePasseOublie()
 						this.notification = this.$t('emailEnvoye')
