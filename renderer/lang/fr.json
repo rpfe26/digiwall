@@ -422,5 +422,8 @@
 	"corbeille": "Corbeille",
 	"restaurer": "Restaurer",
 	"murRestaure": "Mur restauré.",
-	"murDansCorbeille": "Mur mis à la corbeille."
+	"murDansCorbeille": "Mur mis à la corbeille.",
+	"emailExisteDeja": "L'adresse e-mail <i>{email}<\/i> est déjà utilisée.",
+	"activationEnvoyee": "Un lien d'activation vient d'être envoyé à votre adresse e-mail. Cliquez sur le lien pour activer votre compte.",
+	"compteActive": "Votre compte a été activé."
 }

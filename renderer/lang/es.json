@@ -422,5 +422,8 @@
 	"corbeille": "Papelera",
 	"restaurer": "Restaurar",
 	"murRestaure": "Muro restaurado.",
-	"murDansCorbeille": "Muro enviado a la papelera."
+	"murDansCorbeille": "Muro enviado a la papelera.",
+	"emailExisteDeja": "La dirección de correo electrónico <i>{email}<\/i> ya está en uso.",
+	"activationEnvoyee": "Se acaba de enviar un enlace de activación a su dirección de correo electrónico. Haga clic en el enlace para activar su cuenta.",
+	"compteActive": "Su cuenta ha sido activada."
 }

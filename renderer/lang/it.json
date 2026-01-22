@@ -421,5 +421,8 @@
 	"corbeille": "Cestino",
 	"restaurer": "Ripristina",
 	"murRestaure": "Muro ripristinato.",
-	"murDansCorbeille": "Muro cestinato."
+	"murDansCorbeille": "Muro cestinato.",
+	"emailExisteDeja": "L'indirizzo e-mail <i>{email}<\/i> è già in uso.",
+	"activationEnvoyee": "Un link di attivazione è stato appena inviato al tuo indirizzo e-mail. Clicca sul link per attivare il tuo account.",
+	"compteActive": "Il tuo account è stato attivato."
 }

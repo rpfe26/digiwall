@@ -422,5 +422,8 @@
 	"corbeille": "Trashbin",
 	"restaurer": "Restore",
 	"murRestaure": "Wall restored.",
-	"murDansCorbeille": "Wall trashed."
+	"murDansCorbeille": "Wall trashed.",
+	"emailExisteDeja": "The email address <i>{email}<\/i> is already in use.",
+	"activationEnvoyee": "An activation link has been sent to your email address. Click on the link to activate your account.",
+	"compteActive": "Your account has been activated."
 }

@@ -422,5 +422,8 @@
 	"corbeille": "Papierkorb",
 	"restaurer": "Wiederherstellen",
 	"murRestaure": "Wand wiederhergestellt.",
-	"murDansCorbeille": "Wand in den Papierkorb verschoben."
+	"murDansCorbeille": "Wand in den Papierkorb verschoben.",
+	"emailExisteDeja": "Die E-Mail-Adresse <i>{email}<\/i> ist nicht verfügbar.",
+	"activationEnvoyee": "Ein Aktivierungslink wurde gerade an Ihre E-Mail-Adresse gesendet. Klicken Sie auf den Link, um Ihr Konto zu aktivieren.",
+	"compteActive": "Ihr Konto wurde aktiviert."
 }

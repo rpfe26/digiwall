@@ -35,6 +35,7 @@ libre.convertAsync = util.promisify(libre.convert)
 import { RedisStore } from 'connect-redis'
 import session from 'express-session'
 import { EventEmitter } from 'events'
+import { randomBytes } from 'crypto'
 import Rabbit from 'crypto-js/rabbit.js'
 import Utf8 from 'crypto-js/enc-utf8.js'
 import checkDiskSpace from 'check-disk-space'
@@ -611,44 +612,126 @@ async function demarrerServeur () {
 	app.post('/api/inscription', async function (req, res) {
 		if (creationCompte === 1) {
 			const identifiant = req.body.identifiant
-			const motdepasse = req.body.motdepasse
-			const email = req.body.email
-			const reponse = await db.EXISTS('utilisateurs:' + identifiant)
-			if (reponse === null) {
-				res.send('erreur'); return false
-			} else if (reponse === 0) {
-				const hash = await bcrypt.hash(motdepasse, 10)
-				const date = dayjs().format()
-				let langue = 'fr'
-				if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
-					langue = req.session.langue
+			if (identifiant.match(/^[\w-]+$/)) {
+				const motdepasse = req.body.motdepasse
+				const email = req.body.email.toLowerCase()
+				let reponse = await db.EXISTS('utilisateurs:' + identifiant)
+				if (reponse === null) {
+					res.send('erreur'); return false
+				} else if (reponse === 0) {
+					reponse = await db.EXISTS('emails:' + email)
+					if (reponse === null) {
+						res.send('erreur'); return false
+					} else if (reponse === 0) {
+						let codeActivation = randomBytes(18)
+						codeActivation = codeActivation.toString('hex')
+						const hash = await bcrypt.hash(motdepasse, 10)
+						const date = dayjs().format()
+						let langue = 'fr'
+						if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
+							langue = req.session.langue
+						}
+						await db
+						.multi()
+						.HSET('activations:' + codeActivation, ['id', identifiant, 'motdepasse', hash, 'date', date, 'email', email, 'langue', langue])
+						.EXPIRE('activations:' + codeActivation, 43200)
+						.exec()
+						const message = {
+							from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
+							to: '"Moi" <' + email + '>',
+							subject: 'Activation de votre compte Digiwall',
+							html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Cliquez sur ce lien pour activer votre compte : <a href="' + hote + '/activation/' + codeActivation + '" target="_blank">' + hote + '/activation/' + codeActivation + '</a>.</p>'
+						}
+						transporter.sendMail(message, async function () {
+							res.send('activation_demandee')
+						})
+					} else {
+						res.send('email_existe_deja')
+					}
+				} else {
+					res.send('utilisateur_existe_deja')
 				}
-				await db
-				.multi()
-				.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'motdepasse', hash, 'date', date, 'nom', '', 'email', email, 'langue', langue, 'affichage', 'liste', 'classement', 'date-asc', 'dossiers', JSON.stringify([])])
-				.SADD('emails:' + email, identifiant)
-				.exec()
-				req.session.identifiant = identifiant
-				req.session.motdepasse = motdepasse
-				req.session.nom = ''
-				req.session.email = email
-				req.session.langue = langue
-				req.session.statut = 'utilisateur'
-				req.session.cookie.expires = new Date(Date.now() + dureeSession)
-				const message = {
-					from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
-					to: email,
-					subject: 'Nouveau compte Digiwall',
-					html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Conservez bien cet identifiant, il est nécessaire pour vous connecter à votre compte.</p>'
-				}
-				transporter.sendMail(message, async function () {
-					res.json({ identifiant: identifiant })
-				})
 			} else {
-				res.send('utilisateur_existe_deja')
+				res.send('identifiant_invalide')
 			}
 		} else {
 			res.send('non_autorise')
+		}
+	})
+
+	app.get('/activation/:code', async function (req, res) {
+		if (maintenance === true) {
+			res.redirect('/maintenance')
+			return false
+		}
+		const codeActivation = req.params.code
+		let reponse = await db.EXISTS('activations:' + codeActivation)
+		if (reponse === null) {
+			res.redirect('/')
+		} else if (reponse === 1) {
+			let donnees = await db.HGETALL('activations:' + codeActivation)
+			donnees = Object.assign({}, donnees)
+			if (donnees === null) { res.redirect('/'); return false }
+			const identifiant = donnees.id
+			const email = donnees.email
+			const motdepasse = donnees.motdepasse
+			const date = donnees.date
+			const langue = donnees.langue
+			let reponse = await db.EXISTS('utilisateurs:' + identifiant)
+			if (reponse === 0) {
+				reponse = await db.EXISTS('emails:' + email)
+				if (reponse === 0) {
+					await db
+					.multi()
+					.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'motdepasse', motdepasse, 'date', date, 'nom', '', 'email', email, 'langue', langue, 'affichage', 'liste', 'classement', 'date-asc', 'dossiers', JSON.stringify([])])
+					.HSET('emails:' + email, 'identifiant', identifiant)
+					.UNLINK('activations:' + codeActivation)
+					.exec()
+					req.session.identifiant = identifiant
+					req.session.motdepasse = motdepasse
+					req.session.nom = ''
+					req.session.email = email
+					req.session.langue = langue
+					req.session.statut = 'utilisateur'
+					req.session.cookie.expires = new Date(Date.now() + dureeSession)
+					const message = {
+						from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
+						to: '"Moi" <' + email + '>',
+						subject: 'Compte Digiwall activé',
+						html: '<p>Votre compte Digiwall ayant pour identifiant <strong>' + identifiant + '</strong> a été activé.</p><p>Conservez bien cet identifiant, il est nécessaire pour vous connecter à votre compte sur <a href="' + hote + '" target="_blank">' + hote + '</a>.</p>'
+					}
+					transporter.sendMail(message)
+					const pageContextInit = {
+						urlOriginal: req.originalUrl,
+						hote: hote,
+						langue: langue
+					}
+					const pageContext = await renderPage(pageContextInit)
+					if (pageContext.errorWhileRendering) {
+						if (!pageContext.httpResponse) {
+							throw pageContext.errorWhileRendering
+						}
+					}
+					const { httpResponse } = pageContext
+					if (!httpResponse) {
+						return next()
+					}
+					const { body, statusCode, headers, earlyHints } = httpResponse
+					if (earlyHints103 === true && res.writeEarlyHints) {
+						res.writeEarlyHints({ link: earlyHints.map((e) => e.earlyHintLink) })
+					}
+					if (headers) {
+						headers.forEach(([name, value]) => res.setHeader(name, value))
+					}
+					res.status(statusCode).send(body)
+				} else {
+					res.redirect('/')
+				}
+			} else {
+				res.redirect('/')
+			}
+		} else {
+			res.redirect('/')
 		}
 	})
 
@@ -678,7 +761,7 @@ async function demarrerServeur () {
 				}
 				const nom = donnees.nom
 				const langue = donnees.langue
-				const email = donnees.email
+				const email = donnees.email.toLowerCase()
 				req.session.identifiant = identifiant
 				req.session.motdepasse = motdepasse
 				req.session.nom = nom
@@ -696,34 +779,26 @@ async function demarrerServeur () {
 	})
 
 	app.post('/api/mot-de-passe-oublie', async function (req, res) {
-		const email = req.body.email.trim()
-		const identifiants = await db.SMEMBERS('emails:' + email)
-		if (identifiants === null) { res.send('erreur'); return false }
-		if (identifiants.length > 0) {
-			const emails = []
-			for (const identifiant of identifiants) {
-				const emailEnvoye = new Promise(function (resolve) {
-					const motdepasse = genererMotDePasse(8)
-					const message = {
-						from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
-						to: email,
-						subject: 'Mot de passe Digiwall',
-						html: '<p>Votre nouveau mot de passe : ' + motdepasse + '</p><p>Identifiant : ' + identifiant + '</p>'
-					}
-					transporter.sendMail(message, async function (err) {
-						if (err) {
-							resolve()
-						} else {
-							const hash = await bcrypt.hash(motdepasse, 10)
-							await db.HSET('utilisateurs:' + identifiant, 'motdepassetemp', hash)
-							resolve()
-						}
-					})
-				})
-				emails.push(emailEnvoye)
+		const email = req.body.email.toLowerCase().trim()
+		let donnees = await db.HGETALL('emails:' + email)
+		donnees = Object.assign({}, donnees)
+		if (donnees === null) {
+			const identifiant = donnees.identifiant
+			const motdepasse = genererMotDePasse(8)
+			const message = {
+				from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
+				to: email,
+				subject: 'Mot de passe Digiwall',
+				html: '<p>Votre nouveau mot de passe : ' + motdepasse + '</p><p>Identifiant : ' + identifiant + '</p>'
 			}
-			Promise.all(emails).then(function () {
-				res.send('message_envoye')
+			transporter.sendMail(message, async function (err) {
+				if (err) {
+					res.send('erreur')
+				} else {
+					const hash = await bcrypt.hash(motdepasse, 10)
+					await db.HSET('utilisateurs:' + identifiant, 'motdepassetemp', hash)
+					res.send('message_envoye')
+				}
 			})
 		} else {
 			res.send('email_invalide')
@@ -1812,7 +1887,7 @@ async function demarrerServeur () {
 			if (donneesUtilisateur === null) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const nom = req.body.nom
-				const email = req.body.email
+				const email = req.body.email.toLowerCase()
 				await db.HSET('utilisateurs:' + identifiant, ['nom', nom, 'email', email])
 				req.session.nom = nom
 				req.session.email = email
@@ -1860,7 +1935,7 @@ async function demarrerServeur () {
 		const admin = req.body.admin
 		if (admin !== '' && admin === process.env.VITE_ADMIN_PASSWORD) {
 			const identifiant = req.body.identifiant
-			const email = req.body.email
+			const email = req.body.email.toLowerCase()
 			if (identifiant !== '') {
 				const resultat = await db.EXISTS('utilisateurs:' + identifiant)
 				if (resultat === null) { res.send('erreur'); return false }
@@ -1881,7 +1956,7 @@ async function demarrerServeur () {
 							donnees = Object.assign({}, donnees)
 							if (donnees === null) { resolve({}); return false }
 							if (donnees.hasOwnProperty('email')) {
-								resolve({ identifiant: utilisateur.substring(13), email: donnees.email })
+								resolve({ identifiant: utilisateur.substring(13), email: donnees.email.toLowerCase() })
 							} else {
 								resolve({})
 							}
@@ -2121,6 +2196,7 @@ async function demarrerServeur () {
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
 			if (donneesUtilisateur === null) { res.send('erreur'); return false }
 			if (admin || await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
+				const email = donneesUtilisateur.email.toLowerCase()
 				const murs = await db.SMEMBERS('murs-crees:' + identifiant)
 				if (murs === null) { res.send('erreur'); return false }
 				const donneesMurs = []
@@ -2287,6 +2363,7 @@ async function demarrerServeur () {
 						.UNLINK('murs-admins:' + identifiant)
 						.UNLINK('murs-utilisateurs:' + identifiant)
 						.UNLINK('utilisateurs:' + identifiant)
+						.UNLINK('emails:' + email)
 						.UNLINK('noms:' + identifiant)
 						.exec()
 						if (!admin) {
