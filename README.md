@@ -79,6 +79,7 @@ VITE_DOCX_VIEWER (lien vers une visionneuse pour les documents MS Office / tél�
 UPLOAD_HOST (lien vers un serveur externe pour le traitement des téléversements / équivalent à DOMAIN par défaut)
 ENCRYPTION_KEY (clé pour decrypter les données Digidrive / uniquement nécessaire si Digidrive est utilisé)
 VITE_LEGAL_TERMS_LINK (lien vers les mentions légales)
+ACCOUNT_VALIDATION (validation de l'inscription par email / 0 ou 1 / 0 par défaut)
 ```
 
 ### Projet Vue (Vue.js 3 et Vike) avec serveur Node.js (Express) et base de données Redis

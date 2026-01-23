@@ -181,6 +181,8 @@ async function demarrerServeur () {
 
 	const cleCrypto = process.env.ENCRYPTION_KEY || ''
 
+	const validationInscription = parseInt(process.env.ACCOUNT_VALIDATION) || 0
+
 	// Augmenter nombre de tâches asynchrones par défaut
 	EventEmitter.defaultMaxListeners = 20
 
@@ -622,7 +624,7 @@ async function demarrerServeur () {
 					reponse = await db.EXISTS('emails:' + email)
 					if (reponse === null) {
 						res.send('erreur'); return false
-					} else if (reponse === 0) {
+					} else if (reponse === 0 && validationInscription === 1) {
 						let codeActivation = randomBytes(18)
 						codeActivation = codeActivation.toString('hex')
 						const hash = await bcrypt.hash(motdepasse, 10)
@@ -640,7 +642,7 @@ async function demarrerServeur () {
 							from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
 							to: '"Moi" <' + email + '>',
 							subject: 'Activation de votre compte Digiwall',
-							html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Cliquez sur ce lien pour activer votre compte : <a href="' + hote + '/activation/' + codeActivation + '" target="_blank">' + hote + '/activation/' + codeActivation + '</a>.</p>'
+							html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Cliquez sur ce lien pour activer votre compte : <a href="' + hote + '/activation/' + codeActivation + '" target="_blank">' + hote + '/activation/' + codeActivation + '</a>.</p><p>Veuillez ignorer ce message si vous n\'êtes pas à l\'origine de cette création de compte.</p><p>La Digitale</p>'
 						}
 						transporter.sendMail(message, async function (err) {
 							if (err) {
@@ -649,6 +651,39 @@ async function demarrerServeur () {
 								res.send('activation_demandee')
 							}
 						})
+					} else if (reponse === 0 && validationInscription === 0) {
+						const hash = await bcrypt.hash(motdepasse, 10)
+						const date = dayjs().format()
+						let langue = 'fr'
+						if (req.session.hasOwnProperty('langue') && req.session.langue !== '' && req.session.langue !== undefined) {
+							langue = req.session.langue
+						}
+						await db
+						.multi()
+						.HSET('utilisateurs:' + identifiant, ['id', identifiant, 'motdepasse', hash, 'date', date, 'nom', '', 'email', email, 'langue', langue, 'affichage', 'liste', 'classement', 'date-asc', 'dossiers', JSON.stringify([])])
+						.HSET('emails:' + email, 'identifiant', identifiant)
+						.exec()
+						req.session.identifiant = identifiant
+						req.session.motdepasse = motdepasse
+						req.session.nom = ''
+						req.session.email = email
+						req.session.langue = langue
+						req.session.statut = 'utilisateur'
+						req.session.cookie.expires = new Date(Date.now() + dureeSession)
+						const message = {
+							from: '"La Digitale" <' + process.env.EMAIL_ADDRESS + '>',
+							to: email,
+							subject: 'Nouveau compte Digiwall',
+							html: '<p>Vous avez créé un compte Digiwall ayant pour identifiant : <strong>' + identifiant + '</strong></p><p>Conservez bien cet identifiant, il est nécessaire pour vous connecter à votre compte.</p><p>La Digitale</p>'
+						}
+						transporter.sendMail(message, async function (err) {
+							if (err) {
+								res.send('erreur_email')
+							} else {
+								res.send('compte_cree')
+							}
+						})
+
 					} else {
 						res.send('email_existe_deja')
 					}
@@ -666,6 +701,9 @@ async function demarrerServeur () {
 	app.get('/activation/:code', async function (req, res) {
 		if (maintenance === true) {
 			res.redirect('/maintenance')
+			return false
+		} else if (validationInscription === 0) {
+			res.redirect('/')
 			return false
 		}
 		const codeActivation = req.params.code
@@ -864,7 +902,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur_creation'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur_creation'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const titre = req.body.titre
 				const token = Math.random().toString(16).slice(10)
@@ -983,7 +1021,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const mur = req.body.murId
 				await db.SADD('murs-favoris:' + identifiant, mur.toString())
@@ -1002,7 +1040,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const mur = req.body.murId
 				await db.SREM('murs-favoris:' + identifiant, mur.toString())
@@ -1021,7 +1059,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const murId = req.body.murId
 				const destination = req.body.destination
@@ -1214,7 +1252,7 @@ async function demarrerServeur () {
 		if (identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur_import'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur_import'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				televerserTemp(req, res, async function (err) {
 					if (err) { res.send('erreur_import'); return false }
@@ -1874,7 +1912,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const nom = req.body.nom
 				const email = req.body.email.toLowerCase()
@@ -2184,7 +2222,7 @@ async function demarrerServeur () {
 		if ((req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') || admin) {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (admin || await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const email = donneesUtilisateur.email.toLowerCase()
 				const murs = await db.SMEMBERS('murs-crees:' + identifiant)
@@ -2542,7 +2580,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const affichage = req.body.affichage
 				await db.HSET('utilisateurs:' + identifiant, 'affichage', affichage)
@@ -2561,7 +2599,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const classement = req.body.classement
 				await db.HSET('utilisateurs:' + identifiant, 'classement', classement)
@@ -2581,7 +2619,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur_ajout_dossier'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur_ajout_dossier'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const nom = req.body.dossier
 				let dossiers = []
@@ -2606,7 +2644,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur_modification_dossier'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur_modification_dossier'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const nom = req.body.dossier
 				const dossierId = req.body.dossierId
@@ -2632,7 +2670,7 @@ async function demarrerServeur () {
 		if (req.session.identifiant && req.session.identifiant === identifiant && req.session.statut === 'utilisateur' && req.session.hasOwnProperty('motdepasse') && req.session.motdepasse !== '') {
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { res.send('erreur_suppression_dossier'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur_suppression_dossier'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const dossierId = req.body.dossierId
 				const dossiers = JSON.parse(donneesUtilisateur.dossiers)
@@ -6853,7 +6891,7 @@ async function demarrerServeur () {
 				}
 				let donneesUtilisateur = await db.HGETALL('utilisateurs:' + session.identifiant)
 				donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-				if (donneesUtilisateur === null) { resolve('erreur'); return false }
+				if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { resolve('erreur'); return false }
 				if ((proprietaire === session.identifiant || admins.includes(session.identifiant)) && await bcrypt.compare(session.motdepasse, donneesUtilisateur.motdepasse)) {
 					resolve(true)
 				} else {
@@ -6878,7 +6916,7 @@ async function demarrerServeur () {
 			}
 			let donneesUtilisateur = await db.HGETALL('utilisateurs:' + identifiant)
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
-			if (donneesUtilisateur === null) { resolve('erreur'); return false }
+			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { resolve('erreur'); return false }
 			if ((donneesMur.identifiant === identifiant || admins.includes(identifiant)) && await bcrypt.compare(motdepasse, donneesUtilisateur.motdepasse)) {
 				resolve(true)
 			} else {

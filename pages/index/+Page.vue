@@ -280,26 +280,35 @@ export default {
 			})
 		},
 		sInscrire () {
-			if (this.identifiant.trim() !== '' && this.verifierIdentifant(this.identifiant.trim()) === true && this.motDePasse.trim() !== '' && this.motDePasse.trim() === this.confirmationMotDePasse.trim() && this.email.trim() !== '' && this.$verifierEmail(this.email.trim()) === true) {
+			const identifiant = this.identifiant.trim()
+			const motdepasse = this.motDePasse.trim()
+			const email = this.email.trim()
+			if (identifiant !== '' && this.verifierIdentifant(identifiant) === true && motdepasse !== '' && motdepasse === this.confirmationMotDePasse.trim() && email !== '' && this.$verifierEmail(email) === true) {
 				this.chargement = true
 				axios.post(this.hote + '/api/inscription', {
-					identifiant: this.identifiant.trim(),
-					motdepasse: this.motDePasse.trim(),
-					email: this.email.trim()
+					identifiant: identifiant,
+					motdepasse: motdepasse,
+					email: email
 				}).then(function (reponse) {
-					this.chargement = false
 					const donnees = reponse.data
 					if (donnees === 'utilisateur_existe_deja') {
-						this.message = this.$t('identifiantExisteDeja', { identifiant: this.identifiant })
+						this.chargement = false
+						this.message = this.$t('identifiantExisteDeja', { identifiant: identifiant })
 					} else if (donnees === 'email_existe_deja') {
-						this.message = this.$t('emailExisteDeja', { email: this.email })
+						this.chargement = false
+						this.message = this.$t('emailExisteDeja', { email: email })
 					} else if (donnees === 'identifiant_invalide') {
+						this.chargement = false
 						this.message = this.$t('identifiantNonConforme')
 					} else if (donnees === 'erreur_email') {
+						this.chargement = false
 						this.message = this.$t('erreurEnvoiEmail')
 					} else if (donnees === 'activation_demandee') {
+						this.chargement = false
 						this.fermerModaleInscription()
 						this.message = this.$t('activationEnvoyee')
+					} else if (donnees === 'compte_cree') {
+						window.location.href = '/u/' + identifiant
 					} else {
 						this.message = this.$t('erreurCommunicationServeur')
 					}
@@ -307,13 +316,13 @@ export default {
 					this.chargement = false
 					this.message = this.$t('erreurCommunicationServeur')
 				}.bind(this))
-			} else if (this.identifiant.trim() === '' || this.motDePasse.trim() === '' || this.confirmationMotDePasse.trim() === '' || this.email.trim() === '') {
+			} else if (identifiant === '' || motdepasse === '' || this.confirmationMotDePasse.trim() === '' || email === '') {
 				this.message = this.$t('remplirChamps')
-			} else if (this.verifierIdentifant(this.identifiant.trim()) === false) {
+			} else if (this.verifierIdentifant(identifiant) === false) {
 				this.message = this.$t('identifiantNonConforme')
-			} else if (this.motDePasse.trim() !== this.confirmationMotDePasse.trim()) {
+			} else if (motdepasse !== this.confirmationMotDePasse.trim()) {
 				this.message = this.$t('motsDePassePasIdentiques')
-			} else if (this.$verifierEmail(this.email.trim()) === false) {
+			} else if (this.$verifierEmail(email) === false) {
 				this.message = this.$t('erreurEmail')
 			}
 		},
