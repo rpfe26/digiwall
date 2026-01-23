@@ -310,6 +310,7 @@ export default {
 					} else if (donnees === 'compte_cree') {
 						window.location.href = '/u/' + identifiant
 					} else {
+						this.chargement = false
 						this.message = this.$t('erreurCommunicationServeur')
 					}
 				}.bind(this)).catch(function () {
