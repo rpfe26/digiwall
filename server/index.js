@@ -39,6 +39,8 @@ import { randomBytes } from 'crypto'
 import Rabbit from 'crypto-js/rabbit.js'
 import Utf8 from 'crypto-js/enc-utf8.js'
 import checkDiskSpace from 'check-disk-space'
+import { Agent } from 'https'
+import { NodeHttpHandler } from '@smithy/node-http-handler'
 import { S3Client, CopyObjectCommand, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { renderPage, createDevMiddleware } from 'vike/server'
 
@@ -75,6 +77,10 @@ async function demarrerServeur () {
 	if (stockage === 's3') {
 		const s3ServerType = process.env.S3_SERVER_TYPE || 'aws'
 		const maxSockets = process.env.S3_MAX_SOCKETS || 500
+		const agent = new Agent({
+			keepAlive: true,
+			maxSockets: maxSockets
+		})
 		s3Client = new S3Client({
 			endpoint: process.env.S3_ENDPOINT,
 			region: process.env.S3_REGION,
@@ -83,10 +89,7 @@ async function demarrerServeur () {
 				secretAccessKey: process.env.S3_SECRET_KEY
 			},
 			forcePathStyle: s3ServerType === 'minio' ? true : false,
-			requestHandler: {
-				requestTimeout: 30_000,
-				httpsAgent: { maxSockets: maxSockets }
-			}
+			requestHandler: new NodeHttpHandler({ httpsAgent: agent })
 		})
 	}
 	let db
