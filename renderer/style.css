@@ -357,8 +357,13 @@ header.pleine-largeur #titre {
     text-transform: uppercase;
 }
 
+.menu .en-tete .action {
+	line-height: 1;
+}
+
 .menu .reinitialiser,
 .menu .fermer {
+	display: inline-block;
 	width: 2rem;
 	height: 2rem;
     font-size: 2rem;
