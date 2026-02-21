@@ -217,10 +217,10 @@ header {
 }
 
 .modale .en-tete .fermer {
-	vertical-align: top;
-	cursor: pointer;
 	font-size: 24px;
 	margin-right: 15px;
+	line-height: 1;
+	cursor: pointer;
 }
 
 .modale .conteneur {

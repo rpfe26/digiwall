@@ -1896,6 +1896,7 @@ export default {
 	background-position: center;
 	background-repeat: no-repeat;
 	margin-right: 2rem;
+	flex-shrink: 0;
 }
 
 .mur.liste .meta {
