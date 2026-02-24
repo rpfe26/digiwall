@@ -169,7 +169,7 @@ export default {
 	},
 	computed: {
 		admin () {
-			return ((this.statut === 'utilisateur' && ((this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant) || (this.mur.hasOwnProperty('admins') && this.mur.admins.includes(this.identifiant)))) || (this.statut === 'auteur' && this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant && this.mur.hasOwnProperty('id') && this.murs.includes(parseInt(this.mur.id))))
+			return ((this.statut === 'utilisateur' && ((this.mur.hasOwnProperty('identifiant') && this.mur.identifiant === this.identifiant) || (this.mur.hasOwnProperty('admins') && this.mur.admins.includes(this.identifiant)))) || (this.statut === 'auteur' && this.mur.hasOwnProperty('id') && this.murs.includes(parseInt(this.mur.id))))
 		},
 		mobile () {
 			if (((this.userAgent.match(/iPhone/i) || this.userAgent.match(/iPad/i) || this.userAgent.match(/iPod/i)) && this.userAgent.match(/Mobile/i)) || this.userAgent.match(/Android/i)) {
