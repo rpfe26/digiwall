@@ -822,6 +822,10 @@ label.bouton-bleu {
 	border-radius: 50%;
 }
 
+.boutons-editeur input[type="color"]::-webkit-color-swatch-wrapper {
+	padding: 0;
+}
+
 .boutons-editeur-commentaire input[type="color"]::-moz-color-swatch {
 	border: none;
 	border-radius: 50%;
