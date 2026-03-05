@@ -787,6 +787,12 @@ label.bouton-bleu {
 	margin-right: 1.2rem;
 }
 
+.boutons-editeur-commentaire button:focus,
+.boutons-editeur button:focus {
+	outline: 2px solid #ed5b00;
+  	outline-offset: 1px;
+}
+
 .boutons-editeur-commentaire button:last-child,
 .boutons-editeur button:last-child {
 	margin-right: 0;
