@@ -43,7 +43,12 @@
 						<input id="champ-titre-mur" type="text" maxlength="48" v-model="titre">
 						<label for="champ-motdepasse-mur">{{ $t('motDePasseMur') }}</label>
 						<p class="information">{{ $t('infoMotDePasseMur') }}</p>
-						<input id="champ-motdepasse-mur" type="text" maxlength="48" v-model="motDePasseMur" @keydown.enter="creerMur">
+						<div class="conteneur-motdepasse">
+							<input id="champ-motdepasse" type="password" maxlength="48" :value="motDePasseMur" @input="motDePasseMur = $event.target.value" @keydown.enter="creerMur" v-if="!motDePasseVisible">
+							<input id="champ-motdepasse" type="text" maxlength="48" :value="motDePasseMur" @input="motDePasseMur = $event.target.value" @keydown.enter="creerMur" v-else>
+							<span class="icone" role="button" :tabindex="message === '' ? 0 : -1" :title="$t('masquerMotDePasse')" @click="motDePasseVisible = false" @keydown.enter="motDePasseVisible = false" v-if="motDePasseVisible"><i class="material-icons">visibility_off</i></span>
+							<span class="icone" role="button" :tabindex="message === '' ? 0 : -1" :title="$t('afficherMotDePasse')" @click="motDePasseVisible = true" @keydown.enter="motDePasseVisible = true" v-else><i class="material-icons">visibility</i></span>
+						</div>
 						<div class="actions">
 							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="creerMur" @keydown.enter="creerMur" v-if="!chargement">{{ $t('creer') }}</span>
 							<div class="conteneur-chargement" v-else>
@@ -66,7 +71,12 @@
 						<label for="champ-identifiant">{{ $t('identifiant') }}</label>
 						<input id="champ-identifiant" type="text" maxlength="48" v-model="identifiant">
 						<label for="champ-motdepasse">{{ $t('motDePasse') }}</label>
-						<input id="champ-motdepasse" type="password" maxlength="48" v-model="motDePasse" @keydown.enter="seConnecter">
+						<div class="conteneur-motdepasse">
+							<input id="champ-motdepasse" type="password" maxlength="48" :value="motDePasse" @input="motDePasse = $event.target.value" @keydown.enter="seConnecter" v-if="!motDePasseVisible">
+							<input id="champ-motdepasse" type="text" maxlength="48" :value="motDePasse" @input="motDePasse = $event.target.value" @keydown.enter="seConnecter" v-else>
+							<span class="icone" role="button" :tabindex="message === '' ? 0 : -1" :title="$t('masquerMotDePasse')" @click="motDePasseVisible = false" @keydown.enter="motDePasseVisible = false" v-if="motDePasseVisible"><i class="material-icons">visibility_off</i></span>
+							<span class="icone" role="button" :tabindex="message === '' ? 0 : -1" :title="$t('afficherMotDePasse')" @click="motDePasseVisible = true" @keydown.enter="motDePasseVisible = true" v-else><i class="material-icons">visibility</i></span>
+						</div>
 						<div class="mot-de-passe-oublie" role="button" :tabindex="message === '' ? 0 : -1" @click="afficherModaleMotDePasseOublie" @keydown.enter="afficherModaleMotDePasseOublie" v-html="$t('motDePasseOublie')" />
 						<div class="actions">
 							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="seConnecter" @keydown.enter="seConnecter" v-if="!chargement">{{ $t('valider') }}</span>
@@ -164,6 +174,7 @@ export default {
 			identifiant: '',
 			motDePasse: '',
 			confirmationMotDePasse: '',
+			motDePasseVisible: false,
 			email: '',
 			hub: false,
 			elementPrecedent: null,
@@ -241,6 +252,8 @@ export default {
 		fermerModaleCreer () {
 			this.modale = ''
 			this.titre = ''
+			this.motDePasseMur = ''
+			this.motDePasseVisible = false
 			this.gererFocus()
 		},
 		afficherModaleConnexion () {
@@ -378,6 +391,7 @@ export default {
 			this.modale = ''
 			this.identifiant = ''
 			this.motDePasse = ''
+			this.motDePasseVisible = false
 			this.gererFocus()
 		},
 		fermerModaleInscription () {
@@ -622,7 +636,7 @@ export default {
 	cursor: pointer;
 }
 
-#connexion #champ-motdepasse {
+#connexion .conteneur-motdepasse {
 	margin-bottom: 10px;
 }
 
