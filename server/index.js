@@ -792,7 +792,10 @@ async function demarrerServeur () {
 				}
 				const nom = donnees.nom
 				const langue = donnees.langue
-				const email = donnees.email.toLowerCase()
+				let email = ''
+				if (donnees.hasOwnProperty('email')) {
+					email = donnees.email.toLowerCase()
+				}
 				req.session.identifiant = identifiant
 				req.session.motdepasse = motdepasse
 				req.session.nom = nom
@@ -1918,11 +1921,38 @@ async function demarrerServeur () {
 			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
 				const nom = req.body.nom
+				let ancienemail = ''
+				if (donneesUtilisateur.hasOwnProperty('email')) {
+					ancienemail = donneesUtilisateur.email
+				}
 				const email = req.body.email.toLowerCase()
-				await db.HSET('utilisateurs:' + identifiant, ['nom', nom, 'email', email])
-				req.session.nom = nom
-				req.session.email = email
-				res.send('utilisateur_modifie')
+				const reponse = await db.EXISTS('emails:' + email)
+				if (reponse === null) {
+					res.send('erreur'); return false
+				} else if (reponse === 0) {
+					if (ancienemail !== '') {
+						await db
+						.multi()
+						.HSET('utilisateurs:' + identifiant, ['nom', nom, 'email', email])
+						.HSET('emails:' + email, 'identifiant', identifiant)
+						.DEL('emails:' + ancienemail)
+						.exec()
+						req.session.nom = nom
+						req.session.email = email
+						res.send('utilisateur_modifie')
+					} else {
+						await db
+						.multi()
+						.HSET('utilisateurs:' + identifiant, ['nom', nom, 'email', email])
+						.HSET('emails:' + email, 'identifiant', identifiant)
+						.exec()
+						req.session.nom = nom
+						req.session.email = email
+						res.send('utilisateur_modifie')
+					}
+				} else {
+					res.send('email_existe_deja')
+				}
 			} else {
 				res.send('non_connecte')
 			}
@@ -2227,7 +2257,10 @@ async function demarrerServeur () {
 			donneesUtilisateur = Object.assign({}, donneesUtilisateur)
 			if (donneesUtilisateur === null || !donneesUtilisateur.hasOwnProperty('motdepasse')) { res.send('erreur'); return false }
 			if (admin || await bcrypt.compare(req.session.motdepasse, donneesUtilisateur.motdepasse)) {
-				const email = donneesUtilisateur.email.toLowerCase()
+				let email = ''
+				if (donneesUtilisateur.hasOwnProperty('email')) {
+					email = donneesUtilisateur.email.toLowerCase()
+				}
 				const murs = await db.SMEMBERS('murs-crees:' + identifiant)
 				if (murs === null) { res.send('erreur'); return false }
 				const donneesMurs = []
@@ -2385,18 +2418,32 @@ async function demarrerServeur () {
 						}
 					}
 					Promise.all([donneesBlocs, donneesActivites, donneesCommentaires, donneesEvaluations]).then(async function () {
-						await db
-						.multi()
-						.UNLINK('murs-crees:' + identifiant)
-						.UNLINK('murs-supprimes:' + identifiant)
-						.UNLINK('murs-rejoints:' + identifiant)
-						.UNLINK('murs-favoris:' + identifiant)
-						.UNLINK('murs-admins:' + identifiant)
-						.UNLINK('murs-utilisateurs:' + identifiant)
-						.UNLINK('utilisateurs:' + identifiant)
-						.UNLINK('emails:' + email)
-						.UNLINK('noms:' + identifiant)
-						.exec()
+						if (email !== '') {
+							await db
+							.multi()
+							.UNLINK('murs-crees:' + identifiant)
+							.UNLINK('murs-supprimes:' + identifiant)
+							.UNLINK('murs-rejoints:' + identifiant)
+							.UNLINK('murs-favoris:' + identifiant)
+							.UNLINK('murs-admins:' + identifiant)
+							.UNLINK('murs-utilisateurs:' + identifiant)
+							.UNLINK('utilisateurs:' + identifiant)
+							.UNLINK('emails:' + email)
+							.UNLINK('noms:' + identifiant)
+							.exec()
+						} else {
+							await db
+							.multi()
+							.UNLINK('murs-crees:' + identifiant)
+							.UNLINK('murs-supprimes:' + identifiant)
+							.UNLINK('murs-rejoints:' + identifiant)
+							.UNLINK('murs-favoris:' + identifiant)
+							.UNLINK('murs-admins:' + identifiant)
+							.UNLINK('murs-utilisateurs:' + identifiant)
+							.UNLINK('utilisateurs:' + identifiant)
+							.UNLINK('noms:' + identifiant)
+							.exec()
+						}
 						if (!admin) {
 							supprimerSession(req)
 							res.send('compte_supprime')
