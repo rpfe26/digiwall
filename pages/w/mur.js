@@ -415,7 +415,7 @@ export default {
 				this.blocs.forEach(function (bloc) {
 					bloc.texte = this.formaterHTML(bloc.texte)
 					if (bloc.hasOwnProperty('iframe')) {
-						bloc.iframe = DOMPurify.sanitize(bloc.iframe)
+						bloc.iframe = DOMPurify.sanitize(bloc.iframe, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder'] })
 					}
 				}.bind(this))
 
@@ -1374,14 +1374,15 @@ export default {
 					this.message = this.$t('erreurEspaceDisque')
 				} else {
 					this.modale = ''
+					const iframe = DOMPurify.sanitize(this.iframe, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder'] })
 					if (this.mode === 'creation' && this.typeBloc === 'classique') {
-						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), donnees, DOMPurify.sanitize(this.iframe), 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
+						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), donnees, iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					} else if (this.mode === 'edition' && this.typeBloc === 'classique') {
-						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), donnees, DOMPurify.sanitize(this.iframe), 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
+						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), donnees, iframe, 'audio', this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					} else if (this.mode === 'creation' && this.typeBloc === 'image-audio') {
-						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, DOMPurify.sanitize(this.iframe), this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
+						this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					} else if (this.mode === 'edition' && this.typeBloc === 'image-audio') {
-						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, DOMPurify.sanitize(this.iframe), this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
+						this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, iframe, this.type, this.source, this.vignette, this.vignetteActivee, donnees, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 					}
 				}
 				this.progressionEnregistrement = false
@@ -1732,7 +1733,8 @@ export default {
 			this.bloc = 'bloc-id-' + (new Date()).getTime() + Math.random().toString(16).slice(10)
 			if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'galerie' && this.medias.length > 1 && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
 				this.chargement = true
-				this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, DOMPurify.sanitize(this.iframe), this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
+				const iframe = DOMPurify.sanitize(this.iframe, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder'] })
+				this.$socket.emit('ajouterbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 				this.modale = ''
 			} else if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
 				this.ajouterAudio()
@@ -1741,7 +1743,8 @@ export default {
 		modifierBloc () {
 			if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'galerie' && this.medias.length > 1 && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && this.type !== 'enregistrement' && this.typeExtra !== 'enregistrement') {
 				this.chargement = true
-				this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, DOMPurify.sanitize(this.iframe), this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
+				const iframe = DOMPurify.sanitize(this.iframe, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder'] })
+				this.$socket.emit('modifierbloc', this.bloc, this.typeBloc, this.mur.id, this.mur.token, this.titre, this.formaterHTML(this.texte), this.media, iframe, this.type, this.source, this.vignette, this.vignetteActivee, this.mediaExtra, this.medias, this.couleur, this.colonne, this.visibilite, this.protection, this.motDePasse, this.identifiant, this.nom)
 				this.modale = ''
 			} else if (((this.typeBloc === 'classique' && ((this.titre !== '' || this.texte !== '' || this.media !== '') && !this.enregistrement) && ((this.protection === true && this.motDePasse !== '') || this.protection === false)) || (this.typeBloc === 'image-audio' && this.media !== '' && this.mediaExtra !== '' && ((this.protection === true && this.motDePasse !== '') || this.protection === false))) && (this.type === 'enregistrement' || this.typeExtra === 'enregistrement')) {
 				this.ajouterAudio()
@@ -1994,7 +1997,7 @@ export default {
 					} else if (this.verifierURL(item.iframe) === true) {
 						html = '<iframe src="' + item.iframe + '" allow="autoplay; fullscreen"></iframe>'
 					} else {
-						html = '<div class="html">' + DOMPurify.sanitize(item.iframe) + '</div>'
+						html = '<div class="html">' + DOMPurify.sanitize(item.iframe, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder'] }) + '</div>'
 					}
 					break
 				}
