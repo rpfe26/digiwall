@@ -7245,28 +7245,28 @@ async function demarrerServeur () {
 										</div>
 										<div class="texte" v-if="item.texte !== ''" v-html="item.texte"></div>
 										<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-											<img role="button" tabindex="0" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'./fichiers/' + item.media" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)">
-											<img role="button" tabindex="0" v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)">
+											<img role="button" tabindex="0" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'./fichiers/' + item.media" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)">
+											<img role="button" tabindex="0" v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)">
 											<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'./fichiers/' + item.media"></audio>
 											<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'./fichiers/' + item.media"></video>
 											<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-											<span role="button" tabindex="0" v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
-											<span role="button" tabindex="0" v-else-if="item.type === 'document' || item.type === 'pdf' || item.type === 'office'" @click="afficherMedia(item)" @keydown.enter="afficherMedia(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
+											<span role="button" tabindex="0" v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
+											<span role="button" tabindex="0" v-else-if="item.type === 'document' || item.type === 'pdf' || item.type === 'office'" @click="afficherMedia(item)" @keydown.enter.space.prevent="afficherMedia(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
 											<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></a></span>
 											<span v-else><a :href="'./fichiers/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></a></span>
 											<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'./fichiers/' + item.mediaExtra"></audio>
 										</div>
 										<div class="evaluation" v-if="mur.evaluations === 'activees'">
 											<span class="etoiles">
-												<i class="material-icons" v-for="etoile in definirEvaluationCapsule(item.listeEvaluations)" :key="'etoilepleine_' + etoile">star</i>
-												<i class="material-icons" v-for="etoile in (5 - definirEvaluationCapsule(item.listeEvaluations))" :key="'etoilevide_' + etoile">star_outline</i>
+												<i class="material-icons" aria-hidden="true" v-for="etoile in definirEvaluationCapsule(item.listeEvaluations)" :key="'etoilepleine_' + etoile">star</i>
+												<i class="material-icons" aria-hidden="true" v-for="etoile in (5 - definirEvaluationCapsule(item.listeEvaluations))" :key="'etoilevide_' + etoile">star_outline</i>
 												<span>({{ item.listeEvaluations.length }})</span>
 											</span>
 										</div>
 										<div class="action" :style="{'color': item.couleur}">
-											<span role="button" tabindex="0" class="bouton" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" @keydown.enter="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-											<span role="button" tabindex="0" class="bouton info" :data-description="item.info"><i class="material-icons">info</i></span>
-											<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
+											<span role="button" tabindex="0" class="bouton" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" @keydown.enter.space.prevent="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons" aria-hidden="true">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+											<span role="button" tabindex="0" class="bouton info" :data-description="item.info"><i class="material-icons" aria-hidden="true">info</i></span>
+											<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons" aria-hidden="true">{{ definirIconeMedia(item) }}</i></span>
 										</div>
 									</div>
 								</div>
@@ -7280,28 +7280,28 @@ async function demarrerServeur () {
 										</div>
 										<div class="texte" v-if="item.texte !== ''" v-html="item.texte"></div>
 										<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-											<img role="button" tabindex="0" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'./fichiers/' + item.media" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)">
-											<img role="button" tabindex="0" v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)">
+											<img role="button" tabindex="0" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'./fichiers/' + item.media" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)">
+											<img role="button" tabindex="0" v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)">
 											<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'./fichiers/' + item.media"></audio>
 											<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'./fichiers/' + item.media"></video>
 											<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-											<span role="button" tabindex="0" v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
-											<span role="button" tabindex="0" v-else-if="item.type === 'document' || item.type === 'pdf' || item.type === 'office'" @click="afficherMedia(item)" @keydown.enter="afficherMedia(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
+											<span role="button" tabindex="0" v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
+											<span role="button" tabindex="0" v-else-if="item.type === 'document' || item.type === 'pdf' || item.type === 'office'" @click="afficherMedia(item)" @keydown.enter.space.prevent="afficherMedia(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
 											<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></a></span>
 											<span v-else><a :href="'./fichiers/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></a></span>
 											<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'./fichiers/' + item.mediaExtra"></audio>
 										</div>
 										<div class="evaluation" v-if="mur.evaluations === 'activees'">
 											<span class="etoiles">
-												<i class="material-icons" v-for="etoile in definirEvaluationCapsule(item.listeEvaluations)" :key="'etoilepleine_' + etoile">star</i>
-												<i class="material-icons" v-for="etoile in (5 - definirEvaluationCapsule(item.listeEvaluations))" :key="'etoilevide_' + etoile">star_outline</i>
+												<i class="material-icons" aria-hidden="true" v-for="etoile in definirEvaluationCapsule(item.listeEvaluations)" :key="'etoilepleine_' + etoile">star</i>
+												<i class="material-icons" aria-hidden="true" v-for="etoile in (5 - definirEvaluationCapsule(item.listeEvaluations))" :key="'etoilevide_' + etoile">star_outline</i>
 												<span>({{ item.listeEvaluations.length }})</span>
 											</span>
 										</div>
 										<div class="action" :style="{'color': item.couleur}">
-											<span role="button" tabindex="0" class="bouton" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" @keydown.enter="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-											<span role="button" tabindex="0" class="bouton info" :data-description="item.info"><i class="material-icons">info</i></span>
-											<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
+											<span role="button" tabindex="0" class="bouton" @click="ouvrirModaleCommentaires(item.bloc, item.titre)" @keydown.enter.space.prevent="ouvrirModaleCommentaires(item.bloc, item.titre)" v-if="mur.commentaires === 'actives'"><i class="material-icons" aria-hidden="true">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+											<span role="button" tabindex="0" class="bouton info" :data-description="item.info"><i class="material-icons" aria-hidden="true">info</i></span>
+											<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons" aria-hidden="true">{{ definirIconeMedia(item) }}</i></span>
 										</div>
 									</div>
 								</div>
@@ -7322,28 +7322,28 @@ async function demarrerServeur () {
 												</div>
 												<div class="texte" v-if="item.texte !== ''" v-html="item.texte"></div>
 												<div class="media" :class="{'iframe-video': item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')}" v-if="item.media !== '' || item.medias.length > 0">
-													<img role="button" tabindex="0" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'./fichiers/' + item.media" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)">
-													<img role="button" tabindex="0" v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)">
+													<img role="button" tabindex="0" v-if="item.type === 'image' || item.typeBloc === 'image-audio'" :src="'./fichiers/' + item.media" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)">
+													<img role="button" tabindex="0" v-else-if="item.type === 'lien-image'" :src="item.media" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)">
 													<audio v-else-if="item.type === 'audio' && item.vignetteActivee === 'non'" controls preload="metadata" :src="'./fichiers/' + item.media"></audio>
 													<video v-else-if="item.type === 'video' && item.vignetteActivee === 'non'" controls playsinline crossOrigin="anonymous" :src="'./fichiers/' + item.media"></video>
 													<iframe v-else-if="item.type === 'embed' && item.vignetteActivee === 'non' && (item.source === 'digiview' || item.source === 'peertube' || item.source === 'youtube' || item.source === 'vimeo' || item.source === 'dailymotion' || item.source === 'soundcloud')" :src="item.iframe" allowfullscreen></iframe>
-													<span role="button" tabindex="0" v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)" @keydown.enter="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
-													<span role="button" tabindex="0" v-else-if="item.type === 'document' || item.type === 'pdf' || item.type === 'office'" @click="afficherMedia(item)" @keydown.enter="afficherMedia(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
+													<span role="button" tabindex="0" v-else-if="item.type === 'audio' || item.type === 'video' || item.type === 'embed' || item.typeBloc === 'galerie'" @click="afficherVisionneuse(item)" @keydown.enter.space.prevent="afficherVisionneuse(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
+													<span role="button" tabindex="0" v-else-if="item.type === 'document' || item.type === 'pdf' || item.type === 'office'" @click="afficherMedia(item)" @keydown.enter.space.prevent="afficherMedia(item)"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></span>
 													<span v-else-if="item.type === 'lien'"><a :href="item.media" target="_blank"><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></a></span>
 													<span v-else><a :href="'./fichiers/' + item.media" download><img :class="{'vignette': definirVignette(item).substring(0, 9) !== './static/'}" :src="definirVignette(item)"></a></span>
 													<audio v-if="item.typeBloc === 'image-audio'" controls preload="metadata" :src="'./fichiers/' + item.mediaExtra"></audio>
 												</div>
 												<div class="evaluation" v-if="mur.evaluations === 'activees'">
 													<span class="etoiles">
-														<i class="material-icons" v-for="etoile in definirEvaluationCapsule(item.listeEvaluations)" :key="'etoilepleine_' + etoile">star</i>
-														<i class="material-icons" v-for="etoile in (5 - definirEvaluationCapsule(item.listeEvaluations))" :key="'etoilevide_' + etoile">star_outline</i>
+														<i class="material-icons" aria-hidden="true" v-for="etoile in definirEvaluationCapsule(item.listeEvaluations)" :key="'etoilepleine_' + etoile">star</i>
+														<i class="material-icons" aria-hidden="true" v-for="etoile in (5 - definirEvaluationCapsule(item.listeEvaluations))" :key="'etoilevide_' + etoile">star_outline</i>
 														<span>({{ item.listeEvaluations.length }})</span>
 													</span>
 												</div>
 												<div class="action" :style="{'color': item.couleur}">
-													<span role="button" tabindex="0" class="bouton" @click="ouvrirModaleCommentaires(item.bloc)" @keydown.enter="ouvrirModaleCommentaires(item.bloc)" v-if="mur.commentaires === 'actives'"><i class="material-icons">comment</i><span class="badge">{{ item.commentaires }}</span></span>
-													<span role="button" tabindex="0" class="bouton info" :data-description="item.info"><i class="material-icons">info</i></span>
-													<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons">{{ definirIconeMedia(item) }}</i></span>
+													<span role="button" tabindex="0" class="bouton" @click="ouvrirModaleCommentaires(item.bloc)" @keydown.enter.space.prevent="ouvrirModaleCommentaires(item.bloc)" v-if="mur.commentaires === 'actives'"><i class="material-icons" aria-hidden="true">comment</i><span class="badge">{{ item.commentaires }}</span></span>
+													<span role="button" tabindex="0" class="bouton info" :data-description="item.info"><i class="material-icons" aria-hidden="true">info</i></span>
+													<span class="media-type" v-if="item.media !== '' || item.medias.length > 0"><i class="material-icons" aria-hidden="true">{{ definirIconeMedia(item) }}</i></span>
 												</div>
 											</div>
 										</div>
@@ -7356,7 +7356,7 @@ async function demarrerServeur () {
 							<div id="discussion" class="modale" role="dialog">
 								<div class="en-tete">
 									<span class="titre">{{ titre }}</span>
-									<span role="button" tabindex="0" class="fermer" @click="fermerModaleCommentaires" @keydown.enter="fermerModaleCommentaires"><i class="material-icons">close</i></span>
+									<span role="button" tabindex="0" class="fermer" @click="fermerModaleCommentaires" @keydown.enter.space.prevent="fermerModaleCommentaires"><i class="material-icons" aria-hidden="true">close</i></span>
 								</div>
 								<ul class="commentaires ascenseur">
 									<li v-for="(entreeCommentaire, indexEntreeCommentaire) in commentaires" :key="indexEntreeCommentaire">
@@ -7536,7 +7536,7 @@ async function demarrerServeur () {
 												html += '<div class="diapo"><div class="numero">' + (i + 1) + '/' + item.medias.length + '</div><img src="./fichiers/' + item.medias[i].fichier + '"></div>'
 											}
 										}
-										html += '<span class="diapo-precedente" role="button" tabindex="0"><i class="material-icons">navigate_before</i></span><span class="diapo-suivante" role="button" tabindex="0"><i class="material-icons">navigate_next</i></span>'
+										html += '<span class="diapo-precedente" role="button" tabindex="0"><i class="material-icons" aria-hidden="true">navigate_before</i></span><span class="diapo-suivante" role="button" tabindex="0"><i class="material-icons" aria-hidden="true">navigate_next</i></span>'
 										html += '</div>'
 									}
 									this.$nextTick(function () {

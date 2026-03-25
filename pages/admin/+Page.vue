@@ -2,19 +2,19 @@
 	<div id="page" v-if="acces">
 		<div id="accueil">
 			<div id="langues">
-				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'fr'}" @click="modifierLangue('fr')" @keydown.enter="modifierLangue('fr')">FR</span>
-				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'es'}" @click="modifierLangue('es')" @keydown.enter="modifierLangue('es')">ES</span>
-				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'it'}" @click="modifierLangue('it')" @keydown.enter="modifierLangue('it')">IT</span>
-				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'de'}" @click="modifierLangue('de')" @keydown.enter="modifierLangue('de')">DE</span>
-				<span class="bouton" role="button" :tabindex="definirTabIndex()" :class="{'selectionne': langue === 'en'}" @click="modifierLangue('en')" @keydown.enter="modifierLangue('en')">EN</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" title="Français" aria-label="Français" :class="{'selectionne': langue === 'fr'}" @click="modifierLangue('fr')" @keydown.enter.space.prevent="modifierLangue('fr')">FR</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" title="Español" aria-label="Español" :class="{'selectionne': langue === 'es'}" @click="modifierLangue('es')" @keydown.enter.space.prevent="modifierLangue('es')">ES</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" title="Italiano" aria-label="Italiano" :class="{'selectionne': langue === 'it'}" @click="modifierLangue('it')" @keydown.enter.space.prevent="modifierLangue('it')">IT</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" title="Deutsch" aria-label="Deutsch" :class="{'selectionne': langue === 'de'}" @click="modifierLangue('de')" @keydown.enter.space.prevent="modifierLangue('de')">DE</span>
+				<span class="bouton" role="button" :tabindex="definirTabIndex()" title="English" aria-label="English" :class="{'selectionne': langue === 'en'}" @click="modifierLangue('en')" @keydown.enter.space.prevent="modifierLangue('en')">EN</span>
 			</div>
 			<div id="conteneur">
 				<h1>
 					<span>{{ $t('maintenance') }}</span>
 				</h1>
 				<div class="conteneur actions">
-					<span class="bouton maintenance" role="button" :tabindex="definirTabIndex()" @click="activerMaintenance" @keydown.enter="activerMaintenance" v-if="maintenance === false">{{ $t('activerMaintenance') }}</span>
-					<span class="bouton maintenance" role="button" :tabindex="definirTabIndex()" @click="desactiverMaintenance" @keydown.enter="desactiverMaintenance" v-else>{{ $t('desactiverMaintenance') }}</span>
+					<span class="bouton maintenance" role="button" :tabindex="definirTabIndex()" @click="activerMaintenance" @keydown.enter.space.prevent="activerMaintenance" v-if="maintenance === false">{{ $t('activerMaintenance') }}</span>
+					<span class="bouton maintenance" role="button" :tabindex="definirTabIndex()" @click="desactiverMaintenance" @keydown.enter.space.prevent="desactiverMaintenance" v-else>{{ $t('desactiverMaintenance') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('modifierMotDePasseUtilisateur') }}</span>
@@ -32,7 +32,7 @@
 					<input id="champ-motdepasse" type="text" maxlength="48" v-model.lazy="motdepasse">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="modifierMotDePasse" @keydown.enter="modifierMotDePasse">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="modifierMotDePasse" @keydown.enter.space.prevent="modifierMotDePasse">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('recupererDonneesMur') }}</span>
@@ -45,7 +45,7 @@
 					<span class="donnees">{{ donneesMur }}</span>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesMur" @keydown.enter="recupererDonneesMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesMur" @keydown.enter.space.prevent="recupererDonneesMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('modifierDonneesMur') }}</span>
@@ -68,7 +68,7 @@
 					<input id="champ-valeur" type="text" v-model.lazy="valeur" v-else>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="modifierDonneesMur" @keydown.enter="modifierDonneesMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="modifierDonneesMur" @keydown.enter.space.prevent="modifierDonneesMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('exporterMur') }}</span>
@@ -78,7 +78,7 @@
 					<input id="champ-numero-mur-e" type="number" v-model.lazy="murIdE">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="exporterMur" @keydown.enter="exporterMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="exporterMur" @keydown.enter.space.prevent="exporterMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('rattacherMur') }}</span>
@@ -92,7 +92,7 @@
 					<input id="champ-identifiant-ra" type="text" v-model.lazy="identifiantRa">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleRattacher" @keydown.enter="afficherModaleRattacher">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleRattacher" @keydown.enter.space.prevent="afficherModaleRattacher">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('transfererMur') }}</span>
@@ -106,7 +106,7 @@
 					<input id="champ-identifiant-n" type="text" v-model.lazy="identifiantN">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererMur" @keydown.enter="afficherModaleTransfererMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererMur" @keydown.enter.space.prevent="afficherModaleTransfererMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('supprimerMur') }}</span>
@@ -118,14 +118,14 @@
 				<div class="conteneur">
 					<div class="conteneur-interrupteur">
 						<span>{{ $t('supprimerFichiersServeur') }}</span>
-						<label class="bouton-interrupteur" :tabindex="definirTabIndex()" @keydown.enter="activerInput('suppression-fichier')">
+						<label class="bouton-interrupteur" :tabindex="definirTabIndex()" @keydown.enter.space.prevent="activerInput('suppression-fichier')">
 							<input id="suppression-fichier" type="checkbox" :checked="suppressionFichiers" @change="modifierSuppressionFichiers">
 							<span class="barre" />
 						</label>
 					</div>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleSupprimerMur" @keydown.enter="afficherModaleSupprimerMur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleSupprimerMur" @keydown.enter.space.prevent="afficherModaleSupprimerMur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('recupererDonneesUtilisateur') }}</span>
@@ -138,7 +138,7 @@
 					<span class="donnees">{{ donneesUtilisateur }}</span>
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesUtilisateur" @keydown.enter="recupererDonneesUtilisateur">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="recupererDonneesUtilisateur" @keydown.enter.space.prevent="recupererDonneesUtilisateur">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('transfererCompte') }}</span>
@@ -152,7 +152,7 @@
 					<input id="champ-identifiant-t" type="text" v-model.lazy="identifiantT">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererCompte" @keydown.enter="afficherModaleTransfererCompte">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleTransfererCompte" @keydown.enter.space.prevent="afficherModaleTransfererCompte">{{ $t('valider') }}</span>
 				</div>
 				<h1>
 					<span>{{ $t('supprimerCompte') }}</span>
@@ -162,7 +162,7 @@
 					<input id="champ-identifiant-s" type="text" v-model.lazy="identifiantS">
 				</div>
 				<div class="conteneur actions">
-					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleSupprimerCompte" @keydown.enter="afficherModaleSupprimerCompte">{{ $t('valider') }}</span>
+					<span class="bouton" role="button" :tabindex="definirTabIndex()" @click="afficherModaleSupprimerCompte" @keydown.enter.space.prevent="afficherModaleSupprimerCompte">{{ $t('valider') }}</span>
 				</div>
 			</div>
 		</div>
@@ -177,19 +177,19 @@
 						<div class="message" v-html="$t('confirmationTransfererCompte')" v-else-if="modale === 'transferer-compte'" />
 						<div class="message" v-html="$t('confirmationSupprimerCompteAdmin')" v-else-if="modale === 'supprimer-compte'" />
 						<div class="actions">
-							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModale" @keydown.enter="fermerModale">{{ $t('non') }}</span>
-							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="rattacherMur" @keydown.enter="rattacherMur" v-if="modale === 'rattacher-mur'">{{ $t('oui') }}</span>
-							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerMur" @keydown.enter="supprimerMur" v-else-if="modale === 'supprimer-mur'">{{ $t('oui') }}</span>
-							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="transfererMur" @keydown.enter="transfererMur" v-else-if="modale === 'transferer-mur'">{{ $t('oui') }}</span>
-							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="transfererCompte" @keydown.enter="transfererCompte" v-else-if="modale === 'transferer-compte'">{{ $t('oui') }}</span>
-							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerCompte" @keydown.enter="supprimerCompte" v-else-if="modale === 'supprimer-compte'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="fermerModale" @keydown.enter.space.prevent="fermerModale">{{ $t('non') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="rattacherMur" @keydown.enter.space.prevent="rattacherMur" v-if="modale === 'rattacher-mur'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerMur" @keydown.enter.space.prevent="supprimerMur" v-else-if="modale === 'supprimer-mur'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="transfererMur" @keydown.enter.space.prevent="transfererMur" v-else-if="modale === 'transferer-mur'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="transfererCompte" @keydown.enter.space.prevent="transfererCompte" v-else-if="modale === 'transferer-compte'">{{ $t('oui') }}</span>
+							<span class="bouton" role="button" :tabindex="message === '' ? 0 : -1" @click="supprimerCompte" @keydown.enter.space.prevent="supprimerCompte" v-else-if="modale === 'supprimer-compte'">{{ $t('oui') }}</span>
 						</div>
 					</div>
 				</div>
 			</div>
 		</div>
 
-		<Notification :notification="notification" @fermer="notification = ''" v-if="notification !== ''" />
+		<Notification :notification="notification" @fermer="notification = ''" />
 
 		<Message :message="message" @elementPrecedent="definirElementPrecedent" @fermer="fermerMessage" v-if="message !== ''" />
 

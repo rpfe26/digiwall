@@ -178,8 +178,10 @@
 
 #blocs .bloc .media {
 	display: block;
+	text-align: center;
 	line-height: 1;
 	font-size: 0;
+	outline: 0;
 	cursor: pointer;
 }
 
@@ -203,15 +205,18 @@
 #blocs .bloc .media img {
 	border-top-left-radius: 4px;
 	border-top-right-radius: 4px;
+	outline: 0;
 }
 
 #blocs .bloc .media video {
 	width: 100%;
 	height: auto;
+	outline: 0;
 }
 
 #blocs .bloc .media audio {
 	width: 100%;
+	outline: 0;
 }
 
 #blocs .bloc .texte + .media img,
@@ -224,6 +229,7 @@
 	display: block;
     text-align: center;
 	padding: 1rem;
+	outline: 0;
 }
 
 #blocs .bloc .media span img.vignette {
@@ -235,6 +241,11 @@
 	max-width: 128px;
 	max-height: 128px;
 	border-radius: 1rem;
+}
+
+#blocs .bloc .media span a {
+	display: block;
+	outline: 0;
 }
 
 #blocs .bloc .titre + .media {
@@ -413,10 +424,6 @@
 		border-radius: 0!important;
 		margin-bottom: 1.5rem!important;
 		max-width: 700px!important;
-	}
-
-	#blocs .bloc .media {
-		text-align: center!important;
 	}
 
 	#blocs .bloc .media img {
