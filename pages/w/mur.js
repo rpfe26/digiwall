@@ -330,13 +330,20 @@ export default {
 		if (identifiant && identifiant !== '' && motdepasse && motdepasse !== '') {
 			window.history.replaceState({}, document.title, window.location.href.split('?')[0])
 		}
-		const langue = params.lang
-		if (langue && this.langues.includes(langue) === true) {
-			this.$i18n.locale = langue
-			this.langue = langue
-			this.$socket.emit('modifierlangue', langue)
-		} else {
-			this.$i18n.locale = this.langue
+		const langueNav = navigator.language.substring(0, 2)
+		const langueParam = params.lang
+		if (langueParam && langueParam !== '' && this.langues.includes(langueParam) === true) {
+			this.langue = langueParam
+			localStorage.setItem('digiwall_lang', langueParam)
+		} else if (!langueParam && langueNav !== '' && this.langues.includes(langueNav) === true) {
+			this.langue = langueNav
+		} 
+		if (localStorage.getItem('digiwall_lang')) {
+			this.langue = localStorage.getItem('digiwall_lang')
+		}
+		this.$i18n.locale = this.langue
+		if (this.langue !== this.$pageContext.pageProps.langue) {
+			this.$socket.emit('modifierlangue', this.langue)
 		}
 
 		if (this.mur.affichage === 'colonnes') {
@@ -3147,6 +3154,7 @@ export default {
 					document.getElementsByTagName('html')[0].setAttribute('lang', langue)
 					this.langue = langue
 					this.notification = this.$t('langueModifiee')
+					localStorage.setItem('digiwall_lang', langue)
 				}.bind(this)).catch(function () {
 					this.message = this.$t('erreurCommunicationServeur')
 				}.bind(this))

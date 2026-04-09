@@ -189,13 +189,20 @@ export default {
 	},
 	created () {
 		const params = this.$pageContext.pageProps.params
-		const langue = params.lang
-		if (langue && this.langues.includes(langue) === true) {
-			this.$i18n.locale = langue
-			this.langue = langue
-			this.$socket.emit('modifierlangue', langue)
-		} else {
-			this.$i18n.locale = this.langue
+		const langueNav = navigator.language.substring(0, 2)
+		const langueParam = params.lang
+		if (langueParam && langueParam !== '' && this.langues.includes(langueParam) === true) {
+			this.langue = langueParam
+			localStorage.setItem('digiwall_lang', langueParam)
+		} else if (!langueParam && langueNav !== '' && this.langues.includes(langueNav) === true) {
+			this.langue = langueNav
+		} 
+		if (localStorage.getItem('digiwall_lang')) {
+			this.langue = localStorage.getItem('digiwall_lang')
+		}
+		this.$i18n.locale = this.langue
+		if (this.langue !== this.$pageContext.pageProps.langue) {
+			this.$socket.emit('modifierlangue', this.langue)
 		}
 		if (import.meta.env.VITE_CREATE_ACCOUNT && import.meta.env.VITE_CREATE_ACCOUNT !== '') {
 			this.creationCompte = parseInt(import.meta.env.VITE_CREATE_ACCOUNT)
@@ -423,6 +430,7 @@ export default {
 					document.getElementsByTagName('html')[0].setAttribute('lang', langue)
 					this.langue = langue
 					this.notification = this.$t('langueModifiee')
+					localStorage.setItem('digiwall_lang', langue)
 				}.bind(this)).catch(function () {
 					this.message = this.$t('erreurCommunicationServeur')
 				}.bind(this))

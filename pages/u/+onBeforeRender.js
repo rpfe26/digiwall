@@ -9,6 +9,7 @@ async function onBeforeRender (pageContext) {
 		const urlOriginal = pageContext.urlOriginal
 		const params = pageContext.params
 		const hote = pageContext.hote
+		const langues = pageContext.langues
 		const identifiant = pageContext.identifiant
 		const nom = pageContext.nom
 		const email = pageContext.email
@@ -23,7 +24,7 @@ async function onBeforeRender (pageContext) {
 		const mursFavoris = pageContext.mursFavoris
 		const dossiers = pageContext.dossiers
 		const titre = identifiant + ' - Digiwall by La Digitale'
-		pageProps = { urlOriginal, params, hote, identifiant, nom, email, langue, statut, affichage, classement, mursCrees, mursCorbeille, mursRejoints, mursAdmins, mursFavoris, dossiers, titre }
+		pageProps = { urlOriginal, params, hote, langues, identifiant, nom, email, langue, statut, affichage, classement, mursCrees, mursCorbeille, mursRejoints, mursAdmins, mursFavoris, dossiers, titre }
 	}
 	return {
 		pageContext: {
