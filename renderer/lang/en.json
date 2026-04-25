@@ -449,5 +449,6 @@
 	"classer": "Sort",
 	"verifierMotDePasse": "Verify password",
 	"imagePrecedente": "Previous image",
-	"imageSuivante": "Next image"
+	"imageSuivante": "Next image",
+	"supprimerFormatage": "Remove formatting"
 }

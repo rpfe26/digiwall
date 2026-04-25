@@ -449,5 +449,6 @@
 	"classer": "Ordnen",
 	"verifierMotDePasse": "Passwort überprüfen",
 	"imagePrecedente": "Vorheriges Bild",
-	"imageSuivante": "Nächstes Bild"
+	"imageSuivante": "Nächstes Bild",
+	"supprimerFormatage": "Formatierung entfernen"
 }

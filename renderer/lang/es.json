@@ -449,5 +449,6 @@
 	"classer": "Ordenar",
 	"verifierMotDePasse": "Verificar la contraseña",
 	"imagePrecedente": "Imagen anterior",
-	"imageSuivante": "Imagen siguiente"
+	"imageSuivante": "Imagen siguiente",
+	"supprimerFormatage": "Eliminar el formato"
 }
